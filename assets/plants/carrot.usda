@@ -1,0 +1,201 @@
+#usda 1.0
+(
+    metersPerUnit = 1
+    upAxis = "Z"
+    defaultPrim = "Carrot"
+)
+
+# Carrot plant — orange crown stub at soil level + 5 feathery green fronds.
+# In a field you see mostly the green tops; the orange root is underground.
+# Plant base sits at Z=0 (soil level).
+
+def Xform "Carrot"
+{
+    # ── Materials ─────────────────────────────────────────────────────────────
+
+    def Material "RootMat"
+    {
+        token outputs:surface.connect = </Carrot/RootMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.88, 0.38, 0.04)
+            float inputs:roughness = 0.72
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "FrondMat"
+    {
+        token outputs:surface.connect = </Carrot/FrondMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.14, 0.58, 0.10)
+            float inputs:roughness = 0.78
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "FrondTipMat"
+    {
+        token outputs:surface.connect = </Carrot/FrondTipMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.22, 0.70, 0.15)
+            float inputs:roughness = 0.75
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    # ── Crown stub ────────────────────────────────────────────────────────────
+    # The very top of the orange root, just visible above the soil.
+
+    def Xform "Crown"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.03)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Cylinder "Geo"
+        {
+            double height = 0.06
+            double radius = 0.028
+            token axis = "Z"
+            rel material:binding = </Carrot/RootMat>
+        }
+    }
+
+    # ── Feathery fronds ───────────────────────────────────────────────────────
+    # Five carrot-top fronds fanning out from the crown.
+    # Each frond is a pair: a main stem cylinder + a shorter tip for taper.
+    # Lean angles are in degrees; azimuth is encoded via XY translation offset.
+
+    # Frond 0 — leans toward +X
+    def Xform "Frond0"
+    {
+        double3 xformOp:translate = (0.018, 0.0, 0.06)
+        float3 xformOp:rotateXYZ = (0.0, -22.0, 0.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+
+        def Cylinder "Stem"
+        {
+            double height = 0.25
+            double radius = 0.006
+            token axis = "Z"
+            double3 xformOp:translate = (0.0, 0.0, 0.125)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondMat>
+        }
+        def Sphere "Tip"
+        {
+            double radius = 0.012
+            double3 xformOp:translate = (0.0, 0.0, 0.26)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondTipMat>
+        }
+    }
+
+    # Frond 1 — leans toward +Y
+    def Xform "Frond1"
+    {
+        double3 xformOp:translate = (0.0, 0.018, 0.06)
+        float3 xformOp:rotateXYZ = (22.0, 0.0, 0.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+
+        def Cylinder "Stem"
+        {
+            double height = 0.28
+            double radius = 0.006
+            token axis = "Z"
+            double3 xformOp:translate = (0.0, 0.0, 0.14)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondMat>
+        }
+        def Sphere "Tip"
+        {
+            double radius = 0.012
+            double3 xformOp:translate = (0.0, 0.0, 0.29)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondTipMat>
+        }
+    }
+
+    # Frond 2 — leans toward -X
+    def Xform "Frond2"
+    {
+        double3 xformOp:translate = (-0.018, 0.0, 0.06)
+        float3 xformOp:rotateXYZ = (0.0, 22.0, 0.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+
+        def Cylinder "Stem"
+        {
+            double height = 0.24
+            double radius = 0.006
+            token axis = "Z"
+            double3 xformOp:translate = (0.0, 0.0, 0.12)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondMat>
+        }
+        def Sphere "Tip"
+        {
+            double radius = 0.011
+            double3 xformOp:translate = (0.0, 0.0, 0.25)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondTipMat>
+        }
+    }
+
+    # Frond 3 — leans toward -Y
+    def Xform "Frond3"
+    {
+        double3 xformOp:translate = (0.0, -0.018, 0.06)
+        float3 xformOp:rotateXYZ = (-20.0, 0.0, 0.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+
+        def Cylinder "Stem"
+        {
+            double height = 0.26
+            double radius = 0.005
+            token axis = "Z"
+            double3 xformOp:translate = (0.0, 0.0, 0.13)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondMat>
+        }
+        def Sphere "Tip"
+        {
+            double radius = 0.011
+            double3 xformOp:translate = (0.0, 0.0, 0.27)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondTipMat>
+        }
+    }
+
+    # Frond 4 — leans toward +X,+Y diagonal (tallest, central)
+    def Xform "Frond4"
+    {
+        double3 xformOp:translate = (0.010, 0.010, 0.06)
+        float3 xformOp:rotateXYZ = (12.0, -12.0, 0.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]
+
+        def Cylinder "Stem"
+        {
+            double height = 0.30
+            double radius = 0.007
+            token axis = "Z"
+            double3 xformOp:translate = (0.0, 0.0, 0.15)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondMat>
+        }
+        def Sphere "Tip"
+        {
+            double radius = 0.013
+            double3 xformOp:translate = (0.0, 0.0, 0.31)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+            rel material:binding = </Carrot/FrondTipMat>
+        }
+    }
+}

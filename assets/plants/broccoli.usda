@@ -1,0 +1,147 @@
+#usda 1.0
+(
+    metersPerUnit = 1
+    upAxis = "Z"
+    defaultPrim = "Broccoli"
+)
+
+# Broccoli plant — stalk + flattened floret dome + 3 curling leaves
+# All dimensions in metres. Plant base sits at Z=0 (soil level).
+
+def Xform "Broccoli"
+{
+    # ── Materials ─────────────────────────────────────────────────────────────
+
+    def Material "StemMat"
+    {
+        token outputs:surface.connect = </Broccoli/StemMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.30, 0.52, 0.18)
+            float inputs:roughness = 0.88
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "HeadMat"
+    {
+        token outputs:surface.connect = </Broccoli/HeadMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.06, 0.32, 0.05)
+            float inputs:roughness = 0.94
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "LeafMat"
+    {
+        token outputs:surface.connect = </Broccoli/LeafMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.18, 0.48, 0.10)
+            float inputs:roughness = 0.82
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    # ── Stalk ─────────────────────────────────────────────────────────────────
+    # Central stem, 40 cm tall, slim (r=2.2 cm)
+
+    def Xform "Stalk"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.20)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Cylinder "Geo"
+        {
+            double height = 0.40
+            double radius = 0.022
+            token axis = "Z"
+            rel material:binding = </Broccoli/StemMat>
+        }
+    }
+
+    # ── Floret dome ───────────────────────────────────────────────────────────
+    # Flattened sphere sitting on top of the stalk — the floret head.
+    # Z-scale of 0.62 gives a characteristic squat dome shape.
+
+    def Xform "Head"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.43)
+        float3 xformOp:scale = (1.0, 1.0, 0.62)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.21
+            rel material:binding = </Broccoli/HeadMat>
+        }
+    }
+
+    # Secondary floret bump (adds visual complexity to the dome)
+    def Xform "HeadBump"
+    {
+        double3 xformOp:translate = (0.08, 0.06, 0.52)
+        float3 xformOp:scale = (1.0, 1.0, 0.58)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.11
+            rel material:binding = </Broccoli/HeadMat>
+        }
+    }
+
+    # ── Leaves ────────────────────────────────────────────────────────────────
+    # Three broad leaves radiating outward at ~120° intervals.
+    # Each is a flattened+elongated sphere.
+
+    def Xform "Leaf1"
+    {
+        double3 xformOp:translate = (0.17, 0.0, 0.24)
+        float3 xformOp:rotateXYZ = (58.0, 0.0, 0.0)
+        float3 xformOp:scale = (0.7, 2.0, 1.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.09
+            rel material:binding = </Broccoli/LeafMat>
+        }
+    }
+
+    def Xform "Leaf2"
+    {
+        double3 xformOp:translate = (-0.10, 0.14, 0.20)
+        float3 xformOp:rotateXYZ = (52.0, 0.0, 120.0)
+        float3 xformOp:scale = (0.7, 1.8, 1.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.088
+            rel material:binding = </Broccoli/LeafMat>
+        }
+    }
+
+    def Xform "Leaf3"
+    {
+        double3 xformOp:translate = (-0.09, -0.15, 0.18)
+        float3 xformOp:rotateXYZ = (50.0, 0.0, 240.0)
+        float3 xformOp:scale = (0.7, 1.7, 1.0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.085
+            rel material:binding = </Broccoli/LeafMat>
+        }
+    }
+}

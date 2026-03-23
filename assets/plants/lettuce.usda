@@ -1,0 +1,129 @@
+#usda 1.0
+(
+    metersPerUnit = 1
+    upAxis = "Z"
+    defaultPrim = "Lettuce"
+)
+
+# Lettuce plant — three concentric leaf layers + a compact inner head.
+# Outer leaves are wide and low; inner head is compact and lighter green.
+# Plant base sits at Z=0 (soil level).
+
+def Xform "Lettuce"
+{
+    # ── Materials ─────────────────────────────────────────────────────────────
+
+    def Material "OuterLeafMat"
+    {
+        token outputs:surface.connect = </Lettuce/OuterLeafMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.14, 0.46, 0.10)
+            float inputs:roughness = 0.78
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "MidLeafMat"
+    {
+        token outputs:surface.connect = </Lettuce/MidLeafMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.26, 0.60, 0.16)
+            float inputs:roughness = 0.72
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    def Material "HeadMat"
+    {
+        token outputs:surface.connect = </Lettuce/HeadMat/Shader.outputs:surface>
+        def Shader "Shader"
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            color3f inputs:diffuseColor = (0.62, 0.80, 0.38)
+            float inputs:roughness = 0.65
+            float inputs:metallic = 0.0
+            token outputs:surface
+        }
+    }
+
+    # ── Outer leaf layer ──────────────────────────────────────────────────────
+    # Wide, low, flat disc — the broad spreading outer leaves.
+
+    def Xform "OuterLeaves"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.025)
+        float3 xformOp:scale = (1.0, 1.0, 0.18)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.28
+            rel material:binding = </Lettuce/OuterLeafMat>
+        }
+    }
+
+    # Outer leaf curl — a slightly raised rim to suggest leaf edges curling up
+    def Xform "OuterRim"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.055)
+        float3 xformOp:scale = (1.0, 1.0, 0.12)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.26
+            rel material:binding = </Lettuce/OuterLeafMat>
+        }
+    }
+
+    # ── Mid leaf layer ────────────────────────────────────────────────────────
+    # Slightly more upright, medium green inner rosette.
+
+    def Xform "MidLeaves"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.07)
+        float3 xformOp:scale = (1.0, 1.0, 0.30)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.20
+            rel material:binding = </Lettuce/MidLeafMat>
+        }
+    }
+
+    # ── Inner head ────────────────────────────────────────────────────────────
+    # Compact, light yellow-green heart of the lettuce head.
+
+    def Xform "Head"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.14)
+        float3 xformOp:scale = (1.0, 1.0, 0.70)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.13
+            rel material:binding = </Lettuce/HeadMat>
+        }
+    }
+
+    # Tiny top highlight — the very tight centre bud
+    def Xform "Bud"
+    {
+        double3 xformOp:translate = (0.0, 0.0, 0.20)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Sphere "Geo"
+        {
+            double radius = 0.045
+            rel material:binding = </Lettuce/HeadMat>
+        }
+    }
+}
