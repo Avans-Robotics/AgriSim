@@ -2,7 +2,24 @@
 
 Tools for generating pixel farming fields for robot simulation. A field is divided into square pixels, each holding one crop. Fields are described in a simple YAML file (hand-drawn or random), resolved into a simulator-independent layout, and exported to a simulator. Gazebo (Harmonic) is the first target; the end goal is harvesting with a simulated Farm-ng Amiga and manipulator.
 
-**Status: design phase.** No code yet. Start with the design documents below.
+**Status: milestone M1a.** The core turns a Field Spec into a Field Layout and Manifest; the only Exporter so far is a top-down SVG view. Gazebo export follows in M1b.
+
+## Quick start
+
+Install [uv](https://docs.astral.sh/uv/) once:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then, from the repository root:
+
+```bash
+uv sync                                               # install dependencies
+uv run pixelfield build examples/carrot_pixel.yaml    # writes out/carrot_pixel/manifest.json and field.svg
+uv run pytest                                         # tests
+uv run ruff check . && uv run ruff format --check .   # lint
+```
 
 ## Documentation
 
