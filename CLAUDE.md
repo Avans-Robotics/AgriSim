@@ -16,6 +16,11 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Plants reuse Variants from `assets/library/`; never generate a unique mesh per Plant.
 - Units SI, z up, x east, y north, Field origin at the south-west corner.
 
+## Workflow
+
+- Build in small chunks (see the M1 chunk table in the spec), each ending in something checkable by hand plus tests.
+- One branch per chunk from main (`m1a-core`, `m1b-gazebo`, ...). Merging to main is done by the maintainer after review.
+
 ## Environment
 
 - Ubuntu 24.04, Python 3.12, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8).
