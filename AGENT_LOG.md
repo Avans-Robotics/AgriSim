@@ -32,3 +32,22 @@ Branch feat/fresh-start. Docs only, no code; links checked. Uncommitted except t
 ### Open items
 - Resolve the 13 open questions in spec section 12 (camera model, carrot planting defaults, license, name, ...).
 - Then start M1 on IMPLEMENT.
+
+## 2026-09-30 M1a: core Field Spec to Manifest, SVG view
+### Goal & outcome
+M1a chunk: repo tooling (uv, ruff, pytest, GitHub Actions CI) and core. `pixelfield build examples/carrot_pixel.yaml` writes manifest.json and field.svg (32 of 33 carrot positions planted, 3 east-west rows). 12 tests pass, ruff clean.
+### Decisions & why
+- SVG writer is an Exporter (`EXPORTERS["svg"]`): exercises the extension point now, keeps rendering out of core.
+- One RNG per Pixel seeded with "seed:row:col": editing one Pixel leaves all other Plants identical.
+- All random draws happen for every nominal position, missing or not: ids (position index) and values stay stable.
+- Rows are centred in the Pixel and clipped to the margin-inset square; jittered positions are clamped to it (ponytail note in layout.py).
+- Random mode and path_gap raise a clear "planned for M2" error instead of being silently ignored.
+- Only runtime dependency: pyyaml; stdlib random, argparse.
+### Lessons / gotchas
+- ROS Jazzy puts /opt/ros/jazzy site-packages on PYTHONPATH; their pytest11 plugins (launch_testing etc.) break collection. Fixed with `addopts = "--disable-plugin-autoload"` in pyproject.
+- uv was not installed; user installed it via the official script (~/.local/bin).
+### State
+Branch m1a-core, commit 1e0c73a, not pushed. Validated: tests, lint, CLI run, SVG rendered and inspected (single Pixel and a rotated 2x2 grid). CI workflow UNVERIFIED until pushed to GitHub.
+### Open items
+- Push m1a-core and check the CI run; user reviews and merges.
+- Next chunk M1b: fix local gz PATH, Gazebo Exporter with soil plane and primitive Plants.
