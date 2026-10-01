@@ -79,3 +79,19 @@ field.svg now has a legend strip below the Field: one entry per Crop with its Pl
 Branch m1a-core, validated (tests, lint, both SVGs rendered and inspected). Not pushed; CI UNVERIFIED.
 ### Open items
 - Push, CI check, review and merge; then M1b.
+
+## 2026-10-01 M1a: coordinate frame and 10 cm grid in the SVG view
+### Goal & outcome
+field.svg now shows the Field frame at the origin (x east red, y north green, 10 cm arrows) and a light grid every 10 cm from the origin. Legend label reads "10 cm (grid)". Rendered for carrot_pixel and mixed; 13 tests pass.
+### Decisions & why
+- No axis tick labels (user choice): frame plus grid is enough to count positions.
+- Grid spacing and scale bar share one constant (GRID_M) so they cannot drift apart.
+- Grid lines on Pixel edges are skipped so the darker Pixel outlines stay visible.
+- 20 px white border via a negative viewBox origin: field coordinates in the SVG are unchanged.
+### Lessons / gotchas
+- A frame drawn exactly on the image edge is half clipped; the first render showed only half of the y axis. Always render and look.
+- Green label on brown soil is unreadable; axis labels sit in the white border or use the axis color on a contrasting area.
+### State
+Branch m1a-core, validated (tests, lint, both SVGs rendered and inspected). Not pushed; CI UNVERIFIED.
+### Open items
+- Push, CI check, review and merge; then M1b.
