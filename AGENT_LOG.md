@@ -187,7 +187,6 @@ Carrot Variants now have 6-10 leaves: a tapered 3-sided petiole tube along a qua
 ### Lessons / gotchas
 - `uv run --with matplotlib` gives a quick off-repo render to look at meshes before asking the user, with no project dependency change.
 ### State
-Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. Look in the gz GUI UNVERIFIED (user checks, including whether the double-sided blades show from below).
+Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. User checked the leaves in the gz GUI and approved them ("perfect for now").
 ### Open items
-- User: `gz sim out/carrot_variants/world.sdf`, judge leaves.
-- Then push m1c-carrot, PR, CI.
+- Push m1c-carrot, PR, CI, review and merge. Then M1d.
