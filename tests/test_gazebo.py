@@ -21,17 +21,30 @@ def mixed(tmp_path_factory):
     return out / "world.sdf", manifest
 
 
-def test_one_model_per_plant_at_its_pose(mixed):
+def _plant_visuals(world_sdf):
+    """Plant id: (visual, its model's pose) for every Plant visual in the Pixel models."""
+    visuals = {}
+    for model in ET.parse(world_sdf).iter("model"):
+        pose = [float(v) for v in model.findtext("pose").split()]
+        for visual in model.iter("visual"):
+            visuals[visual.get("name")] = (visual, pose)
+    return visuals
+
+
+def test_one_model_per_pixel_with_plants_at_their_pose(mixed):
     world_sdf, manifest = mixed
-    models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
+    models = {m.get("name") for m in ET.parse(world_sdf).iter("model")}
     plants = manifest["plants"]
-    assert set(models) == {p["id"] for p in plants} | {"soil", "camera_top", "camera_oblique"}
+    pixels = {p["id"].split("-")[0] for p in plants}
+    assert models == pixels | {"soil", "camera_top", "camera_oblique"}
+    visuals = _plant_visuals(world_sdf)
     for p in plants:
-        x, y, z, _, _, yaw = map(float, models[p["id"]].findtext("pose").split())
-        assert (x, y, yaw) == pytest.approx((p["pose"]["x"], p["pose"]["y"], p["pose"]["yaw"]),
-                                            abs=1e-3)  # fmt: skip
-        length = models[p["id"]].findtext(".//cylinder/length")
-        base = z - float(length) / 2 if length else z  # Variant origin is on the soil surface
+        visual, (mx, my, mz, *_) = visuals[p["id"]]
+        x, y, z, _, _, yaw = map(float, visual.findtext("pose").split())
+        assert (mx + x, my + y, yaw) == pytest.approx(
+            (p["pose"]["x"], p["pose"]["y"], p["pose"]["yaw"]), abs=1e-3)  # fmt: skip
+        length = visual.findtext(".//cylinder/length")
+        base = mz + z - float(length) / 2 if length else mz + z  # Variant origin on the soil
         assert base == pytest.approx(0.0, abs=1e-4)
 
 
@@ -45,9 +58,9 @@ def test_soil_covers_field_plus_border(mixed):
 
 def test_carrots_use_copied_variant_meshes_and_lettuce_falls_back(mixed):
     world_sdf, manifest = mixed
-    models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
+    visuals = _plant_visuals(world_sdf)
     for p in manifest["plants"]:
-        model = models[p["id"]]
+        model = visuals[p["id"]][0]
         if p["crop"] == "lettuce":  # no lettuce Variants yet
             assert model.find(".//cylinder") is not None
             continue

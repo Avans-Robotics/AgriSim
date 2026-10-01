@@ -1,4 +1,4 @@
-"""Gazebo Harmonic world: flat soil, a sun and one static model per Plant.
+"""Gazebo Harmonic world: flat soil, a sun and one static model per Pixel of Plants.
 
 Plants use their Variant mesh, copied into `meshes/` next to world.sdf so the output folder
 is self-contained. Crops without Variants in their library fall back to a cylinder.
@@ -78,9 +78,18 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     for name, (pitch, distance) in CAMERAS.items():
         world.append(_camera(name, (width / 2, depth / 2), pitch, distance))
 
+    # One static model per Pixel holding its Plants as visuals: thousands of separate models
+    # stall the Physics system (RTF 0.3 on 10 x 10 Pixels); one per Pixel runs at 1.0 (ADR 0007).
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
     meshes, copied = Path(out_dir) / "meshes", set()
+    origins = {(pixel.row, pixel.col): pixel.origin for pixel in layout.pixels}
+    links = {}  # (row, col): link of that Pixel's model, created at its first Plant
     for p in layout.plants:
+        ox, oy = origins[p.pixel]
+        if p.pixel not in links:
+            links[p.pixel] = _model(world, "r{}c{}".format(*p.pixel), (ox, oy, 0.0, 0.0))
+        link = links[p.pixel]
+        visual = ET.SubElement(link, "visual", name=p.id)
         mesh = Path(layout.crops[p.crop].library) / f"{p.variant}.glb"
         if mesh.is_file():
             # ponytail: hue_shift ignored here, glb materials can't be tinted per Plant
@@ -89,9 +98,8 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
                 meshes.mkdir(exist_ok=True)
                 shutil.copyfile(mesh, meshes / mesh.name)
                 copied.add(mesh)
-            link = _model(world, p.id, (p.x, p.y, p.z, p.yaw))
-            visual = ET.SubElement(link, "visual", name="visual")
-            _text(visual, "pose", _join(GLTF_TO_Z_UP))
+            # Roll stands the y-up glTF up, then yaw turns it about z (SDF applies roll first).
+            _text(visual, "pose", _join((p.x - ox, p.y - oy, p.z, GLTF_TO_Z_UP[3], 0.0, p.yaw)))
             geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
             _text(geometry, "uri", f"meshes/{mesh.name}")  # resolved against world.sdf
             _text(geometry, "scale", _join((p.scale,) * 3))
@@ -99,8 +107,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
         pattern = layout.crops[p.crop].planting
         radius = STAND_IN_RADIUS * min(pattern.row_spacing, pattern.in_row_spacing) * p.scale
         height = STAND_IN_HEIGHT * p.scale
-        link = _model(world, p.id, (p.x, p.y, p.z + height / 2, p.yaw))
-        visual = ET.SubElement(link, "visual", name="visual")
+        _text(visual, "pose", _join((p.x - ox, p.y - oy, p.z + height / 2, 0.0, 0.0, p.yaw)))
         cylinder = ET.SubElement(ET.SubElement(visual, "geometry"), "cylinder")
         _text(cylinder, "radius", f"{radius:.4f}")
         _text(cylinder, "length", f"{height:.4f}")

@@ -183,9 +183,9 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 
 ## 10. Physics
 
-- Until M4, Plants are static models.
+- Until M4, Plants are static. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
 - M4 implements Pull-out Force as proposed in [ADR 0006](../adr/0006-pull-out-via-force-threshold-detach.md).
-- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become dynamic).
+- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
 
 ## 11. Milestones
 
@@ -221,7 +221,7 @@ Resolved:
 2. **Row direction**: a default per Crop, overridable by an optional Field-wide setting. Per-Pixel overrides only if real fields need them.
 3. **Random mode rules**: weights plus an optional `no_same_neighbour: true`.
 4. **Path Gaps**: "every N columns, width W", off by default.
-5. **Detection labels**: Gazebo segmentation and bounding-box camera sensors in M2, YOLO export first.
+5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
 6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
 7. **Crops for M3**: lettuce, onion and one CropCraft import (bean) as placeholders, to be replaced by the crops of the real field when known.
 8. **Performance budget**: at least 0.5x real time on the development laptop with a 10 x 10 Pixel Field and an active camera; target 1.0x or better.
