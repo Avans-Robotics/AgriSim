@@ -122,7 +122,7 @@ Branch m1b-gazebo. Validated in fresh `bash -i`: gz sim 8.14.0, gz sdf 14.9.0, `
 - gz-msgs loads every *.gz_desc in /usr/share/gz/protos; two major versions there means duplicate descriptors in every gz process.
 - GZ_DESCRIPTOR_PATH is additive: pointing it at a msgs10-only dir doubled the errors (220 to 432).
 ### State
-Branch m1b-gazebo. Validated in fresh `bash -i`: 0 protobuf errors in headless `gz sim -s` and `gz topic -l` (was 220 and 440), gz sim 8.14.0, only transport 13.5.0 left. EGL fix UNVERIFIED until the user opens the GUI.
+Branch m1b-gazebo. Validated in fresh `bash -i`: 0 protobuf errors in headless `gz sim -s` and `gz topic -l` (was 220 and 440), gz sim 8.14.0, only transport 13.5.0 left. EGL fix validated: user opened the GUI, shapes render, no warnings.
 ### Open items
-- User: `gz sim shapes.sdf` in a new terminal; confirm GUI opens without EGL warnings. Revert the EGL line if rendering breaks.
+None for the gz setup.
 - Next: grill the Gazebo Exporter (soil plane, primitive Plants).
