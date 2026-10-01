@@ -1,6 +1,11 @@
-"""Gazebo Harmonic world: flat soil, a sun and one static primitive model per Plant."""
+"""Gazebo Harmonic world: flat soil, a sun and one static model per Plant.
+
+Plants use their Variant mesh, copied into `meshes/` next to world.sdf so the output folder
+is self-contained. Crops without Variants in their library fall back to a cylinder.
+"""
 
 import math
+import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -11,9 +16,15 @@ SDF_VERSION = "1.9"
 SOIL_BORDER = 0.5  # meters of soil around the Field
 SOIL_THICKNESS = 0.02
 SOIL_RGBA = (0.35, 0.25, 0.17, 1.0)
-# ponytail: stand-in cylinder until Variants replace it (M1d); radius from the Planting Pattern.
+# Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
+# Sun from the south-east at 40 degrees elevation, for consistent shadows in renders.
+SUN_ELEVATION = math.radians(40)
+SUN_AZIMUTH = math.radians(135)  # compass bearing the light comes from, clockwise from north
+# VCT global illumination, applied by the Sensors system to camera sensors only.
+GI_RESOLUTION = 32  # voxels per axis; more is sharper bounce light but costs VRAM
+GI_BOUNCES = 6
 # Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
 GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
 SYSTEMS = {
@@ -29,6 +40,8 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     world = ET.SubElement(sdf, "world", name="pixelfield")
     for filename, name in SYSTEMS.items():
         ET.SubElement(world, "plugin", filename=filename, name=name)
+    world.append(_sensors())
+    world.append(_scene())
     world.append(_sun())
 
     width, depth = spec.cols * spec.pixel_size, spec.rows * spec.pixel_size
@@ -43,7 +56,23 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             element.append(_material(SOIL_RGBA))
 
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
+    meshes, copied = Path(out_dir) / "meshes", set()
     for p in layout.plants:
+        mesh = Path(layout.crops[p.crop].library) / f"{p.variant}.glb"
+        if mesh.is_file():
+            # ponytail: hue_shift ignored here, glb materials can't be tinted per Plant
+            # without replacing them; add a per-Plant material if renders look too uniform.
+            if mesh not in copied:  # copy each build so a regenerated library is picked up
+                meshes.mkdir(exist_ok=True)
+                shutil.copyfile(mesh, meshes / mesh.name)
+                copied.add(mesh)
+            link = _model(world, p.id, (p.x, p.y, p.z, p.yaw))
+            visual = ET.SubElement(link, "visual", name="visual")
+            _text(visual, "pose", _join(GLTF_TO_Z_UP))
+            geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
+            _text(geometry, "uri", f"meshes/{mesh.name}")  # resolved against world.sdf
+            _text(geometry, "scale", _join((p.scale,) * 3))
+            continue
         pattern = layout.crops[p.crop].planting
         radius = STAND_IN_RADIUS * min(pattern.row_spacing, pattern.in_row_spacing) * p.scale
         height = STAND_IN_HEIGHT * p.scale
@@ -96,8 +125,35 @@ def _sun() -> ET.Element:
     _text(sun, "pose", "0 0 10 0 0 0")
     _text(sun, "diffuse", "0.8 0.8 0.8 1")
     _text(sun, "specular", "0.2 0.2 0.2 1")
-    _text(sun, "direction", "-0.5 0.1 -0.9")
+    horizontal = math.cos(SUN_ELEVATION)  # light travels away from the sun's bearing
+    direction = (-horizontal * math.sin(SUN_AZIMUTH), -horizontal * math.cos(SUN_AZIMUTH),
+                 -math.sin(SUN_ELEVATION))  # fmt: skip
+    _text(sun, "direction", _join(direction))
     return sun
+
+
+def _scene() -> ET.Element:
+    scene = ET.Element("scene")
+    _text(scene, "ambient", "0.4 0.4 0.4 1")
+    _text(scene, "background", "0.7 0.8 0.9 1")
+    ET.SubElement(scene, "sky")
+    _text(scene, "grid", "false")
+    return scene
+
+
+def _sensors() -> ET.Element:
+    """Sensors system with VCT global illumination, values from gz-sim's GI example world."""
+    sensors = ET.Element("plugin", filename="gz-sim-sensors-system",
+                         name="gz::sim::systems::Sensors")  # fmt: skip
+    _text(sensors, "render_engine", "ogre2")
+    gi = ET.SubElement(sensors, "global_illumination", type="vct")
+    for tag, value in [("enabled", "true"), ("resolution", _join((GI_RESOLUTION,) * 3)),
+                       ("octant_count", "1 1 1"), ("bounce_count", str(GI_BOUNCES)),
+                       ("high_quality", "true"), ("anisotropic", "true"),
+                       ("thin_wall_counter", "1.0"), ("conserve_memory", "false"),
+                       ("debug_vis_mode", "none")]:  # fmt: skip
+        _text(gi, tag, value)
+    return sensors
 
 
 def _material(rgba: tuple[float, ...]) -> ET.Element:
