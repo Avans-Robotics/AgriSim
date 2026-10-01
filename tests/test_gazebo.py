@@ -1,4 +1,5 @@
 import json
+import math
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -24,7 +25,7 @@ def test_one_model_per_plant_at_its_pose(mixed):
     world_sdf, manifest = mixed
     models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
     plants = manifest["plants"]
-    assert set(models) == {p["id"] for p in plants} | {"soil"}
+    assert set(models) == {p["id"] for p in plants} | {"soil", "camera_top", "camera_oblique"}
     for p in plants:
         x, y, z, _, _, yaw = map(float, models[p["id"]].findtext("pose").split())
         assert (x, y, yaw) == pytest.approx((p["pose"]["x"], p["pose"]["y"], p["pose"]["yaw"]),
@@ -85,3 +86,29 @@ def test_soil_visual_is_textured_tiles_covering_the_collision_box(mixed):
     for tile in tiles:
         uri = tile.findtext(".//albedo_map")
         assert uri == "textures/color.jpg" and (world_sdf.parent / uri).is_file()
+
+
+def test_cameras_look_at_field_centre(mixed):
+    world_sdf, manifest = mixed
+    models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
+    field = manifest["field"]
+    centre = (field["cols"] * 0.5 / 2, field["rows"] * 0.5 / 2, 0.0)
+    for name in ("top", "oblique"):
+        x, y, z, _, pitch, yaw = map(float, models[f"camera_{name}"].findtext("pose").split())
+        # forward axis of a camera with this pitch and yaw, from its pose to the centre
+        forward = (
+            math.cos(pitch) * math.cos(yaw),
+            math.cos(pitch) * math.sin(yaw),
+            -math.sin(pitch),
+        )
+        to_centre = [c - p for c, p in zip(centre, (x, y, z), strict=True)]
+        assert to_centre == pytest.approx([1.0 * f for f in forward], abs=1e-3)
+        assert models[f"camera_{name}"].findtext(".//save/path") == f"renders/{name}"
+
+
+@pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
+def test_render_saves_one_image_per_camera(tmp_path):
+    main(["build", str(REPO / "examples" / "carrot_pixel.yaml"), "-o", str(tmp_path),
+          "--crops", str(REPO / "crops")])  # fmt: skip
+    main(["render", str(tmp_path / "world.sdf")])
+    assert sorted(p.name for p in (tmp_path / "renders").iterdir()) == ["oblique.png", "top.png"]

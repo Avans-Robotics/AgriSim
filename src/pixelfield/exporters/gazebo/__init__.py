@@ -5,7 +5,9 @@ is self-contained. Crops without Variants in their library fall back to a cylind
 """
 
 import math
+import re
 import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -27,6 +29,12 @@ SUN_AZIMUTH = math.radians(135)  # compass bearing the light comes from, clockwi
 # VCT global illumination, applied by the Sensors system to camera sensors only.
 GI_RESOLUTION = 32  # voxels per axis; more is sharper bounce light but costs VRAM
 GI_BOUNCES = 6
+# Placeholder render cameras until the real Amiga camera is known (spec open item 1).
+CAMERA_SIZE = (1920, 1080)
+CAMERA_HFOV = math.radians(60)
+CAMERA_DISTANCE = 1.0  # meters from the Field centre
+CAMERAS = {"top": math.pi / 2, "oblique": math.pi / 4}  # name: pitch down, looking north
+RENDER_DIR = "renders"  # camera save path, relative to the cwd of `render`
 # Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
 GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
 SYSTEMS = {
@@ -66,6 +74,9 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
             visual.append(_soil_material())
 
+    for name, pitch in CAMERAS.items():
+        world.append(_camera(name, (width / 2, depth / 2), pitch))
+
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
     meshes, copied = Path(out_dir) / "meshes", set()
     for p in layout.plants:
@@ -100,6 +111,34 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     return path
 
 
+def render(world_sdf: Path, iterations: int = 5000) -> list[Path]:
+    """Run the world headless and save one image per camera as renders/<camera>.png.
+
+    Cameras only save while something subscribes to their topic, so a `gz topic` echo runs
+    per camera. A few thousand iterations are needed before the render thread delivers frames.
+    """
+    out = Path(world_sdf).resolve().parent
+    renders = out / RENDER_DIR
+    shutil.rmtree(renders, ignore_errors=True)
+    echo = [["gz", "topic", "-e", "-t", f"/camera/{name}"] for name in CAMERAS]
+    subscribers = [subprocess.Popen(cmd, stdout=subprocess.DEVNULL) for cmd in echo]
+    try:
+        subprocess.run(["gz", "sim", "-s", "-r", "--headless-rendering", "--iterations",
+                        str(iterations), Path(world_sdf).name], cwd=out, check=True)  # fmt: skip
+    finally:
+        for subscriber in subscribers:
+            subscriber.terminate()
+    images = []
+    for name in CAMERAS:
+        frames = sorted((renders / name).glob("*.png"),
+                        key=lambda f: int(re.findall(r"\d+", f.stem)[-1]))  # fmt: skip
+        if not frames:
+            raise RuntimeError(f"camera {name} saved no images; try more iterations")
+        images.append(frames[-1].replace(renders / f"{name}.png"))
+        shutil.rmtree(renders / name)
+    return images
+
+
 def preview(meshes: list[Path], out_dir: Path, spacing: float = 0.15) -> Path:
     """World with one static model per Variant mesh in a row along x, no soil, for checking."""
     sdf = ET.Element("sdf", version=SDF_VERSION)
@@ -128,6 +167,30 @@ def _model(world: ET.Element, name: str, pose: tuple[float, float, float, float]
     x, y, z, yaw = pose
     _text(model, "pose", _join((x, y, z, 0.0, 0.0, yaw)))
     return ET.SubElement(model, "link", name="link")
+
+
+def _camera(name: str, target: tuple[float, float], pitch: float) -> ET.Element:
+    """Static camera CAMERA_DISTANCE from target, south of it, pitched down towards it."""
+    model = ET.Element("model", name=f"camera_{name}")
+    _text(model, "static", "true")
+    x, y = target[0], target[1] - CAMERA_DISTANCE * math.cos(pitch)
+    _text(model, "pose", _join((x, y, CAMERA_DISTANCE * math.sin(pitch), 0.0, pitch, math.pi / 2)))
+    sensor = ET.SubElement(ET.SubElement(model, "link", name="link"), "sensor", name="camera",
+                           type="camera")  # fmt: skip
+    camera = ET.SubElement(sensor, "camera")
+    _text(camera, "horizontal_fov", f"{CAMERA_HFOV:.4f}")
+    image = ET.SubElement(camera, "image")
+    _text(image, "width", str(CAMERA_SIZE[0]))
+    _text(image, "height", str(CAMERA_SIZE[1]))
+    clip = ET.SubElement(camera, "clip")
+    _text(clip, "near", "0.02")
+    _text(clip, "far", "50")
+    save = ET.SubElement(camera, "save", enabled="true")
+    _text(save, "path", f"{RENDER_DIR}/{name}")
+    _text(sensor, "always_on", "true")
+    _text(sensor, "update_rate", "2")
+    _text(sensor, "topic", f"camera/{name}")
+    return model
 
 
 def _sun() -> ET.Element:
