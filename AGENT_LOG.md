@@ -163,3 +163,16 @@ Branch m1c-carrot. Validated: pytest (21), ruff, determinism (same md5 across ru
 ### Open items
 - User: `gz sim out/carrot_variants/world.sdf`, judge shape and orientation.
 - Checkpoint 2: foliage.
+
+## 2026-10-01 M1c: y-up Variants stood up in Gazebo
+### Goal & outcome
+User saw the preview carrots lying on their side: Gazebo loads glTF without converting y up to z up (confirms the Q10 expectation). The Gazebo code now puts a roll of +90 degrees on each Variant visual (`GLTF_TO_Z_UP`), so the preview stands them up; M1d reuses it.
+### Decisions & why
+- Roll on the visual pose, not the model pose: the model frame stays z up with yaw only, so M1d Plant poses need no change.
+- Moved forward from M1d (user approved) so foliage can be judged upright at checkpoint 2.
+### Lessons / gotchas
+None.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`. Upright look in the GUI UNVERIFIED (user checks). User judged the root shape fine.
+### Open items
+- Checkpoint 2: foliage.
