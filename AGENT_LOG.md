@@ -144,3 +144,22 @@ None for the gz setup.
 Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean, user checked both worlds in the GUI (stand-in sizes differ from the SVG dots, accepted: both are throwaway).
 ### Open items
 - Push m1b-gazebo, CI check, review and merge. Then M1c (carrot Asset Generator).
+
+## 2026-10-01 M1c checkpoint 1: carrot root Variants
+### Goal & outcome
+`pixelfield generate carrot` writes 24 root-only carrot Variants (glb, about 16 KB each, 760 triangles), `variants.json` with root sizes, and a Gazebo preview world (`out/carrot_variants/world.sdf`). 21 tests pass.
+### Decisions & why
+- Grilled: harvest stage only; real mesh leaflets (checkpoint 2); one PBR material per part, no textures; trimesh as optional `generate` extra plus dev group; collision sizes in variants.json now (only the generator knows them); at most 3k triangles per Variant; Variant files are spec-correct y-up, any Gazebo rotation goes in the Exporter (M1d).
+- Variant count and library path come from the Crop YAML (Crop gained `library`).
+- Preview world lives in exporters/gazebo (`preview`), keeping simulator code out of generators.
+- Root = solid of revolution (flat crown, rounded edge, Nantes-like taper) with a small sideways bend.
+### Lessons / gotchas
+- trimesh `fix_normals` needs scipy; instead the revolve profile runs tip to crown so the volume is positive (normals outward). A test asserts it.
+- trimesh names glb meshes `geometry_0` unless `geom_name` is passed.
+- The agent shell lacks ~/.bashrc; gz commands need `bash -ic`.
+- Headless `gz sim -s` does not load visual meshes, so it does not prove the glb renders.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, determinism (same md5 across runs), `gz sdf -k` on the preview world, build still works without trimesh. GUI look in gz UNVERIFIED (user checks, including whether gz shows the y-up glb standing or lying).
+### Open items
+- User: `gz sim out/carrot_variants/world.sdf`, judge shape and orientation.
+- Checkpoint 2: foliage.
