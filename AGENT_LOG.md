@@ -208,3 +208,17 @@ Grilled M1d into 4 checkpoints (Variants, lighting, soil texture, cameras + `pix
 Branch m1d-variants, uncommitted code. Validated: pytest (21), ruff, `gz sdf -k` on carrot_pixel and mixed, headless camera snapshot shows 32 upright carrots with shoulders above the soil. GUI look UNVERIFIED (user checks).
 ### Open items
 - User: `gz sim out/carrot_pixel/world.sdf`. Then checkpoint 2 (lighting).
+
+## 2026-10-01 M1d checkpoint 2: lighting
+### Goal & outcome
+world.sdf now has the Sensors system (ogre2) with VCT global illumination (32^3, 6 bounces, other values from gz-sim's example world), a `<scene>` with sky, ambient 0.4 and no grid, and the sun at 40 degrees elevation from the south-east (constants `SUN_ELEVATION`, `SUN_AZIMUTH`, `GI_RESOLUTION`, `GI_BOUNCES`).
+### Decisions & why
+- GI lives in world.sdf (Sensors plugin), not a separate render world: cameras (checkpoint 4) pick it up, and the GUI ignores it.
+- No custom `<gui>` block for the GUI GI plugin: it would replace gz's default GUI layout.
+### Lessons / gotchas
+- At 32^3 GI on one Pixel the effect is subtle (lighter canopy interior and stems); compare against a no-GI render to see it.
+### State
+Branch m1d-variants, uncommitted code. Validated: pytest (22), ruff, `gz sdf -k`, headless GI and no-GI renders with 0 errors. GUI sky look UNVERIFIED (user checks).
+### Open items
+- Tune ambient/sun intensity by eye once the soil texture and real cameras are in.
+- Next: checkpoint 3 (soil texture, user approves the ambientCG set).
