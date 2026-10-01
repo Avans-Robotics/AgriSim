@@ -126,3 +126,22 @@ Branch m1b-gazebo. Validated in fresh `bash -i`: 0 protobuf errors in headless `
 ### Open items
 None for the gz setup.
 - Next: grill the Gazebo Exporter (soil plane, primitive Plants).
+
+## 2026-10-01 M1b: Gazebo Exporter with soil and stand-in Plants
+### Goal & outcome
+`pixelfield build` now also writes world.sdf: flat brown soil (Field plus 0.5 m border, 2 cm box, top at z=0, with collision), a directional sun, Physics/UserCommands/SceneBroadcaster systems, and one static cylinder model per Plant named by Plant id. 17 tests pass; both examples pass `gz sdf -k` and load headless without warnings.
+### Decisions & why
+- One world.sdf with inline Plant models, no per-Crop model.sdf + include: `<include>` cannot scale, and every Plant has its own scale. Modularity lives in the shared Variant .glb files (M1d).
+- Stand-in size derived, no YAML field: radius 0.4 x min(row_spacing, in_row_spacing), height 0.1 m, both times Plant scale. Thrown away in M1d.
+- Visual only on Plants; collision comes with Variants.
+- FieldLayout gained `crops` (deviation, reported): Exporters need the Planting Pattern and only receive the Layout.
+- Plant colors moved to exporters/colors.py so SVG and Gazebo match.
+- build runs all Exporters by default; `--exporter` picks one.
+- SDF written with stdlib ElementTree (escaping, ET.indent, tests parse with the same module).
+### Lessons / gotchas
+- The gz sdf test is skipped only when gz is absent; with gz present but GZ_CONFIG_PATH unfixed it fails (intended, it flags the broken setup).
+### State
+Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean. GUI look UNVERIFIED until the user opens both worlds.
+### Open items
+- User: `gz sim out/carrot_pixel/world.sdf` and `out/mixed/world.sdf`; Plants should match field.svg (lettuce yellow-green, carrot green).
+- Push m1b-gazebo, CI check, review and merge. Then M1c (carrot Asset Generator).
