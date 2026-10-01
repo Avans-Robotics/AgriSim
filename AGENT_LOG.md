@@ -65,3 +65,17 @@ Branch m1a-core, validated (tests, lint, CLI, rendered SVG inspected). Not pushe
 ### Open items
 - Replace lettuce values with measured ones (spec section 12, open item 2).
 - Push, CI check, review and merge; then M1b.
+
+## 2026-10-01 M1a: legend in the SVG view
+### Goal & outcome
+field.svg now has a legend strip below the Field: one entry per Crop with its Plant count, an Empty Pixel swatch (only when present) and a scale bar. Rendered for carrot_pixel and mixed; 13 tests pass.
+### Decisions & why
+- Legend below the Field (user choice), so no Plants are covered.
+- Scale bar 10 cm instead of the proposed 0.5 m: 0.5 m equals the full width of a one-Pixel image.
+- Entries wrap to a new line on narrow Fields; text width estimated at 8 px per character (ponytail note).
+### Lessons / gotchas
+- Legend circles are self-closing, Plant circles have a <title> child: tests count "</circle>" to count Plants only.
+### State
+Branch m1a-core, validated (tests, lint, both SVGs rendered and inspected). Not pushed; CI UNVERIFIED.
+### Open items
+- Push, CI check, review and merge; then M1b.
