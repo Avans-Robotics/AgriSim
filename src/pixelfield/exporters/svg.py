@@ -6,6 +6,9 @@ from pixelfield.core.layout import FieldLayout
 
 PX_PER_M = 1000
 PLANT_COLORS = ["#3c8d2f", "#c9d93a", "#2f7fbf", "#d9603a", "#9b4fc9"]  # cycled per Crop
+CROP_FILL, EMPTY_FILL = "#8b6b4a", "#c8b89a"
+SCALE_BAR_M = 0.1
+LINE_HEIGHT = 26
 
 
 def export(layout: FieldLayout, out_dir: Path) -> Path:
@@ -16,27 +19,70 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     def svg_y(y: float) -> float:  # SVG y points down, Field y points north
         return height - y * PX_PER_M
 
+    crops = sorted({p.crop for p in layout.plants})
+    color = {crop: PLANT_COLORS[i % len(PLANT_COLORS)] for i, crop in enumerate(crops)}
+    legend = _legend(layout, color, width, top=height)
+    total_height = height + LINE_HEIGHT * legend["lines"] + 10
+
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
-        f'viewBox="0 0 {width:.1f} {height:.1f}">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{total_height:.0f}" '
+        f'viewBox="0 0 {width:.1f} {total_height:.1f}">',
+        f'<rect width="{width:.1f}" height="{total_height:.1f}" fill="#fff"/>',
     ]
     for p in layout.pixels:
-        fill = "#8b6b4a" if p.crop else "#c8b89a"
+        fill = CROP_FILL if p.crop else EMPTY_FILL
         parts.append(
             f'<rect x="{p.origin[0] * PX_PER_M:.1f}" y="{svg_y(p.origin[1]) - size:.1f}" '
             f'width="{size:.1f}" height="{size:.1f}" fill="{fill}" stroke="#5a4632">'
             f"<title>r{p.row}c{p.col} {p.crop or 'empty'}</title></rect>"
         )
-    crops = sorted({p.crop for p in layout.plants})
-    color = {crop: PLANT_COLORS[i % len(PLANT_COLORS)] for i, crop in enumerate(crops)}
     for p in layout.plants:
         parts.append(
             f'<circle cx="{p.x * PX_PER_M:.1f}" cy="{svg_y(p.y):.1f}" r="{8 * p.scale:.1f}" '
             f'fill="{color[p.crop]}"><title>{p.id} {p.variant}</title></circle>'
         )
     parts.append('<text x="6" y="18" font-size="16" fill="#fff">N &#8593;</text>')
+    parts += legend["parts"]
     parts.append("</svg>")
 
     path = Path(out_dir) / "field.svg"
     path.write_text("\n".join(parts) + "\n")
     return path
+
+
+def _legend(layout: FieldLayout, color: dict[str, str], width: float, top: float) -> dict:
+    """Legend below the Field: one entry per Crop with its Plant count, Empty Pixel, scale bar.
+
+    Entries flow left to right and wrap to a new line when the Field is too narrow.
+    """
+    counts = {crop: sum(p.crop == crop for p in layout.plants) for crop in color}
+    swatches = [
+        (f'<circle cx="{{x}}" cy="{{y}}" r="7" fill="{color[c]}"/>', f"{c} ({n})")
+        for c, n in counts.items()
+    ]
+    if any(p.crop is None for p in layout.pixels):
+        swatches.append(
+            (f'<rect x="{{x0}}" y="{{y0}}" width="14" height="14" fill="{EMPTY_FILL}" '
+             f'stroke="#5a4632"/>', "empty Pixel")
+        )  # fmt: skip
+    bar = SCALE_BAR_M * PX_PER_M
+    swatches.append(
+        (f'<path d="M{{x0}} {{y}}h{bar:.0f}m0 -5v10M{{x0}} {{y0}}v10" stroke="#000" fill="none"/>',
+         f"{SCALE_BAR_M * 100:.0f} cm")
+    )  # fmt: skip
+
+    # ponytail: text width estimated at 8 px per character, measure fonts only if labels clip.
+    parts, x, line = [], 10.0, 0
+    for i, (shape, label) in enumerate(swatches):
+        shape_w = bar if i == len(swatches) - 1 else 14
+        entry_w = shape_w + 8 + 8 * len(label) + 20
+        if x > 10 and x + entry_w > width:
+            x, line = 10.0, line + 1
+        y = top + 20 + line * LINE_HEIGHT
+        parts.append(shape.format(x=x + 7, y=y, x0=x, y0=y - 7))
+        parts.append(
+            f'<text x="{x + shape_w + 8:.1f}" y="{y + 5:.1f}" font-size="14" '
+            f'font-family="sans-serif">{label}</text>'
+        )
+        x += entry_w
+    return {"parts": parts, "lines": line + 1}

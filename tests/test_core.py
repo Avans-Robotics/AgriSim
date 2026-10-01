@@ -94,7 +94,9 @@ def test_build_writes_manifest_and_svg(tmp_path):
     assert manifest["plants"][0]["id"].startswith("r0c0-")
     assert manifest["plants"][0]["variant"].startswith("carrot_v")
     svg = (out / "field.svg").read_text()
-    assert svg.count("<circle") == len(manifest["plants"])
+    assert svg.count("</circle>") == len(manifest["plants"])  # legend circles self-close
+    assert f"carrot ({len(manifest['plants'])})" in svg
+    assert "empty Pixel" not in svg
 
 
 def test_manifest_matches_layout(tmp_path):
