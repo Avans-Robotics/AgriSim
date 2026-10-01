@@ -102,7 +102,8 @@ def test_cameras_look_at_field_centre(mixed):
             -math.sin(pitch),
         )
         to_centre = [c - p for c, p in zip(centre, (x, y, z), strict=True)]
-        assert to_centre == pytest.approx([1.0 * f for f in forward], abs=1e-3)
+        distance = {"top": 1.7, "oblique": 1.0}[name]
+        assert to_centre == pytest.approx([distance * f for f in forward], abs=1e-3)
         assert models[f"camera_{name}"].findtext(".//save/path") == f"renders/{name}"
 
 

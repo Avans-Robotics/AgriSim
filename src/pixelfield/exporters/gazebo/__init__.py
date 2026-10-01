@@ -32,8 +32,9 @@ GI_BOUNCES = 6
 # Placeholder render cameras until the real Amiga camera is known (spec open item 1).
 CAMERA_SIZE = (1920, 1080)
 CAMERA_HFOV = math.radians(60)
-CAMERA_DISTANCE = 1.0  # meters from the Field centre
-CAMERAS = {"top": math.pi / 2, "oblique": math.pi / 4}  # name: pitch down, looking north
+# name: (pitch down, meters from the Field centre); both look north. The top camera sits high
+# enough to frame a whole Pixel plus overhanging leaves (vertical FOV is only 36 degrees).
+CAMERAS = {"top": (math.pi / 2, 1.7), "oblique": (math.pi / 4, 1.0)}
 RENDER_DIR = "renders"  # camera save path, relative to the cwd of `render`
 # Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
 GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
@@ -74,8 +75,8 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
             visual.append(_soil_material())
 
-    for name, pitch in CAMERAS.items():
-        world.append(_camera(name, (width / 2, depth / 2), pitch))
+    for name, (pitch, distance) in CAMERAS.items():
+        world.append(_camera(name, (width / 2, depth / 2), pitch, distance))
 
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
     meshes, copied = Path(out_dir) / "meshes", set()
@@ -169,12 +170,12 @@ def _model(world: ET.Element, name: str, pose: tuple[float, float, float, float]
     return ET.SubElement(model, "link", name="link")
 
 
-def _camera(name: str, target: tuple[float, float], pitch: float) -> ET.Element:
-    """Static camera CAMERA_DISTANCE from target, south of it, pitched down towards it."""
+def _camera(name: str, target: tuple[float, float], pitch: float, distance: float) -> ET.Element:
+    """Static camera `distance` from target, south of it, pitched down towards it."""
     model = ET.Element("model", name=f"camera_{name}")
     _text(model, "static", "true")
-    x, y = target[0], target[1] - CAMERA_DISTANCE * math.cos(pitch)
-    _text(model, "pose", _join((x, y, CAMERA_DISTANCE * math.sin(pitch), 0.0, pitch, math.pi / 2)))
+    x, y = target[0], target[1] - distance * math.cos(pitch)
+    _text(model, "pose", _join((x, y, distance * math.sin(pitch), 0.0, pitch, math.pi / 2)))
     sensor = ET.SubElement(ET.SubElement(model, "link", name="link"), "sensor", name="camera",
                            type="camera")  # fmt: skip
     camera = ET.SubElement(sensor, "camera")
@@ -208,7 +209,7 @@ def _sun() -> ET.Element:
 
 def _scene() -> ET.Element:
     scene = ET.Element("scene")
-    _text(scene, "ambient", "0.4 0.4 0.4 1")
+    _text(scene, "ambient", "0.1 0.1 0.1 1")  # low, so GI bounce light fills the shadows
     _text(scene, "background", "0.7 0.8 0.9 1")
     ET.SubElement(scene, "sky")
     _text(scene, "grid", "false")

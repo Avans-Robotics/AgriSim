@@ -21,16 +21,20 @@ ROOT_SECTIONS = 20  # facets around the root
 ROOT_RINGS = 16  # profile points along the taper
 FOLIAGE_HEIGHT = (0.25, 0.40)  # meters, tallest leaf above the crown
 LEAF_COUNT = (6, 10)
-LEAFLET_PAIRS = (4, 6)  # along each leaf, plus one leaflet at the tip
-LOBES = (3, 5)  # per leaflet, a fan of narrow blades
+LEAFLET_PAIRS = (5, 7)  # along each leaf, plus one leaflet at the tip
+SEGMENT_PAIRS = (3, 4)  # narrow segments along each leaflet, plus one at its tip
+LEAFLET_LENGTH = 0.12  # fraction of the leaf length, shrinking toward the tip
+SEGMENT_WIDTH = 0.12  # half-width of a segment, fraction of its length
 PETIOLE_SIDES = 3
 PETIOLE_SEGMENTS = 6
 PETIOLE_RADIUS = (0.0015, 0.0007)  # meters, at the crown and at the leaf tip
-MAX_TRIANGLES = 3000
+MAX_TRIANGLES = 8000
 
-ROOT_COLOR = (237, 120, 30, 255)
-LEAF_COLOR = (55, 110, 35, 255)
-PETIOLE_COLOR = (110, 150, 60, 255)
+# Each Variant mixes its colors between these two ends with one sampled shade, so the
+# library holds 24 shades; per-Plant hue_shift is not applied (see the Gazebo Exporter).
+ROOT_COLOR = ((225, 105, 25), (245, 140, 40))
+LEAF_COLOR = ((40, 95, 35), (80, 125, 40))
+PETIOLE_COLOR = ((95, 135, 55), (130, 165, 70))
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
 
 
@@ -56,8 +60,12 @@ def variant(rng: random.Random) -> tuple[dict[str, trimesh.Trimesh], dict]:
     length = rng.uniform(*ROOT_LENGTH)
     radius = rng.uniform(*SHOULDER_DIAMETER) / 2
     top = rng.uniform(*SHOULDER_HEIGHT)
+    shade = rng.random()
     root = _root(length, radius, top, rng.uniform(*ROOT_BEND))
+    root.visual = trimesh.visual.TextureVisuals(material=_material(_mix(ROOT_COLOR, shade)))
     petioles, leaves = _foliage(rng, radius, top, rng.uniform(*FOLIAGE_HEIGHT))
+    _part(petioles, _mix(PETIOLE_COLOR, shade))
+    _part(leaves, _mix(LEAF_COLOR, shade))
     foliage = np.vstack([petioles.vertices, leaves.vertices])
     sizes = {
         "root": {"length": length, "radius": radius, "top": top},
@@ -92,7 +100,6 @@ def _root(length: float, radius: float, top: float, bend: float) -> trimesh.Trim
     mesh = trimesh.creation.revolve(profile[::-1], sections=ROOT_SECTIONS)
     depth = (top - mesh.vertices[:, 2]) / length
     mesh.vertices[:, 0] += bend * depth**2
-    mesh.visual = trimesh.visual.TextureVisuals(material=_material(ROOT_COLOR))
     return mesh
 
 
@@ -113,10 +120,7 @@ def _foliage(
                   start + reach * out + [0, 0, rise * rng.uniform(0.75, 0.95)])  # fmt: skip
         petioles.append(_tube(bezier))
         blades.append(_leaflets(rng, bezier))
-    return (
-        _part(trimesh.util.concatenate(petioles), PETIOLE_COLOR),
-        _part(trimesh.util.concatenate(blades), LEAF_COLOR),
-    )
+    return trimesh.util.concatenate(petioles), trimesh.util.concatenate(blades)
 
 
 def _bezier(curve, t: float) -> tuple[np.ndarray, np.ndarray]:
@@ -164,21 +168,32 @@ def _leaflets(rng: random.Random, curve) -> trimesh.Trimesh:
         # leaflets point forward and outward, shrinking toward the tip
         direction = s * side * math.cos(0.7) + tangent * (math.sin(0.7) if s else 1.0) - 0.2 * up
         direction /= np.linalg.norm(direction)
-        length = leaf_length * 0.2 * (1.1 - 0.5 * t) * rng.uniform(0.85, 1.15)
+        length = leaf_length * LEAFLET_LENGTH * (1.1 - 0.5 * t) * rng.uniform(0.85, 1.15)
         across = np.cross(up, direction)
-        lobes = rng.randint(*LOBES)
-        for spread in np.linspace(-0.6, 0.6, lobes):
-            u = math.cos(spread) * direction + math.sin(spread) * across
+        # each leaflet is divided again: narrow segment pairs along a short midrib
+        k, rib = len(vertices), 0.03 * length * np.cross(up, direction)
+        vertices += [base + rib, base + length * direction, base - rib]
+        faces.append((k, k + 1, k + 2))
+        pairs = rng.randint(*SEGMENT_PAIRS)
+        for tt, ss in [(u, v) for u in np.linspace(0.1, 0.8, pairs) for v in (-1, 1)] + [(1.0, 0)]:
+            start = base + tt * length * direction
+            angle = 0.9 * ss
+            u = math.cos(angle) * direction + math.sin(angle) * across
             v = np.cross(up, u)
-            lobe = length * (1 - 0.3 * abs(spread) / 0.6)
+            segment = 0.45 * length * (1.1 - 0.5 * tt) * rng.uniform(0.8, 1.2)
+            w = SEGMENT_WIDTH * segment
             k = len(vertices)
-            vertices += [base, base + 0.5 * lobe * u + 0.12 * lobe * v, base + lobe * u,
-                         base + 0.5 * lobe * u - 0.12 * lobe * v]  # fmt: skip
+            vertices += [start, start + 0.4 * segment * u + w * v, start + segment * u,
+                         start + 0.4 * segment * u - w * v]  # fmt: skip
             faces += [(k, k + 1, k + 2), (k, k + 2, k + 3)]
     mesh = trimesh.Trimesh(vertices, faces, process=False)
     down = mesh.face_normals[:, 2] < 0  # blades face up, for the lighting on single faces
     mesh.faces[down] = mesh.faces[down][:, ::-1]
     return mesh
+
+
+def _mix(ends: tuple[tuple[int, ...], tuple[int, ...]], shade: float) -> tuple[int, ...]:
+    return tuple(round(a + shade * (b - a)) for a, b in zip(*ends, strict=True)) + (255,)
 
 
 def _part(mesh: trimesh.Trimesh, rgba: tuple[int, ...]) -> trimesh.Trimesh:
