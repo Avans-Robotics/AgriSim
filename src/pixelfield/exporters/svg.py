@@ -5,6 +5,7 @@ from pathlib import Path
 from pixelfield.core.layout import FieldLayout
 
 PX_PER_M = 1000
+PLANT_COLORS = ["#3c8d2f", "#c9d93a", "#2f7fbf", "#d9603a", "#9b4fc9"]  # cycled per Crop
 
 
 def export(layout: FieldLayout, out_dir: Path) -> Path:
@@ -26,10 +27,12 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             f'width="{size:.1f}" height="{size:.1f}" fill="{fill}" stroke="#5a4632">'
             f"<title>r{p.row}c{p.col} {p.crop or 'empty'}</title></rect>"
         )
+    crops = sorted({p.crop for p in layout.plants})
+    color = {crop: PLANT_COLORS[i % len(PLANT_COLORS)] for i, crop in enumerate(crops)}
     for p in layout.plants:
         parts.append(
             f'<circle cx="{p.x * PX_PER_M:.1f}" cy="{svg_y(p.y):.1f}" r="{8 * p.scale:.1f}" '
-            f'fill="#3c8d2f"><title>{p.id} {p.variant}</title></circle>'
+            f'fill="{color[p.crop]}"><title>{p.id} {p.variant}</title></circle>'
         )
     parts.append('<text x="6" y="18" font-size="16" fill="#fff">N &#8593;</text>')
     parts.append("</svg>")

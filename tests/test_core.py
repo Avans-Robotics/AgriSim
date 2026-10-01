@@ -102,3 +102,15 @@ def test_manifest_matches_layout(tmp_path):
     manifest = to_manifest(layout)
     assert [p["crop"] for p in manifest["pixels"]] == ["carrot", None]
     assert len(manifest["plants"]) == len(layout.plants)
+
+
+def test_two_crops_in_one_field():
+    spec = load_field_spec(REPO / "examples" / "mixed.yaml")
+    lettuce = load_crop(REPO / "crops" / "lettuce.yaml")
+    layout = build_layout(spec, {"carrot": CARROT, "lettuce": lettuce})
+    assert len(planting_positions(lettuce.planting, 0.5, 0.0)) == 4
+    for p in layout.plants:
+        assert p.crop == spec.grid[p.pixel[0]][p.pixel[1]]
+        assert p.variant.startswith(p.crop + "_v")
+    assert {p.pixel for p in layout.plants if p.crop == "lettuce"} == {(0, 1), (1, 0), (1, 2)}
+    assert not [p for p in layout.plants if p.pixel == (0, 2)]
