@@ -25,12 +25,16 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 
 - Ubuntu 24.04, Python 3.12, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8).
 - GPU: NVIDIA RTX PRO 1000 Blackwell, 8 GB VRAM. Watch VRAM with large Fields.
-- Known issue: the ROS-vendored `gz` in `/opt/ros/jazzy/opt/gz_tools_vendor/bin` shadows the system `gz`, so `gz sim` fails until PATH is fixed. `ros-jazzy-ros-gz` is not installed yet.
+- Known issue: sourcing ROS Jazzy sets `GZ_CONFIG_PATH` to `/opt/ros/jazzy/opt/sdformat_vendor/share/gz` only, so `gz` lists just `sdf` and `gz sim` is missing (PATH is not the cause; both `gz` binaries behave the same). Fix, after `source /opt/ros/jazzy/setup.bash` in `~/.bashrc`: `export GZ_CONFIG_PATH="$GZ_CONFIG_PATH:/usr/share/gz"`.
+- Known issue: any newer gz-msgs (e.g. `libgz-msgs12`) installed next to Harmonic puts a second `.gz_desc` in `/usr/share/gz/protos/`, and every gz program prints hundreds of `libprotobuf ERROR ... File already exists in database`. `GZ_DESCRIPTOR_PATH` does not help (it adds, never replaces). Keep only Harmonic's gz-msgs10 installed.
+- Known issue: `libEGL warning: egl: failed to create dri2 screen` comes from Mesa probing the NVIDIA GPU. Fix: `export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json`.
+- `ros-jazzy-ros-gz` is not installed yet; deferred until a chunk needs ROS topics.
 
-## Commands (planned, from milestone M1)
+## Commands
 
 - Install: `uv sync`
-- Build a world: `uv run pixelfield build examples/carrot_pixel.yaml`
+- Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf)
+- Open it: `gz sim out/carrot_pixel/world.sdf`
 - Tests: `uv run pytest`
 - Lint: `uv run ruff check . && uv run ruff format --check .`
 - Validate SDF: `gz sdf -k <world.sdf>`

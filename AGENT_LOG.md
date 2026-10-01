@@ -95,3 +95,52 @@ field.svg now shows the Field frame at the origin (x east red, y north green, 10
 Branch m1a-core, validated (tests, lint, both SVGs rendered and inspected). Not pushed; CI UNVERIFIED.
 ### Open items
 - Push, CI check, review and merge; then M1b.
+
+## 2026-10-01 M1b: fix local gz (GZ_CONFIG_PATH, not PATH)
+### Goal & outcome
+Make `gz sim` work locally. Root cause: sourcing ROS Jazzy sets GZ_CONFIG_PATH to /opt/ros/jazzy/opt/sdformat_vendor/share/gz only, so gz sees just `sdf`. Fixed by appending /usr/share/gz in ~/.bashrc (backup at ~/.bashrc.bak-gzconfig). CLAUDE.md known issue rewritten.
+### Decisions & why
+- Fix lives in ~/.bashrc, not the repo: machine issue; Docker (M1e) covers other users.
+- Keep gz-transport15/msgs12 (user-installed 2026-02-01 via python3-gz-transport15, may serve another project); workaround `--force-version 13` documented.
+- ros-jazzy-ros-gz deferred until a chunk needs ROS topics.
+### Lessons / gotchas
+- The PATH theory was wrong: vendor gz and /usr/bin/gz behave identically; the gz tools discover commands via *.yaml in GZ_CONFIG_PATH.
+- `gz topic --versions` lists 15.1.0 and 13.5.0; default may pick 15, incompatible with Harmonic.
+### State
+Branch m1b-gazebo. Validated in fresh `bash -i`: gz sim 8.14.0, gz sdf 14.9.0, `gz sdf -k` on stock shapes.sdf Valid. GUI open of shapes.sdf UNVERIFIED (user checks by eye).
+### Open items
+- User: run `gz sim shapes.sdf` in a new terminal, confirm GUI.
+- Next: Gazebo Exporter with soil plane and primitive Plants (grill first).
+
+## 2026-10-01 M1b: silence gz protobuf errors and EGL warnings
+### Goal & outcome
+`gz sim shapes.sdf` worked but printed hundreds of `libprotobuf ERROR ... File already exists` lines plus libEGL dri2 warnings. Protobuf errors fixed by removing the gz-msgs12/transport15 stack (user ran apt). EGL: `__EGL_VENDOR_LIBRARY_FILENAMES` set to NVIDIA only in ~/.bashrc. CLAUDE.md known issues updated.
+### Decisions & why
+- Removed the stack instead of dpkg-diverting the desc file: its only user (DroneBalloonProto, PX4 camera scripts, last touched 2026-02-01) is obsolete per user.
+- Explicit `apt remove libgz-msgs12 libgz-utils4 libzenohc`, no `apt autoremove`: autoremove would also drop the unrelated ros-jazzy-hpp-fcl.
+### Lessons / gotchas
+- gz-msgs loads every *.gz_desc in /usr/share/gz/protos; two major versions there means duplicate descriptors in every gz process.
+- GZ_DESCRIPTOR_PATH is additive: pointing it at a msgs10-only dir doubled the errors (220 to 432).
+### State
+Branch m1b-gazebo. Validated in fresh `bash -i`: 0 protobuf errors in headless `gz sim -s` and `gz topic -l` (was 220 and 440), gz sim 8.14.0, only transport 13.5.0 left. EGL fix validated: user opened the GUI, shapes render, no warnings.
+### Open items
+None for the gz setup.
+- Next: grill the Gazebo Exporter (soil plane, primitive Plants).
+
+## 2026-10-01 M1b: Gazebo Exporter with soil and stand-in Plants
+### Goal & outcome
+`pixelfield build` now also writes world.sdf: flat brown soil (Field plus 0.5 m border, 2 cm box, top at z=0, with collision), a directional sun, Physics/UserCommands/SceneBroadcaster systems, and one static cylinder model per Plant named by Plant id. 17 tests pass; both examples pass `gz sdf -k` and load headless without warnings.
+### Decisions & why
+- One world.sdf with inline Plant models, no per-Crop model.sdf + include: `<include>` cannot scale, and every Plant has its own scale. Modularity lives in the shared Variant .glb files (M1d).
+- Stand-in size derived, no YAML field: radius 0.4 x min(row_spacing, in_row_spacing), height 0.1 m, both times Plant scale. Thrown away in M1d.
+- Visual only on Plants; collision comes with Variants.
+- FieldLayout gained `crops` (deviation, reported): Exporters need the Planting Pattern and only receive the Layout.
+- Plant colors moved to exporters/colors.py so SVG and Gazebo match.
+- build runs all Exporters by default; `--exporter` picks one.
+- SDF written with stdlib ElementTree (escaping, ET.indent, tests parse with the same module).
+### Lessons / gotchas
+- The gz sdf test is skipped only when gz is absent; with gz present but GZ_CONFIG_PATH unfixed it fails (intended, it flags the broken setup).
+### State
+Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean, user checked both worlds in the GUI (stand-in sizes differ from the SVG dots, accepted: both are throwaway).
+### Open items
+- Push m1b-gazebo, CI check, review and merge. Then M1c (carrot Asset Generator).

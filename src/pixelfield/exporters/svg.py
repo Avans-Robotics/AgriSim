@@ -3,9 +3,9 @@
 from pathlib import Path
 
 from pixelfield.core.layout import FieldLayout
+from pixelfield.exporters.colors import crop_colors
 
 PX_PER_M = 1000
-PLANT_COLORS = ["#3c8d2f", "#c9d93a", "#2f7fbf", "#d9603a", "#9b4fc9"]  # cycled per Crop
 CROP_FILL, EMPTY_FILL = "#8b6b4a", "#c8b89a"
 GRID_M = 0.1  # grid spacing, also the scale bar length
 LINE_HEIGHT = 26
@@ -20,8 +20,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     def svg_y(y: float) -> float:  # SVG y points down, Field y points north
         return height - y * PX_PER_M
 
-    crops = sorted({p.crop for p in layout.plants})
-    color = {crop: PLANT_COLORS[i % len(PLANT_COLORS)] for i, crop in enumerate(crops)}
+    color = crop_colors(layout)
     legend = _legend(layout, color, width, top=height)
     total_width = width + 2 * PAD
     total_height = height + LINE_HEIGHT * legend["lines"] + 2 * PAD
