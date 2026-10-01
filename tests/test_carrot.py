@@ -53,3 +53,5 @@ def test_preview_has_one_mesh_model_per_variant(library, tmp_path):
     world = gazebo.preview(paths, tmp_path)
     uris = [u.text for u in ET.parse(world).iter("uri")]
     assert uris == [str(p.resolve()) for p in paths]
+    rolls = [float(v.findtext("pose").split()[3]) for v in ET.parse(world).iter("visual")]
+    assert rolls == pytest.approx([1.5708] * len(paths), abs=1e-4)  # y-up glTF stood up

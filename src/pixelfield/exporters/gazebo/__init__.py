@@ -1,5 +1,6 @@
 """Gazebo Harmonic world: flat soil, a sun and one static primitive model per Plant."""
 
+import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -13,6 +14,8 @@ SOIL_RGBA = (0.35, 0.25, 0.17, 1.0)
 # ponytail: stand-in cylinder until Variants replace it (M1d); radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
+# Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
+GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
 SYSTEMS = {
     "gz-sim-physics-system": "gz::sim::systems::Physics",
     "gz-sim-user-commands-system": "gz::sim::systems::UserCommands",
@@ -67,6 +70,7 @@ def preview(meshes: list[Path], out_dir: Path, spacing: float = 0.15) -> Path:
     for i, mesh in enumerate(meshes):
         link = _model(world, Path(mesh).stem, (i * spacing, 0.0, 0.0, 0.0))
         visual = ET.SubElement(link, "visual", name="visual")
+        _text(visual, "pose", _join(GLTF_TO_Z_UP))
         geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
         _text(geometry, "uri", str(Path(mesh).resolve()))
 
