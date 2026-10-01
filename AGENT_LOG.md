@@ -236,3 +236,19 @@ Soil uses ambientCG Ground048 (CC0, 1K JPG color, NormalGL, roughness; about 5 M
 Branch m1d-variants. Validated: pytest (23), ruff, `gz sdf -k`, headless oblique and top-down renders show textured soil without visible tile seams.
 ### Open items
 - Next: checkpoint 4 (cameras + `pixelfield render`).
+
+## 2026-10-01 M1d checkpoint 4: cameras and pixelfield render
+### Goal & outcome
+world.sdf has two static placeholder cameras, 1.0 m from the Field centre, looking north: top-down and 45 degree oblique (1920x1080, hfov 60 deg, 2 Hz, save path `renders/<name>`, topic `camera/<name>`). `pixelfield render <world.sdf>` runs gz headless from the out dir with one `gz topic -e` per camera, keeps the last frame as `renders/top.png` / `renders/oblique.png`, about 12 s. Commit f117e22.
+### Decisions & why
+- Render code in exporters/gazebo (`render()`), CLI only wires it: simulator code stays in the Exporter.
+- gz run with cwd = out dir: camera save paths are cwd-relative, this keeps world.sdf relocatable.
+- Fails loudly if a camera saved no frames (hint: more iterations).
+### Lessons / gotchas
+- Opening the world interactively from the repo root and subscribing to a camera (e.g. Image Display) would save PNGs into ./renders/; harmless, only happens when subscribed.
+- Top-down at 1.0 m sees about 1.15 x 0.65 m: the canopy (foliage radius about 0.2 m) fills most of it and spills over the Pixel edge.
+### State
+Branch m1d-variants. Validated: pytest (25, including a real headless render), ruff, `pixelfield render` on carrot_pixel produced both images. Realism judgment UNVERIFIED (user compares with a real carrot photo).
+### Open items
+- User: judge renders vs real photos (M1d check). Known look gaps: flat maple-like leaflets vs feathery real carrot leaves, no hue variation, GI barely visible.
+- Then push, PR, review, merge; next M1e (Docker).
