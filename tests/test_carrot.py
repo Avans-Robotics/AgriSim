@@ -39,6 +39,11 @@ def test_variants_within_ranges_and_budget(library):
         assert carrot.ROOT_LENGTH[0] <= root["length"] <= carrot.ROOT_LENGTH[1]
         assert carrot.SHOULDER_HEIGHT[0] <= root["top"] <= carrot.SHOULDER_HEIGHT[1]
         assert carrot.SHOULDER_DIAMETER[0] <= 2 * root["radius"] <= carrot.SHOULDER_DIAMETER[1]
+        foliage = sizes[path.stem]["foliage"]
+        top = max(scene.geometry[part].bounds[1][1] for part in ("petioles", "leaves"))
+        assert top == pytest.approx(foliage["height"], abs=1e-4)
+        assert 0.8 * carrot.FOLIAGE_HEIGHT[0] <= foliage["height"] <= carrot.FOLIAGE_HEIGHT[1]
+        assert scene.geometry["leaves"].face_normals[:, 1].min() >= 0  # blades face up (y)
 
 
 def test_regenerate_removes_stale_variants(library):

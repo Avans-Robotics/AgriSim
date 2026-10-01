@@ -9,3 +9,6 @@ Variant files are glTF binaries, y up as the glTF spec requires (z up is applied
 `variants.json` holds per-Variant sizes in meters for collision shapes, in the z-up Field frame:
 
 - `root.length`: crown top to tip; `root.radius`: shoulder radius; `root.top`: crown top above the soil.
+- `foliage.height`: highest leaf point above the soil; `foliage.radius`: widest reach from the root axis.
+
+Parts per Variant (glb nodes): `root`, `petioles`, `leaves`. Foliage materials are double-sided, so single-faced blades show from below too.
