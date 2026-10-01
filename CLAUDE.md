@@ -30,7 +30,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Known issue: `libEGL warning: egl: failed to create dri2 screen` comes from Mesa probing the NVIDIA GPU. Fix: `export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json`.
 - `ros-jazzy-ros-gz` is not installed yet; deferred until a chunk needs ROS topics.
 
-## Commands (planned, from milestone M1)
+## Commands
 
 - Install: `uv sync`
 - Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf)
