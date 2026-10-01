@@ -176,3 +176,18 @@ None.
 Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`. Upright look in the GUI UNVERIFIED (user checks). User judged the root shape fine.
 ### Open items
 - Checkpoint 2: foliage.
+
+## 2026-10-01 M1c checkpoint 2: carrot foliage
+### Goal & outcome
+Carrot Variants now have 6-10 leaves: a tapered 3-sided petiole tube along a quadratic Bezier (up, out, slight droop) and 4-6 leaflet pairs plus a tip leaflet, each a fan of 3-5 diamond blades. At most about 2,000 triangles per Variant, library 1.2 MB. `variants.json` gained `foliage.height` and `foliage.radius`, measured from the mesh.
+### Decisions & why
+- Double-sided glTF material on foliage instead of duplicated back faces: halves the triangles, and gz-common reads assimp's `$mat.twosided` (found in libgz-common5-graphics).
+- Blades are flipped to face up so the single faces light correctly from above.
+- Foliage sizes measured from the vertices, not from the sampled parameters, so collision shapes match the mesh.
+### Lessons / gotchas
+- `uv run --with matplotlib` gives a quick off-repo render to look at meshes before asking the user, with no project dependency change.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. Look in the gz GUI UNVERIFIED (user checks, including whether the double-sided blades show from below).
+### Open items
+- User: `gz sim out/carrot_variants/world.sdf`, judge leaves.
+- Then push m1c-carrot, PR, CI.
