@@ -18,7 +18,9 @@ def main(argv: list[str] | None = None) -> None:
     build.add_argument(
         "--crops", type=Path, default=Path("crops"), help="folder of Crop definitions"
     )
-    build.add_argument("--exporter", choices=sorted(EXPORTERS), default="svg")
+    build.add_argument(
+        "--exporter", choices=sorted(EXPORTERS), help="run only this Exporter (default: all)"
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -32,5 +34,6 @@ def main(argv: list[str] | None = None) -> None:
     out = args.out or Path("out") / args.spec.stem
     out.mkdir(parents=True, exist_ok=True)
     (out / "manifest.json").write_text(json.dumps(to_manifest(layout), indent=2) + "\n")
-    EXPORTERS[args.exporter](layout, out)
+    for name in [args.exporter] if args.exporter else sorted(EXPORTERS):
+        EXPORTERS[name](layout, out)
     print(f"{len(layout.plants)} Plants in {spec.rows} x {spec.cols} Pixels, written to {out}")

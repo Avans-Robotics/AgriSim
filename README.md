@@ -16,7 +16,8 @@ Then, from the repository root:
 
 ```bash
 uv sync                                               # install dependencies
-uv run pixelfield build examples/carrot_pixel.yaml    # writes out/carrot_pixel/manifest.json and field.svg
+uv run pixelfield build examples/carrot_pixel.yaml    # writes out/carrot_pixel/: manifest.json, field.svg, world.sdf
+gz sim out/carrot_pixel/world.sdf                     # open the world in Gazebo
 uv run pytest                                         # tests
 uv run ruff check . && uv run ruff format --check .   # lint
 ```

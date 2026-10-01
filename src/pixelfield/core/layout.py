@@ -34,6 +34,7 @@ class Plant:
 @dataclass(frozen=True)
 class FieldLayout:
     spec: FieldSpec
+    crops: dict[str, Crop]  # the Crops used in this Field, by name
     pixels: tuple[Pixel, ...]
     plants: tuple[Plant, ...]
 
@@ -74,7 +75,7 @@ def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
             pixels.append(Pixel(row, col, name, origin))
             if name is not None:
                 plants += _plant_pixel(spec, crops[name], row, col, origin)
-    return FieldLayout(spec, tuple(pixels), tuple(plants))
+    return FieldLayout(spec, crops, tuple(pixels), tuple(plants))
 
 
 def _plant_pixel(
