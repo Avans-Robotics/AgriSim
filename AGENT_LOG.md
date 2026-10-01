@@ -297,3 +297,16 @@ Branch m1d-variants, PR #5 open (unchanged by the smoke test). Test worlds (`wor
 - User: review and merge PR #5.
 - M2 grill, first topic: Plant grouping per Pixel vs per-Plant models (M4 pull-out, labels). Then Docker (M1e).
 - Decide whether the PRIME offload env goes into CLAUDE.md known issues and ~/.bashrc.
+
+## 2026-10-01 NVIDIA as default for the gz GUI
+### Goal & outcome
+`~/.bashrc` now wraps `gz` in a function that sets PRIME render offload (`__NV_PRIME_RENDER_OFFLOAD=1`, `__GLX_VENDOR_LIBRARY_NAME=nvidia`), so only Gazebo runs on NVIDIA. CLAUDE.md known issues documents it (in PR #5).
+### Decisions & why
+- gz-only function instead of exporting the variables globally: other OpenGL apps stay on the Intel iGPU.
+### Lessons / gotchas
+- `pixelfield render` calls gz via subprocess and does not see the shell function; it already uses NVIDIA through EGL.
+- Backup of the previous ~/.bashrc in the session scratchpad only.
+### State
+Branch m1d-variants. Validated: new interactive shell resolves `gz` to the function, `gz sim --versions` works, the offload env gives an NVIDIA OpenGL renderer. GUI on NVIDIA through the function UNVERIFIED (user checks nvidia-smi with gz open).
+### Open items
+- Review and merge PR #5; then M2 grill (Plant grouping first).
