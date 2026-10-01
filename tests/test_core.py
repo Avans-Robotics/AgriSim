@@ -97,6 +97,8 @@ def test_build_writes_manifest_and_svg(tmp_path):
     assert svg.count("</circle>") == len(manifest["plants"])  # legend circles self-close
     assert f"carrot ({len(manifest['plants'])})" in svg
     assert "empty Pixel" not in svg
+    assert 'id="frame"' in svg
+    assert svg.count("V500.0") == 4  # 0.5 m Pixel, 10 cm grid: 4 inner vertical lines
 
 
 def test_manifest_matches_layout(tmp_path):
