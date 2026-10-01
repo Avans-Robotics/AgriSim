@@ -252,3 +252,18 @@ Branch m1d-variants. Validated: pytest (25, including a real headless render), r
 ### Open items
 - User: judge renders vs real photos (M1d check). Known look gaps: flat maple-like leaflets vs feathery real carrot leaves, no hue variation, GI barely visible.
 - Then push, PR, review, merge; next M1e (Docker).
+
+## 2026-10-01 M1d: look tuning after first renders
+### Goal & outcome
+User judged the first renders: leaves too big and coarse, no color variation, GI invisible, top-down view all canopy. Changed: leaflets now divided again (3-4 narrow segment pairs on a midrib, leaflets 40% shorter), one sampled shade per Variant mixing root/petiole/leaf colors between two ends, ambient 0.4 to 0.1, top camera at 1.7 m (oblique stays 1.0 m). Variants regenerated (max 3,334 triangles, library 2.0 MB).
+### Decisions & why
+- Finer geometry over alpha-textured leaf cards: only the generator changes; cards are the fallback if M2 performance fails.
+- Color variation baked per Variant, not per Plant in Gazebo: 24 shades with no Exporter change; Manifest `hue_shift` stays unused in Gazebo.
+- `MAX_TRIANGLES` 3000 to 8000 (M1c limit) so the finer leaves fit with headroom.
+### Lessons / gotchas
+- With ambient 0.4 the flat fill hid VCT GI; at 0.1 the canopy interior and shadows gain depth (A/B renders).
+### State
+Branch m1d-variants. Validated: pytest (25), ruff, regenerated library, A/B renders. User verdict on the new look UNVERIFIED.
+### Open items
+- User: judge the A/B and new renders; keep or drop GI.
+- Then push, PR, review, merge; next M1e.
