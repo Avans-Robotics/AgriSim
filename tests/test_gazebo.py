@@ -72,3 +72,16 @@ def test_sun_from_south_east_and_vct_gi_on_sensors(mixed):
     gi = world.find("plugin[@name='gz::sim::systems::Sensors']/global_illumination")
     assert gi.get("type") == "vct" and gi.findtext("enabled") == "true"
     assert world.find("scene/sky") is not None
+
+
+def test_soil_visual_is_textured_tiles_covering_the_collision_box(mixed):
+    world_sdf, _ = mixed
+    soil = next(m for m in ET.parse(world_sdf).iter("model") if m.get("name") == "soil")
+    sx, sy, _ = map(float, soil.findtext("link/collision//box/size").split())
+    tiles = soil.findall("link/visual")
+    xs = [float(t.findtext("pose").split()[0]) for t in tiles]
+    ys = [float(t.findtext("pose").split()[1]) for t in tiles]
+    assert max(xs) - min(xs) + 1.0 >= sx and max(ys) - min(ys) + 1.0 >= sy  # 1 m tiles
+    for tile in tiles:
+        uri = tile.findtext(".//albedo_map")
+        assert uri == "textures/color.jpg" and (world_sdf.parent / uri).is_file()

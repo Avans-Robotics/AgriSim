@@ -15,7 +15,9 @@ from pixelfield.exporters.colors import crop_colors
 SDF_VERSION = "1.9"
 SOIL_BORDER = 0.5  # meters of soil around the Field
 SOIL_THICKNESS = 0.02
-SOIL_RGBA = (0.35, 0.25, 0.17, 1.0)
+# CC0 PBR soil (ambientCG Ground048), copied into textures/ next to world.sdf.
+SOIL_TEXTURES = Path("assets/library/textures/soil")
+SOIL_TILE = 1.0  # meters covered by one copy of the texture
 # Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
@@ -48,12 +50,21 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     soil_size = (width + 2 * SOIL_BORDER, depth + 2 * SOIL_BORDER, SOIL_THICKNESS)
     soil_pose = (width / 2, depth / 2, -SOIL_THICKNESS / 2, 0.0)
     soil = _model(world, "soil", soil_pose)
-    for tag in ("collision", "visual"):
-        element = ET.SubElement(soil, tag, name=tag)
-        box = ET.SubElement(ET.SubElement(element, "geometry"), "box")
-        _text(box, "size", _join(soil_size))
-        if tag == "visual":
-            element.append(_material(SOIL_RGBA))
+    collision = ET.SubElement(soil, "collision", name="collision")
+    _text(ET.SubElement(ET.SubElement(collision, "geometry"), "box"), "size", _join(soil_size))
+    # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
+    # centred on the soil; the outer tiles may overhang the collision box a little.
+    textures = Path(out_dir) / "textures"
+    shutil.copytree(SOIL_TEXTURES, textures, dirs_exist_ok=True)
+    nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size[:2])
+    for i in range(nx):
+        for j in range(ny):
+            visual = ET.SubElement(soil, "visual", name=f"tile_{i}_{j}")
+            offset = ((i - (nx - 1) / 2) * SOIL_TILE, (j - (ny - 1) / 2) * SOIL_TILE)
+            _text(visual, "pose", _join(offset + (0.0, 0.0, 0.0, 0.0)))
+            box = ET.SubElement(ET.SubElement(visual, "geometry"), "box")
+            _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
+            visual.append(_soil_material())
 
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
     meshes, copied = Path(out_dir) / "meshes", set()
@@ -160,6 +171,18 @@ def _material(rgba: tuple[float, ...]) -> ET.Element:
     material = ET.Element("material")
     for tag in ("ambient", "diffuse"):
         _text(material, tag, _join(rgba))
+    return material
+
+
+def _soil_material() -> ET.Element:
+    material = ET.Element("material")
+    for tag in ("ambient", "diffuse"):
+        _text(material, tag, "1 1 1 1")  # let the albedo map set the color
+    metal = ET.SubElement(ET.SubElement(material, "pbr"), "metal")
+    for tag, name in [("albedo_map", "color"), ("normal_map", "normal"),
+                      ("roughness_map", "roughness")]:  # fmt: skip
+        _text(metal, tag, f"textures/{name}.jpg")  # resolved against world.sdf
+    _text(metal, "metalness", "0")
     return material
 
 
