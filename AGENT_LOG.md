@@ -95,3 +95,19 @@ field.svg now shows the Field frame at the origin (x east red, y north green, 10
 Branch m1a-core, validated (tests, lint, both SVGs rendered and inspected). Not pushed; CI UNVERIFIED.
 ### Open items
 - Push, CI check, review and merge; then M1b.
+
+## 2026-10-01 M1b: fix local gz (GZ_CONFIG_PATH, not PATH)
+### Goal & outcome
+Make `gz sim` work locally. Root cause: sourcing ROS Jazzy sets GZ_CONFIG_PATH to /opt/ros/jazzy/opt/sdformat_vendor/share/gz only, so gz sees just `sdf`. Fixed by appending /usr/share/gz in ~/.bashrc (backup at ~/.bashrc.bak-gzconfig). CLAUDE.md known issue rewritten.
+### Decisions & why
+- Fix lives in ~/.bashrc, not the repo: machine issue; Docker (M1e) covers other users.
+- Keep gz-transport15/msgs12 (user-installed 2026-02-01 via python3-gz-transport15, may serve another project); workaround `--force-version 13` documented.
+- ros-jazzy-ros-gz deferred until a chunk needs ROS topics.
+### Lessons / gotchas
+- The PATH theory was wrong: vendor gz and /usr/bin/gz behave identically; the gz tools discover commands via *.yaml in GZ_CONFIG_PATH.
+- `gz topic --versions` lists 15.1.0 and 13.5.0; default may pick 15, incompatible with Harmonic.
+### State
+Branch m1b-gazebo. Validated in fresh `bash -i`: gz sim 8.14.0, gz sdf 14.9.0, `gz sdf -k` on stock shapes.sdf Valid. GUI open of shapes.sdf UNVERIFIED (user checks by eye).
+### Open items
+- User: run `gz sim shapes.sdf` in a new terminal, confirm GUI.
+- Next: Gazebo Exporter with soil plane and primitive Plants (grill first).
