@@ -1,5 +1,6 @@
 """Gazebo Harmonic world: flat soil, a sun and one static primitive model per Plant."""
 
+import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -13,6 +14,8 @@ SOIL_RGBA = (0.35, 0.25, 0.17, 1.0)
 # ponytail: stand-in cylinder until Variants replace it (M1d); radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
+# Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
+GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
 SYSTEMS = {
     "gz-sim-physics-system": "gz::sim::systems::Physics",
     "gz-sim-user-commands-system": "gz::sim::systems::UserCommands",
@@ -52,6 +55,27 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
         visual.append(_material(colors[p.crop]))
 
     ET.indent(sdf)
+    path = Path(out_dir) / "world.sdf"
+    ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
+    return path
+
+
+def preview(meshes: list[Path], out_dir: Path, spacing: float = 0.15) -> Path:
+    """World with one static model per Variant mesh in a row along x, no soil, for checking."""
+    sdf = ET.Element("sdf", version=SDF_VERSION)
+    world = ET.SubElement(sdf, "world", name="variants")
+    for filename, name in SYSTEMS.items():
+        ET.SubElement(world, "plugin", filename=filename, name=name)
+    world.append(_sun())
+    for i, mesh in enumerate(meshes):
+        link = _model(world, Path(mesh).stem, (i * spacing, 0.0, 0.0, 0.0))
+        visual = ET.SubElement(link, "visual", name="visual")
+        _text(visual, "pose", _join(GLTF_TO_Z_UP))
+        geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
+        _text(geometry, "uri", str(Path(mesh).resolve()))
+
+    ET.indent(sdf)
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
     path = Path(out_dir) / "world.sdf"
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
     return path

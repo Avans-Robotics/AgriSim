@@ -144,3 +144,49 @@ None for the gz setup.
 Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean, user checked both worlds in the GUI (stand-in sizes differ from the SVG dots, accepted: both are throwaway).
 ### Open items
 - Push m1b-gazebo, CI check, review and merge. Then M1c (carrot Asset Generator).
+
+## 2026-10-01 M1c checkpoint 1: carrot root Variants
+### Goal & outcome
+`pixelfield generate carrot` writes 24 root-only carrot Variants (glb, about 16 KB each, 760 triangles), `variants.json` with root sizes, and a Gazebo preview world (`out/carrot_variants/world.sdf`). 21 tests pass.
+### Decisions & why
+- Grilled: harvest stage only; real mesh leaflets (checkpoint 2); one PBR material per part, no textures; trimesh as optional `generate` extra plus dev group; collision sizes in variants.json now (only the generator knows them); at most 3k triangles per Variant; Variant files are spec-correct y-up, any Gazebo rotation goes in the Exporter (M1d).
+- Variant count and library path come from the Crop YAML (Crop gained `library`).
+- Preview world lives in exporters/gazebo (`preview`), keeping simulator code out of generators.
+- Root = solid of revolution (flat crown, rounded edge, Nantes-like taper) with a small sideways bend.
+### Lessons / gotchas
+- trimesh `fix_normals` needs scipy; instead the revolve profile runs tip to crown so the volume is positive (normals outward). A test asserts it.
+- trimesh names glb meshes `geometry_0` unless `geom_name` is passed.
+- The agent shell lacks ~/.bashrc; gz commands need `bash -ic`.
+- Headless `gz sim -s` does not load visual meshes, so it does not prove the glb renders.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, determinism (same md5 across runs), `gz sdf -k` on the preview world, build still works without trimesh. GUI look in gz UNVERIFIED (user checks, including whether gz shows the y-up glb standing or lying).
+### Open items
+- User: `gz sim out/carrot_variants/world.sdf`, judge shape and orientation.
+- Checkpoint 2: foliage.
+
+## 2026-10-01 M1c: y-up Variants stood up in Gazebo
+### Goal & outcome
+User saw the preview carrots lying on their side: Gazebo loads glTF without converting y up to z up (confirms the Q10 expectation). The Gazebo code now puts a roll of +90 degrees on each Variant visual (`GLTF_TO_Z_UP`), so the preview stands them up; M1d reuses it.
+### Decisions & why
+- Roll on the visual pose, not the model pose: the model frame stays z up with yaw only, so M1d Plant poses need no change.
+- Moved forward from M1d (user approved) so foliage can be judged upright at checkpoint 2.
+### Lessons / gotchas
+None.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`. Upright look in the GUI UNVERIFIED (user checks). User judged the root shape fine.
+### Open items
+- Checkpoint 2: foliage.
+
+## 2026-10-01 M1c checkpoint 2: carrot foliage
+### Goal & outcome
+Carrot Variants now have 6-10 leaves: a tapered 3-sided petiole tube along a quadratic Bezier (up, out, slight droop) and 4-6 leaflet pairs plus a tip leaflet, each a fan of 3-5 diamond blades. At most about 2,000 triangles per Variant, library 1.2 MB. `variants.json` gained `foliage.height` and `foliage.radius`, measured from the mesh.
+### Decisions & why
+- Double-sided glTF material on foliage instead of duplicated back faces: halves the triangles, and gz-common reads assimp's `$mat.twosided` (found in libgz-common5-graphics).
+- Blades are flipped to face up so the single faces light correctly from above.
+- Foliage sizes measured from the vertices, not from the sampled parameters, so collision shapes match the mesh.
+### Lessons / gotchas
+- `uv run --with matplotlib` gives a quick off-repo render to look at meshes before asking the user, with no project dependency change.
+### State
+Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. User checked the leaves in the gz GUI and approved them ("perfect for now").
+### Open items
+- Push m1c-carrot, PR, CI, review and merge. Then M1d.
