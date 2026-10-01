@@ -222,3 +222,17 @@ Branch m1d-variants, uncommitted code. Validated: pytest (22), ruff, `gz sdf -k`
 ### Open items
 - Tune ambient/sun intensity by eye once the soil texture and real cameras are in.
 - Next: checkpoint 3 (soil texture, user approves the ambientCG set).
+
+## 2026-10-01 M1d checkpoint 3: soil texture
+### Goal & outcome
+Soil uses ambientCG Ground048 (CC0, 1K JPG color, NormalGL, roughness; about 5 MB) from `assets/library/textures/soil/`, copied into `out/<name>/textures/` and referenced relatively in a PBR material. Commit f3ebcdd.
+### Decisions & why
+- User picked Ground048 (dark crumbly soil, like a loosened bed) from six ambientCG candidates; swapping later is a one-folder change.
+- NormalGL, not NormalDX: OGRE uses the OpenGL normal convention.
+- Soil visual = grid of 1 m box tiles (`SOIL_TILE`) over one collision box: SDF boxes map the texture once per face, so one big box would stretch it.
+### Lessons / gotchas
+- Relative PBR map paths also resolve against the world file (render run from /tmp worked).
+### State
+Branch m1d-variants. Validated: pytest (23), ruff, `gz sdf -k`, headless oblique and top-down renders show textured soil without visible tile seams.
+### Open items
+- Next: checkpoint 4 (cameras + `pixelfield render`).
