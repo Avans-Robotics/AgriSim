@@ -141,7 +141,6 @@ None for the gz setup.
 ### Lessons / gotchas
 - The gz sdf test is skipped only when gz is absent; with gz present but GZ_CONFIG_PATH unfixed it fails (intended, it flags the broken setup).
 ### State
-Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean. GUI look UNVERIFIED until the user opens both worlds.
+Branch m1b-gazebo, commit 2c5b0ec. Validated: pytest (17), ruff, build + `gz sdf -k` on carrot_pixel and mixed, headless `gz sim -s` load clean, user checked both worlds in the GUI (stand-in sizes differ from the SVG dots, accepted: both are throwaway).
 ### Open items
-- User: `gz sim out/carrot_pixel/world.sdf` and `out/mixed/world.sdf`; Plants should match field.svg (lettuce yellow-green, carrot green).
 - Push m1b-gazebo, CI check, review and merge. Then M1c (carrot Asset Generator).
