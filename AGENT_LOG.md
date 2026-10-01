@@ -51,3 +51,17 @@ Branch m1a-core, commit 1e0c73a, not pushed. Validated: tests, lint, CLI run, SV
 ### Open items
 - Push m1a-core and check the CI run; user reviews and merges.
 - Next chunk M1b: fix local gz PATH, Gazebo Exporter with soil plane and primitive Plants.
+
+## 2026-10-01 M1a: second Crop (lettuce) to prove crop-generic core
+### Goal & outcome
+Check that adding a Crop needs no code change. Added crops/lettuce.yaml (placeholder values), examples/mixed.yaml (2x3 grid, carrot, lettuce, empty) and a two-Crop test. Only code change: SVG colors Plants per Crop. 13 tests pass; mixed build gives 76 Plants and the SVG matches the grid.
+### Decisions & why
+- Lettuce added on m1a-core (not yet merged) because it validates M1a's crop-generic claim; values are guesses, marked provisional in the file.
+- Lettuce: 0.25 m spacing, 0.125 m margin, 4 heads per 0.5 m Pixel.
+### Lessons / gotchas
+- Per-Pixel seeding visibly works: Pixel r0c0 in mixed.yaml is identical to carrot_pixel.yaml (same seed).
+### State
+Branch m1a-core, validated (tests, lint, CLI, rendered SVG inspected). Not pushed; CI UNVERIFIED.
+### Open items
+- Replace lettuce values with measured ones (spec section 12, open item 2).
+- Push, CI check, review and merge; then M1b.
