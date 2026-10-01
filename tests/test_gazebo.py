@@ -1,4 +1,5 @@
 import json
+import math
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -24,13 +25,14 @@ def test_one_model_per_plant_at_its_pose(mixed):
     world_sdf, manifest = mixed
     models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
     plants = manifest["plants"]
-    assert set(models) == {p["id"] for p in plants} | {"soil"}
+    assert set(models) == {p["id"] for p in plants} | {"soil", "camera_top", "camera_oblique"}
     for p in plants:
         x, y, z, _, _, yaw = map(float, models[p["id"]].findtext("pose").split())
         assert (x, y, yaw) == pytest.approx((p["pose"]["x"], p["pose"]["y"], p["pose"]["yaw"]),
                                             abs=1e-3)  # fmt: skip
-        length = float(models[p["id"]].findtext(".//cylinder/length"))
-        assert z == pytest.approx(length / 2, abs=1e-4)  # cylinder base on the soil
+        length = models[p["id"]].findtext(".//cylinder/length")
+        base = z - float(length) / 2 if length else z  # Variant origin is on the soil surface
+        assert base == pytest.approx(0.0, abs=1e-4)
 
 
 def test_soil_covers_field_plus_border(mixed):
@@ -41,11 +43,18 @@ def test_soil_covers_field_plus_border(mixed):
     assert size[:2] == pytest.approx([field["cols"] * 0.5 + 1.0, field["rows"] * 0.5 + 1.0])
 
 
-def test_crops_have_different_colors(mixed):
+def test_carrots_use_copied_variant_meshes_and_lettuce_falls_back(mixed):
     world_sdf, manifest = mixed
     models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
-    color = {p["crop"]: models[p["id"]].findtext(".//diffuse") for p in manifest["plants"]}
-    assert len(set(color.values())) == 2
+    for p in manifest["plants"]:
+        model = models[p["id"]]
+        if p["crop"] == "lettuce":  # no lettuce Variants yet
+            assert model.find(".//cylinder") is not None
+            continue
+        assert model.findtext(".//mesh/uri") == f"meshes/{p['variant']}.glb"
+        assert (world_sdf.parent / "meshes" / f"{p['variant']}.glb").is_file()
+        scale = [float(v) for v in model.findtext(".//mesh/scale").split()]
+        assert scale == pytest.approx([p["scale"]] * 3, abs=1e-3)  # Manifest rounds to 3
 
 
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
@@ -53,3 +62,54 @@ def test_world_passes_gz_sdf_check(mixed):
     world_sdf, _ = mixed
     result = subprocess.run(["gz", "sdf", "-k", str(world_sdf)], capture_output=True, text=True)
     assert result.returncode == 0 and "Valid" in result.stdout, result.stdout + result.stderr
+
+
+def test_sun_from_south_east_and_vct_gi_on_sensors(mixed):
+    world_sdf, _ = mixed
+    world = ET.parse(world_sdf).getroot().find("world")
+    dx, dy, dz = map(float, world.findtext("light/direction").split())
+    assert dx < 0 < dy and dx == pytest.approx(-dy)  # light travels north-west
+    assert dz / (dx**2 + dy**2) ** 0.5 == pytest.approx(-0.839, abs=1e-3)  # tan 40 degrees
+    gi = world.find("plugin[@name='gz::sim::systems::Sensors']/global_illumination")
+    assert gi.get("type") == "vct" and gi.findtext("enabled") == "true"
+    assert world.find("scene/sky") is not None
+
+
+def test_soil_visual_is_textured_tiles_covering_the_collision_box(mixed):
+    world_sdf, _ = mixed
+    soil = next(m for m in ET.parse(world_sdf).iter("model") if m.get("name") == "soil")
+    sx, sy, _ = map(float, soil.findtext("link/collision//box/size").split())
+    tiles = soil.findall("link/visual")
+    xs = [float(t.findtext("pose").split()[0]) for t in tiles]
+    ys = [float(t.findtext("pose").split()[1]) for t in tiles]
+    assert max(xs) - min(xs) + 1.0 >= sx and max(ys) - min(ys) + 1.0 >= sy  # 1 m tiles
+    for tile in tiles:
+        uri = tile.findtext(".//albedo_map")
+        assert uri == "textures/color.jpg" and (world_sdf.parent / uri).is_file()
+
+
+def test_cameras_look_at_field_centre(mixed):
+    world_sdf, manifest = mixed
+    models = {m.get("name"): m for m in ET.parse(world_sdf).iter("model")}
+    field = manifest["field"]
+    centre = (field["cols"] * 0.5 / 2, field["rows"] * 0.5 / 2, 0.0)
+    for name in ("top", "oblique"):
+        x, y, z, _, pitch, yaw = map(float, models[f"camera_{name}"].findtext("pose").split())
+        # forward axis of a camera with this pitch and yaw, from its pose to the centre
+        forward = (
+            math.cos(pitch) * math.cos(yaw),
+            math.cos(pitch) * math.sin(yaw),
+            -math.sin(pitch),
+        )
+        to_centre = [c - p for c, p in zip(centre, (x, y, z), strict=True)]
+        distance = {"top": 1.7, "oblique": 1.0}[name]
+        assert to_centre == pytest.approx([distance * f for f in forward], abs=1e-3)
+        assert models[f"camera_{name}"].findtext(".//save/path") == f"renders/{name}"
+
+
+@pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
+def test_render_saves_one_image_per_camera(tmp_path):
+    main(["build", str(REPO / "examples" / "carrot_pixel.yaml"), "-o", str(tmp_path),
+          "--crops", str(REPO / "crops")])  # fmt: skip
+    main(["render", str(tmp_path / "world.sdf")])
+    assert sorted(p.name for p in (tmp_path / "renders").iterdir()) == ["oblique.png", "top.png"]

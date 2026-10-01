@@ -1,6 +1,13 @@
-"""Gazebo Harmonic world: flat soil, a sun and one static primitive model per Plant."""
+"""Gazebo Harmonic world: flat soil, a sun and one static model per Plant.
+
+Plants use their Variant mesh, copied into `meshes/` next to world.sdf so the output folder
+is self-contained. Crops without Variants in their library fall back to a cylinder.
+"""
 
 import math
+import re
+import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -10,10 +17,25 @@ from pixelfield.exporters.colors import crop_colors
 SDF_VERSION = "1.9"
 SOIL_BORDER = 0.5  # meters of soil around the Field
 SOIL_THICKNESS = 0.02
-SOIL_RGBA = (0.35, 0.25, 0.17, 1.0)
-# ponytail: stand-in cylinder until Variants replace it (M1d); radius from the Planting Pattern.
+# CC0 PBR soil (ambientCG Ground048), copied into textures/ next to world.sdf.
+SOIL_TEXTURES = Path("assets/library/textures/soil")
+SOIL_TILE = 1.0  # meters covered by one copy of the texture
+# Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
+# Sun from the south-east at 40 degrees elevation, for consistent shadows in renders.
+SUN_ELEVATION = math.radians(40)
+SUN_AZIMUTH = math.radians(135)  # compass bearing the light comes from, clockwise from north
+# VCT global illumination, applied by the Sensors system to camera sensors only.
+GI_RESOLUTION = 32  # voxels per axis; more is sharper bounce light but costs VRAM
+GI_BOUNCES = 6
+# Placeholder render cameras until the real Amiga camera is known (spec open item 1).
+CAMERA_SIZE = (1920, 1080)
+CAMERA_HFOV = math.radians(60)
+# name: (pitch down, meters from the Field centre); both look north. The top camera sits high
+# enough to frame a whole Pixel plus overhanging leaves (vertical FOV is only 36 degrees).
+CAMERAS = {"top": (math.pi / 2, 1.7), "oblique": (math.pi / 4, 1.0)}
+RENDER_DIR = "renders"  # camera save path, relative to the cwd of `render`
 # Gazebo loads glTF as is, but Variant files are y up (glTF spec); this roll stands them up.
 GLTF_TO_Z_UP = (0.0, 0.0, 0.0, math.pi / 2, 0.0, 0.0)
 SYSTEMS = {
@@ -29,21 +51,51 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     world = ET.SubElement(sdf, "world", name="pixelfield")
     for filename, name in SYSTEMS.items():
         ET.SubElement(world, "plugin", filename=filename, name=name)
+    world.append(_sensors())
+    world.append(_scene())
     world.append(_sun())
 
     width, depth = spec.cols * spec.pixel_size, spec.rows * spec.pixel_size
     soil_size = (width + 2 * SOIL_BORDER, depth + 2 * SOIL_BORDER, SOIL_THICKNESS)
     soil_pose = (width / 2, depth / 2, -SOIL_THICKNESS / 2, 0.0)
     soil = _model(world, "soil", soil_pose)
-    for tag in ("collision", "visual"):
-        element = ET.SubElement(soil, tag, name=tag)
-        box = ET.SubElement(ET.SubElement(element, "geometry"), "box")
-        _text(box, "size", _join(soil_size))
-        if tag == "visual":
-            element.append(_material(SOIL_RGBA))
+    collision = ET.SubElement(soil, "collision", name="collision")
+    _text(ET.SubElement(ET.SubElement(collision, "geometry"), "box"), "size", _join(soil_size))
+    # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
+    # centred on the soil; the outer tiles may overhang the collision box a little.
+    textures = Path(out_dir) / "textures"
+    shutil.copytree(SOIL_TEXTURES, textures, dirs_exist_ok=True)
+    nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size[:2])
+    for i in range(nx):
+        for j in range(ny):
+            visual = ET.SubElement(soil, "visual", name=f"tile_{i}_{j}")
+            offset = ((i - (nx - 1) / 2) * SOIL_TILE, (j - (ny - 1) / 2) * SOIL_TILE)
+            _text(visual, "pose", _join(offset + (0.0, 0.0, 0.0, 0.0)))
+            box = ET.SubElement(ET.SubElement(visual, "geometry"), "box")
+            _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
+            visual.append(_soil_material())
+
+    for name, (pitch, distance) in CAMERAS.items():
+        world.append(_camera(name, (width / 2, depth / 2), pitch, distance))
 
     colors = {crop: _rgba(hex_color) for crop, hex_color in crop_colors(layout).items()}
+    meshes, copied = Path(out_dir) / "meshes", set()
     for p in layout.plants:
+        mesh = Path(layout.crops[p.crop].library) / f"{p.variant}.glb"
+        if mesh.is_file():
+            # ponytail: hue_shift ignored here, glb materials can't be tinted per Plant
+            # without replacing them; add a per-Plant material if renders look too uniform.
+            if mesh not in copied:  # copy each build so a regenerated library is picked up
+                meshes.mkdir(exist_ok=True)
+                shutil.copyfile(mesh, meshes / mesh.name)
+                copied.add(mesh)
+            link = _model(world, p.id, (p.x, p.y, p.z, p.yaw))
+            visual = ET.SubElement(link, "visual", name="visual")
+            _text(visual, "pose", _join(GLTF_TO_Z_UP))
+            geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
+            _text(geometry, "uri", f"meshes/{mesh.name}")  # resolved against world.sdf
+            _text(geometry, "scale", _join((p.scale,) * 3))
+            continue
         pattern = layout.crops[p.crop].planting
         radius = STAND_IN_RADIUS * min(pattern.row_spacing, pattern.in_row_spacing) * p.scale
         height = STAND_IN_HEIGHT * p.scale
@@ -58,6 +110,34 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     path = Path(out_dir) / "world.sdf"
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
     return path
+
+
+def render(world_sdf: Path, iterations: int = 5000) -> list[Path]:
+    """Run the world headless and save one image per camera as renders/<camera>.png.
+
+    Cameras only save while something subscribes to their topic, so a `gz topic` echo runs
+    per camera. A few thousand iterations are needed before the render thread delivers frames.
+    """
+    out = Path(world_sdf).resolve().parent
+    renders = out / RENDER_DIR
+    shutil.rmtree(renders, ignore_errors=True)
+    echo = [["gz", "topic", "-e", "-t", f"/camera/{name}"] for name in CAMERAS]
+    subscribers = [subprocess.Popen(cmd, stdout=subprocess.DEVNULL) for cmd in echo]
+    try:
+        subprocess.run(["gz", "sim", "-s", "-r", "--headless-rendering", "--iterations",
+                        str(iterations), Path(world_sdf).name], cwd=out, check=True)  # fmt: skip
+    finally:
+        for subscriber in subscribers:
+            subscriber.terminate()
+    images = []
+    for name in CAMERAS:
+        frames = sorted((renders / name).glob("*.png"),
+                        key=lambda f: int(re.findall(r"\d+", f.stem)[-1]))  # fmt: skip
+        if not frames:
+            raise RuntimeError(f"camera {name} saved no images; try more iterations")
+        images.append(frames[-1].replace(renders / f"{name}.png"))
+        shutil.rmtree(renders / name)
+    return images
 
 
 def preview(meshes: list[Path], out_dir: Path, spacing: float = 0.15) -> Path:
@@ -90,20 +170,83 @@ def _model(world: ET.Element, name: str, pose: tuple[float, float, float, float]
     return ET.SubElement(model, "link", name="link")
 
 
+def _camera(name: str, target: tuple[float, float], pitch: float, distance: float) -> ET.Element:
+    """Static camera `distance` from target, south of it, pitched down towards it."""
+    model = ET.Element("model", name=f"camera_{name}")
+    _text(model, "static", "true")
+    x, y = target[0], target[1] - distance * math.cos(pitch)
+    _text(model, "pose", _join((x, y, distance * math.sin(pitch), 0.0, pitch, math.pi / 2)))
+    sensor = ET.SubElement(ET.SubElement(model, "link", name="link"), "sensor", name="camera",
+                           type="camera")  # fmt: skip
+    camera = ET.SubElement(sensor, "camera")
+    _text(camera, "horizontal_fov", f"{CAMERA_HFOV:.4f}")
+    image = ET.SubElement(camera, "image")
+    _text(image, "width", str(CAMERA_SIZE[0]))
+    _text(image, "height", str(CAMERA_SIZE[1]))
+    clip = ET.SubElement(camera, "clip")
+    _text(clip, "near", "0.02")
+    _text(clip, "far", "50")
+    save = ET.SubElement(camera, "save", enabled="true")
+    _text(save, "path", f"{RENDER_DIR}/{name}")
+    _text(sensor, "always_on", "true")
+    _text(sensor, "update_rate", "2")
+    _text(sensor, "topic", f"camera/{name}")
+    return model
+
+
 def _sun() -> ET.Element:
     sun = ET.Element("light", type="directional", name="sun")
     _text(sun, "cast_shadows", "true")
     _text(sun, "pose", "0 0 10 0 0 0")
     _text(sun, "diffuse", "0.8 0.8 0.8 1")
     _text(sun, "specular", "0.2 0.2 0.2 1")
-    _text(sun, "direction", "-0.5 0.1 -0.9")
+    horizontal = math.cos(SUN_ELEVATION)  # light travels away from the sun's bearing
+    direction = (-horizontal * math.sin(SUN_AZIMUTH), -horizontal * math.cos(SUN_AZIMUTH),
+                 -math.sin(SUN_ELEVATION))  # fmt: skip
+    _text(sun, "direction", _join(direction))
     return sun
+
+
+def _scene() -> ET.Element:
+    scene = ET.Element("scene")
+    _text(scene, "ambient", "0.1 0.1 0.1 1")  # low, so GI bounce light fills the shadows
+    _text(scene, "background", "0.7 0.8 0.9 1")
+    ET.SubElement(scene, "sky")
+    _text(scene, "grid", "false")
+    return scene
+
+
+def _sensors() -> ET.Element:
+    """Sensors system with VCT global illumination, values from gz-sim's GI example world."""
+    sensors = ET.Element("plugin", filename="gz-sim-sensors-system",
+                         name="gz::sim::systems::Sensors")  # fmt: skip
+    _text(sensors, "render_engine", "ogre2")
+    gi = ET.SubElement(sensors, "global_illumination", type="vct")
+    for tag, value in [("enabled", "true"), ("resolution", _join((GI_RESOLUTION,) * 3)),
+                       ("octant_count", "1 1 1"), ("bounce_count", str(GI_BOUNCES)),
+                       ("high_quality", "true"), ("anisotropic", "true"),
+                       ("thin_wall_counter", "1.0"), ("conserve_memory", "false"),
+                       ("debug_vis_mode", "none")]:  # fmt: skip
+        _text(gi, tag, value)
+    return sensors
 
 
 def _material(rgba: tuple[float, ...]) -> ET.Element:
     material = ET.Element("material")
     for tag in ("ambient", "diffuse"):
         _text(material, tag, _join(rgba))
+    return material
+
+
+def _soil_material() -> ET.Element:
+    material = ET.Element("material")
+    for tag in ("ambient", "diffuse"):
+        _text(material, tag, "1 1 1 1")  # let the albedo map set the color
+    metal = ET.SubElement(ET.SubElement(material, "pbr"), "metal")
+    for tag, name in [("albedo_map", "color"), ("normal_map", "normal"),
+                      ("roughness_map", "roughness")]:  # fmt: skip
+        _text(metal, tag, f"textures/{name}.jpg")  # resolved against world.sdf
+    _text(metal, "metalness", "0")
     return material
 
 

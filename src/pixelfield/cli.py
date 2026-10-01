@@ -1,4 +1,5 @@
-"""Command line interface: `pixelfield build <field spec>`, `pixelfield generate <crop>`."""
+"""Command line interface: `pixelfield build <field spec>`, `pixelfield generate <crop>`,
+`pixelfield render <world.sdf>`."""
 
 import argparse
 import json
@@ -26,9 +27,16 @@ def main(argv: list[str] | None = None) -> None:
     generate.add_argument(
         "--crops", type=Path, default=Path("crops"), help="folder of Crop definitions"
     )
+    render = commands.add_parser("render", help="save camera images of a Gazebo world, headless")
+    render.add_argument("world", type=Path, help="world.sdf written by build")
+    render.add_argument("--iterations", type=int, default=5000, help="simulation steps to run")
     args = parser.parse_args(argv)
     if args.command == "generate":
         _generate(parser, args)
+        return
+    if args.command == "render":
+        for image in gazebo.render(args.world, args.iterations):
+            print(image)
         return
 
     try:

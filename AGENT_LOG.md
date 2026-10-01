@@ -190,3 +190,123 @@ Carrot Variants now have 6-10 leaves: a tapered 3-sided petiole tube along a qua
 Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. User checked the leaves in the gz GUI and approved them ("perfect for now").
 ### Open items
 - Push m1c-carrot, PR, CI, review and merge. Then M1d.
+
+## 2026-10-01 M1d checkpoint 1: Plants use carrot Variants
+### Goal & outcome
+Grilled M1d into 4 checkpoints (Variants, lighting, soil texture, cameras + `pixelfield render`). Checkpoint 1 done: the Gazebo Exporter gives each Plant its Variant glb (relative URI `meshes/<variant>.glb`, glTF roll, uniform Plant scale, yaw), copying the used glbs into `out/<name>/meshes/`. Crops without Variants (lettuce) keep the cylinder stand-in.
+### Decisions & why
+- Self-contained out dir with relative mesh URIs: relocatable and Docker-friendly (M1e); gz resolves relative mesh URIs against the world file (tested).
+- Visual only, no collision: Plants are static until M4.
+- hue_shift ignored in Gazebo (ponytail note): glb materials cannot be tinted per Plant without replacing them.
+- Rest of M1d agreed: one world.sdf holding cameras (top-down + 45 deg oblique, 1920x1080, hfov 60 deg), VCT GI in the Sensors plugin (32^3), sun about 40 deg elevation from SE plus sky, one approved ambientCG 1K soil set, `pixelfield render` running from the out dir.
+### Lessons / gotchas
+- VCT GI is not SDF scene syntax: it is a `<global_illumination type="vct">` block inside the Sensors system plugin and only affects camera sensors (GUI needs the separate GlobalIlluminationVct plugin). Example: /usr/share/gz/gz-sim8/worlds/global_illumination.sdf.
+- A gz camera sensor saves no images unless something subscribes to its topic (`gz topic -e -t /camera` alongside works).
+- A relative camera `<save><path>` resolves against the cwd, not the world file.
+- Headless runs need a few thousand iterations; at 200 the run ends before the render thread produces a frame.
+### State
+Branch m1d-variants, uncommitted code. Validated: pytest (21), ruff, `gz sdf -k` on carrot_pixel and mixed, headless camera snapshot shows 32 upright carrots with shoulders above the soil. GUI look UNVERIFIED (user checks).
+### Open items
+- User: `gz sim out/carrot_pixel/world.sdf`. Then checkpoint 2 (lighting).
+
+## 2026-10-01 M1d checkpoint 2: lighting
+### Goal & outcome
+world.sdf now has the Sensors system (ogre2) with VCT global illumination (32^3, 6 bounces, other values from gz-sim's example world), a `<scene>` with sky, ambient 0.4 and no grid, and the sun at 40 degrees elevation from the south-east (constants `SUN_ELEVATION`, `SUN_AZIMUTH`, `GI_RESOLUTION`, `GI_BOUNCES`).
+### Decisions & why
+- GI lives in world.sdf (Sensors plugin), not a separate render world: cameras (checkpoint 4) pick it up, and the GUI ignores it.
+- No custom `<gui>` block for the GUI GI plugin: it would replace gz's default GUI layout.
+### Lessons / gotchas
+- At 32^3 GI on one Pixel the effect is subtle (lighter canopy interior and stems); compare against a no-GI render to see it.
+### State
+Branch m1d-variants, uncommitted code. Validated: pytest (22), ruff, `gz sdf -k`, headless GI and no-GI renders with 0 errors. GUI sky look UNVERIFIED (user checks).
+### Open items
+- Tune ambient/sun intensity by eye once the soil texture and real cameras are in.
+- Next: checkpoint 3 (soil texture, user approves the ambientCG set).
+
+## 2026-10-01 M1d checkpoint 3: soil texture
+### Goal & outcome
+Soil uses ambientCG Ground048 (CC0, 1K JPG color, NormalGL, roughness; about 5 MB) from `assets/library/textures/soil/`, copied into `out/<name>/textures/` and referenced relatively in a PBR material. Commit f3ebcdd.
+### Decisions & why
+- User picked Ground048 (dark crumbly soil, like a loosened bed) from six ambientCG candidates; swapping later is a one-folder change.
+- NormalGL, not NormalDX: OGRE uses the OpenGL normal convention.
+- Soil visual = grid of 1 m box tiles (`SOIL_TILE`) over one collision box: SDF boxes map the texture once per face, so one big box would stretch it.
+### Lessons / gotchas
+- Relative PBR map paths also resolve against the world file (render run from /tmp worked).
+### State
+Branch m1d-variants. Validated: pytest (23), ruff, `gz sdf -k`, headless oblique and top-down renders show textured soil without visible tile seams.
+### Open items
+- Next: checkpoint 4 (cameras + `pixelfield render`).
+
+## 2026-10-01 M1d checkpoint 4: cameras and pixelfield render
+### Goal & outcome
+world.sdf has two static placeholder cameras, 1.0 m from the Field centre, looking north: top-down and 45 degree oblique (1920x1080, hfov 60 deg, 2 Hz, save path `renders/<name>`, topic `camera/<name>`). `pixelfield render <world.sdf>` runs gz headless from the out dir with one `gz topic -e` per camera, keeps the last frame as `renders/top.png` / `renders/oblique.png`, about 12 s. Commit f117e22.
+### Decisions & why
+- Render code in exporters/gazebo (`render()`), CLI only wires it: simulator code stays in the Exporter.
+- gz run with cwd = out dir: camera save paths are cwd-relative, this keeps world.sdf relocatable.
+- Fails loudly if a camera saved no frames (hint: more iterations).
+### Lessons / gotchas
+- Opening the world interactively from the repo root and subscribing to a camera (e.g. Image Display) would save PNGs into ./renders/; harmless, only happens when subscribed.
+- Top-down at 1.0 m sees about 1.15 x 0.65 m: the canopy (foliage radius about 0.2 m) fills most of it and spills over the Pixel edge.
+### State
+Branch m1d-variants. Validated: pytest (25, including a real headless render), ruff, `pixelfield render` on carrot_pixel produced both images. Realism judgment UNVERIFIED (user compares with a real carrot photo).
+### Open items
+- User: judge renders vs real photos (M1d check). Known look gaps: flat maple-like leaflets vs feathery real carrot leaves, no hue variation, GI barely visible.
+- Then push, PR, review, merge; next M1e (Docker).
+
+## 2026-10-01 M1d: look tuning after first renders
+### Goal & outcome
+User judged the first renders: leaves too big and coarse, no color variation, GI invisible, top-down view all canopy. Changed: leaflets now divided again (3-4 narrow segment pairs on a midrib, leaflets 40% shorter), one sampled shade per Variant mixing root/petiole/leaf colors between two ends, ambient 0.4 to 0.1, top camera at 1.7 m (oblique stays 1.0 m). Variants regenerated (max 3,334 triangles, library 2.0 MB).
+### Decisions & why
+- Finer geometry over alpha-textured leaf cards: only the generator changes; cards are the fallback if M2 performance fails.
+- Color variation baked per Variant, not per Plant in Gazebo: 24 shades with no Exporter change; Manifest `hue_shift` stays unused in Gazebo.
+- `MAX_TRIANGLES` 3000 to 8000 (M1c limit) so the finer leaves fit with headroom.
+### Lessons / gotchas
+- With ambient 0.4 the flat fill hid VCT GI; at 0.1 the canopy interior and shadows gain depth (A/B renders).
+### State
+Branch m1d-variants. Validated: pytest (25), ruff, regenerated library, A/B renders. User verdict on the new look UNVERIFIED.
+### Open items
+- User: judge the A/B and new renders; keep or drop GI.
+- Then push, PR, review, merge; next M1e.
+
+## 2026-10-01 M1d: GI kept
+### Goal & outcome
+User judged the A/B: low ambient plus VCT GI is clearly better, GI stays.
+### Decisions & why
+None beyond keeping GI.
+### Lessons / gotchas
+- `out/<name>/meshes/` is only refreshed by `pixelfield build`; after `pixelfield generate`, rebuild before opening the world, or Gazebo shows the old Variants.
+- The GUI ignores the Sensors-plugin GI, so with ambient 0.1 its shadows look darker than in the renders.
+### State
+Branch m1d-variants, validated as before; user re-checks the rebuilt world in the GUI.
+### Open items
+- Push, PR, review, merge; next M1e.
+
+## 2026-10-01 M2 preview: 10x10 smoke test
+### Goal & outcome
+Before Docker, checked whether the finer leaves hold up at M2 scale. A 10x10 carrot Field (3,058 Plants, spec in gitignored `out/carrot_10x10.yaml`) builds in 0.16 s and renders headless in about 37 s at about 550 MB VRAM. In the GUI, Play seemed ignored and the RTF was 0.3. Cause: the Physics system with 3,058 separate models (even static, no collision). Grouping Plants as visuals in one model per Pixel (100 models) gives RTF 1.0 with Physics, Sensors and GI kept; user confirmed 99.97% RTF in the GUI at about 960 MiB VRAM.
+### Decisions & why
+- No code change now: grouping makes a Plant no longer its own model, which affects M4 pull-out and per-Plant labels, so it is a design decision. It is the first grill topic of M2, ahead of Docker (M1e).
+- Leaf geometry (fine segments, about 3k triangles) stays: rendering and VRAM are not the bottleneck.
+### Lessons / gotchas
+- Hybrid laptop (Intel Arrow Lake + NVIDIA, PRIME on-demand): the gz GUI renders on Intel by default (nvidia-smi shows about 100 MiB). Run it on NVIDIA with `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia gz sim ...`. Headless rendering already uses NVIDIA through the EGL vendor setting.
+- Measured RTF (10x10, server only): as built 0.3 after a 20 s stall; without Sensors/GI 0.3-0.5; without Physics 1.0; grouped per Pixel 1.0 after 4 s.
+- `pkill -f "gz sim"` inside a `bash -ic '...gz sim...'` kills that shell itself; use a script file.
+### State
+Branch m1d-variants, PR #5 open (unchanged by the smoke test). Test worlds (`world_grouped.sdf` and variants) only in gitignored `out/carrot_10x10/`.
+### Open items
+- User: review and merge PR #5.
+- M2 grill, first topic: Plant grouping per Pixel vs per-Plant models (M4 pull-out, labels). Then Docker (M1e).
+- Decide whether the PRIME offload env goes into CLAUDE.md known issues and ~/.bashrc.
+
+## 2026-10-01 NVIDIA as default for the gz GUI
+### Goal & outcome
+`~/.bashrc` now wraps `gz` in a function that sets PRIME render offload (`__NV_PRIME_RENDER_OFFLOAD=1`, `__GLX_VENDOR_LIBRARY_NAME=nvidia`), so only Gazebo runs on NVIDIA. CLAUDE.md known issues documents it (in PR #5).
+### Decisions & why
+- gz-only function instead of exporting the variables globally: other OpenGL apps stay on the Intel iGPU.
+### Lessons / gotchas
+- `pixelfield render` calls gz via subprocess and does not see the shell function; it already uses NVIDIA through EGL.
+- Backup of the previous ~/.bashrc in the session scratchpad only.
+### State
+Branch m1d-variants. Validated: new interactive shell resolves `gz` to the function, `gz sim --versions` works, the offload env gives an NVIDIA OpenGL renderer. GUI on NVIDIA through the function UNVERIFIED (user checks nvidia-smi with gz open).
+### Open items
+- Review and merge PR #5; then M2 grill (Plant grouping first).
