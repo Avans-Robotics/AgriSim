@@ -1,0 +1,22 @@
+# Provisional values, to be tuned against real field data (spec section 6).
+name: carrot
+planting:                # the Planting Pattern inside one Pixel
+  row_spacing: 0.15      # meters between rows
+  in_row_spacing: 0.04   # meters between Plants in a row
+  margin: 0.04           # meters from Pixel edge to the outermost Plants
+  row_direction: 0.0     # radians, 0 = rows run east-west
+  jitter: 0.01           # meters, random offset per Plant (std dev)
+  missing_rate: 0.08     # fraction of positions with no Plant (failed germination)
+variation:               # sampled per Plant
+  scale: [0.85, 1.15]
+  yaw: [0.0, 6.283]
+  hue_shift: [-0.03, 0.03]
+physics:
+  pull_out_force: [15.0, 26.0]   # newtons, loosened soil (see docs/research/prior-art.md)
+assets:
+  library: assets/library/carrot
+  generator: carrot      # key in GENERATORS, optional
+  variants: 24
+collision:               # simple shapes, the visual mesh is only for rendering
+  root: capsule
+  foliage: cylinder

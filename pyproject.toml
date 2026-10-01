@@ -1,0 +1,28 @@
+[project]
+name = "pixelfield"
+version = "0.1.0"
+description = "Pixel farming field generator for robot simulation"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = ["pyyaml>=6"]
+
+[project.scripts]
+pixelfield = "pixelfield.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+# ROS Jazzy puts its site-packages on PYTHONPATH, and their pytest plugins break collection.
+addopts = "--disable-plugin-autoload"

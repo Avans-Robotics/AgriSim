@@ -1,0 +1,22 @@
+# Placeholder Crop to check that the core is not carrot-specific. All values are provisional
+# guesses, to be replaced with measured values (spec section 12, open item 2).
+name: lettuce
+planting:
+  row_spacing: 0.25
+  in_row_spacing: 0.25
+  margin: 0.125
+  row_direction: 0.0
+  jitter: 0.01
+  missing_rate: 0.05
+variation:
+  scale: [0.8, 1.2]
+  yaw: [0.0, 6.283]
+  hue_shift: [-0.05, 0.05]
+physics:
+  pull_out_force: [20.0, 40.0]   # newtons, guess, no literature value yet
+assets:
+  library: assets/library/lettuce
+  variants: 24
+collision:
+  root: capsule
+  foliage: cylinder

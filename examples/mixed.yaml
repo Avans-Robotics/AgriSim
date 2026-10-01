@@ -1,0 +1,9 @@
+# Two Crops and an Empty Pixel, to check that nothing is carrot-specific.
+pixel_size: 0.5
+seed: 42
+legend:
+  C: carrot
+  L: lettuce
+grid: |
+  C L .
+  L C L
