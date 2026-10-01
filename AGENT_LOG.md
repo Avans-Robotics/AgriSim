@@ -190,3 +190,21 @@ Carrot Variants now have 6-10 leaves: a tapered 3-sided petiole tube along a qua
 Branch m1c-carrot. Validated: pytest (21), ruff, `gz sdf -k`, matplotlib render of three Variants looked like carrots. User checked the leaves in the gz GUI and approved them ("perfect for now").
 ### Open items
 - Push m1c-carrot, PR, CI, review and merge. Then M1d.
+
+## 2026-10-01 M1d checkpoint 1: Plants use carrot Variants
+### Goal & outcome
+Grilled M1d into 4 checkpoints (Variants, lighting, soil texture, cameras + `pixelfield render`). Checkpoint 1 done: the Gazebo Exporter gives each Plant its Variant glb (relative URI `meshes/<variant>.glb`, glTF roll, uniform Plant scale, yaw), copying the used glbs into `out/<name>/meshes/`. Crops without Variants (lettuce) keep the cylinder stand-in.
+### Decisions & why
+- Self-contained out dir with relative mesh URIs: relocatable and Docker-friendly (M1e); gz resolves relative mesh URIs against the world file (tested).
+- Visual only, no collision: Plants are static until M4.
+- hue_shift ignored in Gazebo (ponytail note): glb materials cannot be tinted per Plant without replacing them.
+- Rest of M1d agreed: one world.sdf holding cameras (top-down + 45 deg oblique, 1920x1080, hfov 60 deg), VCT GI in the Sensors plugin (32^3), sun about 40 deg elevation from SE plus sky, one approved ambientCG 1K soil set, `pixelfield render` running from the out dir.
+### Lessons / gotchas
+- VCT GI is not SDF scene syntax: it is a `<global_illumination type="vct">` block inside the Sensors system plugin and only affects camera sensors (GUI needs the separate GlobalIlluminationVct plugin). Example: /usr/share/gz/gz-sim8/worlds/global_illumination.sdf.
+- A gz camera sensor saves no images unless something subscribes to its topic (`gz topic -e -t /camera` alongside works).
+- A relative camera `<save><path>` resolves against the cwd, not the world file.
+- Headless runs need a few thousand iterations; at 200 the run ends before the render thread produces a frame.
+### State
+Branch m1d-variants, uncommitted code. Validated: pytest (21), ruff, `gz sdf -k` on carrot_pixel and mixed, headless camera snapshot shows 32 upright carrots with shoulders above the soil. GUI look UNVERIFIED (user checks).
+### Open items
+- User: `gz sim out/carrot_pixel/world.sdf`. Then checkpoint 2 (lighting).
