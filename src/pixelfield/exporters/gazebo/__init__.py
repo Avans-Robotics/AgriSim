@@ -57,6 +57,26 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     return path
 
 
+def preview(meshes: list[Path], out_dir: Path, spacing: float = 0.15) -> Path:
+    """World with one static model per Variant mesh in a row along x, no soil, for checking."""
+    sdf = ET.Element("sdf", version=SDF_VERSION)
+    world = ET.SubElement(sdf, "world", name="variants")
+    for filename, name in SYSTEMS.items():
+        ET.SubElement(world, "plugin", filename=filename, name=name)
+    world.append(_sun())
+    for i, mesh in enumerate(meshes):
+        link = _model(world, Path(mesh).stem, (i * spacing, 0.0, 0.0, 0.0))
+        visual = ET.SubElement(link, "visual", name="visual")
+        geometry = ET.SubElement(ET.SubElement(visual, "geometry"), "mesh")
+        _text(geometry, "uri", str(Path(mesh).resolve()))
+
+    ET.indent(sdf)
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    path = Path(out_dir) / "world.sdf"
+    ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
+    return path
+
+
 def _model(world: ET.Element, name: str, pose: tuple[float, float, float, float]) -> ET.Element:
     """Static model at (x, y, z, yaw); returns its single link."""
     model = ET.SubElement(world, "model", name=name)

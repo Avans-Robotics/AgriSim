@@ -1,0 +1,170 @@
+{
+  "carrot_v00": {
+    "root": {
+      "length": 0.1922,
+      "radius": 0.0182,
+      "top": 0.0113
+    }
+  },
+  "carrot_v01": {
+    "root": {
+      "length": 0.1567,
+      "radius": 0.0189,
+      "top": 0.0165
+    }
+  },
+  "carrot_v02": {
+    "root": {
+      "length": 0.1978,
+      "radius": 0.0196,
+      "top": 0.0058
+    }
+  },
+  "carrot_v03": {
+    "root": {
+      "length": 0.1619,
+      "radius": 0.0166,
+      "top": 0.0105
+    }
+  },
+  "carrot_v04": {
+    "root": {
+      "length": 0.1618,
+      "radius": 0.0133,
+      "top": 0.0109
+    }
+  },
+  "carrot_v05": {
+    "root": {
+      "length": 0.1811,
+      "radius": 0.0181,
+      "top": 0.0169
+    }
+  },
+  "carrot_v06": {
+    "root": {
+      "length": 0.1897,
+      "radius": 0.0187,
+      "top": 0.0123
+    }
+  },
+  "carrot_v07": {
+    "root": {
+      "length": 0.1662,
+      "radius": 0.0136,
+      "top": 0.0148
+    }
+  },
+  "carrot_v08": {
+    "root": {
+      "length": 0.1613,
+      "radius": 0.0197,
+      "top": 0.0069
+    }
+  },
+  "carrot_v09": {
+    "root": {
+      "length": 0.1732,
+      "radius": 0.0153,
+      "top": 0.0071
+    }
+  },
+  "carrot_v10": {
+    "root": {
+      "length": 0.1786,
+      "radius": 0.0157,
+      "top": 0.0137
+    }
+  },
+  "carrot_v11": {
+    "root": {
+      "length": 0.1726,
+      "radius": 0.0167,
+      "top": 0.0189
+    }
+  },
+  "carrot_v12": {
+    "root": {
+      "length": 0.1737,
+      "radius": 0.0174,
+      "top": 0.015
+    }
+  },
+  "carrot_v13": {
+    "root": {
+      "length": 0.163,
+      "radius": 0.0176,
+      "top": 0.0153
+    }
+  },
+  "carrot_v14": {
+    "root": {
+      "length": 0.1553,
+      "radius": 0.0178,
+      "top": 0.0148
+    }
+  },
+  "carrot_v15": {
+    "root": {
+      "length": 0.1983,
+      "radius": 0.0126,
+      "top": 0.016
+    }
+  },
+  "carrot_v16": {
+    "root": {
+      "length": 0.1681,
+      "radius": 0.0161,
+      "top": 0.0113
+    }
+  },
+  "carrot_v17": {
+    "root": {
+      "length": 0.1761,
+      "radius": 0.0186,
+      "top": 0.0194
+    }
+  },
+  "carrot_v18": {
+    "root": {
+      "length": 0.1591,
+      "radius": 0.0175,
+      "top": 0.01
+    }
+  },
+  "carrot_v19": {
+    "root": {
+      "length": 0.1839,
+      "radius": 0.0184,
+      "top": 0.0128
+    }
+  },
+  "carrot_v20": {
+    "root": {
+      "length": 0.1953,
+      "radius": 0.0176,
+      "top": 0.0165
+    }
+  },
+  "carrot_v21": {
+    "root": {
+      "length": 0.1582,
+      "radius": 0.0177,
+      "top": 0.0145
+    }
+  },
+  "carrot_v22": {
+    "root": {
+      "length": 0.1979,
+      "radius": 0.0136,
+      "top": 0.0054
+    }
+  },
+  "carrot_v23": {
+    "root": {
+      "length": 0.1962,
+      "radius": 0.0196,
+      "top": 0.0184
+    }
+  }
+}

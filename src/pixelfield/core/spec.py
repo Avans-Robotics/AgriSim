@@ -27,6 +27,7 @@ class Crop:
     yaw: tuple[float, float]
     pull_out_force: tuple[float, float]
     variants: int
+    library: str  # Asset Library folder of this Crop's Variants
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ def load_crop(path: Path) -> Crop:
         yaw=tuple(variation["yaw"]),
         pull_out_force=tuple(data["physics"]["pull_out_force"]),
         variants=data["assets"].get("variants", 24),
+        library=data["assets"].get("library", f"assets/library/{data['name']}"),
     )
 
 

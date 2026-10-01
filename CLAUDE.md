@@ -35,6 +35,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Install: `uv sync`
 - Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf)
 - Open it: `gz sim out/carrot_pixel/world.sdf`
+- Regenerate carrot Variants: `uv run pixelfield generate carrot` (needs `uv sync --extra generate` or the dev group; preview: `gz sim out/carrot_variants/world.sdf`)
 - Tests: `uv run pytest`
 - Lint: `uv run ruff check . && uv run ruff format --check .`
 - Validate SDF: `gz sdf -k <world.sdf>`
