@@ -267,3 +267,16 @@ Branch m1d-variants. Validated: pytest (25), ruff, regenerated library, A/B rend
 ### Open items
 - User: judge the A/B and new renders; keep or drop GI.
 - Then push, PR, review, merge; next M1e.
+
+## 2026-10-01 M1d: GI kept
+### Goal & outcome
+User judged the A/B: low ambient plus VCT GI is clearly better, GI stays.
+### Decisions & why
+None beyond keeping GI.
+### Lessons / gotchas
+- `out/<name>/meshes/` is only refreshed by `pixelfield build`; after `pixelfield generate`, rebuild before opening the world, or Gazebo shows the old Variants.
+- The GUI ignores the Sensors-plugin GI, so with ambient 0.1 its shadows look darker than in the renders.
+### State
+Branch m1d-variants, validated as before; user re-checks the rebuilt world in the GUI.
+### Open items
+- Push, PR, review, merge; next M1e.
