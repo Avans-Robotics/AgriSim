@@ -342,3 +342,16 @@ Branch m2a-grouping, doc-only change, not pushed (the user pushed the earlier co
 ### Open items
 - The M1 row still lists installing `ros-jazzy-ros-gz`, which CLAUDE.md defers until a chunk needs ROS topics; decide whether to move it out too.
 - Order now: M2a merge, M2b labels, then the grill for random mode, Path Gaps and perf record.
+
+## 2026-10-01 ros-gz deferred, PR #6 opened
+### Goal & outcome
+Spec M1 row no longer lists installing `ros-jazzy-ros-gz`; the deferred note covers it (until a chunk needs ROS topics). M1 is now complete per the spec. Branch pushed, PR #6 opened for M2a plus both deferrals.
+### Decisions & why
+- Matches CLAUDE.md, which already deferred ros-gz; the spec row was the only place still requiring it.
+### Lessons / gotchas
+None.
+### State
+Branch m2a-grouping, PR #6 open. Validated as in the M2a entry; GUI RTF on 10x10 UNVERIFIED (review check).
+### Open items
+- User: GUI RTF check, review and merge PR #6.
+- Next: M2b labels (Label plugin per Pixel model plus semantic segmentation camera).
