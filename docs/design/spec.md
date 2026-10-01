@@ -200,12 +200,12 @@ M1 chunks:
 | M1c | First Crop Asset Generator (carrot) writing Variants to the Asset Library | Variants open in Gazebo or a glTF viewer and look like the Crop |
 | M1d | Exporter uses Variants; lighting (VCT GI), cameras, headless render script | Rendered images look like a real Pixel of the Crop |
 
-Deferred: a Docker image (ADR 0002), built when the first colleague or student needs to run the world; its check is that they run it from the image.
+Deferred: a Docker image (ADR 0002), built when the first colleague or student needs to run the world; its check is that they run it from the image. Installing `ros-jazzy-ros-gz` is deferred until a chunk needs ROS topics.
 
 | # | Content | Done when |
 |---|---|---|
 | M0 | Design spec, ADRs, glossary, repo structure | Spec agreed, open questions resolved or deferred |
-| M1 | One carrot Pixel end to end: repo tooling (uv, ruff, pytest, CI), core (Field Spec, Pixel grid, Planting Pattern, Field Layout, Manifest), carrot Asset Generator and library, Gazebo Exporter (soil, sun, VCT GI, cameras), headless render check, fixing the local `gz` PATH conflict and installing `ros-jazzy-ros-gz` | `pixelfield build examples/carrot_pixel.yaml` creates a world, Gazebo opens it, camera images show a believable carrot Pixel, core tests pass |
+| M1 | One carrot Pixel end to end: repo tooling (uv, ruff, pytest, CI), core (Field Spec, Pixel grid, Planting Pattern, Field Layout, Manifest), carrot Asset Generator and library, Gazebo Exporter (soil, sun, VCT GI, cameras), headless render check, fixing the local `gz` PATH conflict | `pixelfield build examples/carrot_pixel.yaml` creates a world, Gazebo opens it, camera images show a believable carrot Pixel, core tests pass |
 | M2 | Multi-Pixel Fields, random mode, Path Gaps, performance measurement | A 10 x 10 random Field loads in Gazebo, frame rate and VRAM recorded |
 | M3 | More Crops (CropCraft import, candidate lettuce and onion), iterate on looks | At least three Crops render believably side by side |
 | M4 | Pull-out physics (custom gz-sim system plus `DetachableJoint`) | A test pull detaches a Plant within its Pull-out Force range |
