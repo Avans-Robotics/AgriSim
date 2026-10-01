@@ -25,7 +25,9 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 
 - Ubuntu 24.04, Python 3.12, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8).
 - GPU: NVIDIA RTX PRO 1000 Blackwell, 8 GB VRAM. Watch VRAM with large Fields.
-- Known issue: the ROS-vendored `gz` in `/opt/ros/jazzy/opt/gz_tools_vendor/bin` shadows the system `gz`, so `gz sim` fails until PATH is fixed. `ros-jazzy-ros-gz` is not installed yet.
+- Known issue: sourcing ROS Jazzy sets `GZ_CONFIG_PATH` to `/opt/ros/jazzy/opt/sdformat_vendor/share/gz` only, so `gz` lists just `sdf` and `gz sim` is missing (PATH is not the cause; both `gz` binaries behave the same). Fix, after `source /opt/ros/jazzy/setup.bash` in `~/.bashrc`: `export GZ_CONFIG_PATH="$GZ_CONFIG_PATH:/usr/share/gz"`.
+- Known issue: gz-transport15 and gz-msgs12 (newer than Harmonic) are also installed, so `gz topic` and `gz service` may default to them. If they cannot see a running Harmonic sim, add `--force-version 13`.
+- `ros-jazzy-ros-gz` is not installed yet; deferred until a chunk needs ROS topics.
 
 ## Commands (planned, from milestone M1)
 
