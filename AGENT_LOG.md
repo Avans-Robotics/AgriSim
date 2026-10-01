@@ -329,3 +329,16 @@ Branch m2a-grouping. Validated: pytest (25), ruff, `gz sdf -k` on carrot_pixel a
 ### Open items
 - User: open `out/carrot_10x10/world.sdf` in the GUI, check RTF about 1.0; then push, PR, review, merge.
 - Next: M2b (Label plugin per Pixel model plus semantic segmentation camera, proves the gz label facts by running).
+
+## 2026-10-01 Docker image deferred
+### Goal & outcome
+M1e (Docker) removed from the M1 chunk table and the M1 row; the spec now defers it until the first colleague or student needs to run the world. Commit b91b060 on m2a-grouping.
+### Decisions & why
+- Nobody waits on the image, development is native and Field generation needs no Docker (ADR 0002); an image built now would drift while the M2 stack still changes.
+### Lessons / gotchas
+None.
+### State
+Branch m2a-grouping, doc-only change, not pushed (the user pushed the earlier commits).
+### Open items
+- The M1 row still lists installing `ros-jazzy-ros-gz`, which CLAUDE.md defers until a chunk needs ROS topics; decide whether to move it out too.
+- Order now: M2a merge, M2b labels, then the grill for random mode, Path Gaps and perf record.
