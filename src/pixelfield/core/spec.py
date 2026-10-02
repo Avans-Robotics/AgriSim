@@ -37,6 +37,7 @@ class FieldSpec:
     seed: int
     grid: tuple[tuple[str | None, ...], ...]  # Crop name per Pixel, row 0 is north, None is empty
     row_direction: float | None  # Field-wide override of each Crop's default
+    path_gap: tuple[int, float] | None  # (every_n_cols, width): bare soil between column groups
     sha256: str
 
     @property
@@ -46,6 +47,19 @@ class FieldSpec:
     @property
     def cols(self) -> int:
         return len(self.grid[0])
+
+    def column_x(self, col: int) -> float:
+        """West edge of a Pixel column; Path Gaps push the columns east of them."""
+        gaps = col // self.path_gap[0] if self.path_gap else 0
+        return col * self.pixel_size + gaps * (self.path_gap[1] if self.path_gap else 0.0)
+
+    @property
+    def width(self) -> float:
+        return self.column_x(self.cols - 1) + self.pixel_size
+
+    @property
+    def depth(self) -> float:
+        return self.rows * self.pixel_size
 
 
 def load_crop(path: Path) -> Crop:
@@ -65,8 +79,11 @@ def load_crop(path: Path) -> Crop:
 def load_field_spec(path: Path) -> FieldSpec:
     raw = Path(path).read_bytes()
     data = yaml.safe_load(raw)
+    path_gap = None
     if "path_gap" in data:
-        raise ValueError("path_gap is not supported yet (planned for M2)")
+        path_gap = int(data["path_gap"]["every_n_cols"]), float(data["path_gap"]["width"])
+        if path_gap[0] < 1 or path_gap[1] <= 0:
+            raise ValueError("path_gap needs every_n_cols of at least 1 and a width above 0")
     seed = int(data.get("seed", 0))
     if "random" in data and "grid" in data:
         raise ValueError("a Field Spec has either grid or random, not both")
@@ -77,6 +94,7 @@ def load_field_spec(path: Path) -> FieldSpec:
         seed=seed,
         grid=grid,
         row_direction=data.get("row_direction"),
+        path_gap=path_gap,
         sha256=hashlib.sha256(raw).hexdigest(),
     )
 

@@ -15,7 +15,7 @@ PAD = 20  # white border, so the frame at the origin corner is not clipped
 def export(layout: FieldLayout, out_dir: Path) -> Path:
     spec = layout.spec
     size = spec.pixel_size * PX_PER_M
-    width, height = spec.cols * size, spec.rows * size
+    width, height = spec.width * PX_PER_M, spec.depth * PX_PER_M
 
     def svg_y(y: float) -> float:  # SVG y points down, Field y points north
         return height - y * PX_PER_M

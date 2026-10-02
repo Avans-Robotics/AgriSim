@@ -80,8 +80,8 @@ def test_bad_specs_are_rejected(tmp_path):
         layout_of(tmp_path, "  C X\n")
     with pytest.raises(ValueError, match="same number"):
         layout_of(tmp_path, "  C C\n  C\n")
-    with pytest.raises(ValueError, match="M2"):
-        layout_of(tmp_path, "  C\n", extra="path_gap: {every_n_cols: 1, width: 0.3}\n")
+    with pytest.raises(ValueError, match="path_gap"):
+        layout_of(tmp_path, "  C\n", extra="path_gap: {every_n_cols: 0, width: 0.3}\n")
     with pytest.raises(ValueError, match="not both"):
         layout_of(tmp_path, "  C\n", extra="random: {rows: 1, cols: 1, crops: {carrot: 1}}\n")
 
@@ -170,3 +170,19 @@ def test_two_crops_in_one_field():
         assert p.variant.startswith(p.crop + "_v")
     assert {p.pixel for p in layout.plants if p.crop == "lettuce"} == {(0, 1), (1, 0), (1, 2)}
     assert not [p for p in layout.plants if p.pixel == (0, 2)]
+
+
+def test_path_gaps_push_columns_east(tmp_path):
+    layout = layout_of(tmp_path, "  C C . C C\n", extra="path_gap: {every_n_cols: 2, width: 0.3}\n")
+    assert [round(p.origin[0], 6) for p in layout.pixels] == [0.0, 0.5, 1.3, 1.8, 2.6]
+    assert layout.spec.width == pytest.approx(3.1)
+    for p in layout.plants:
+        x0 = layout.pixels[p.pixel[1]].origin[0]
+        assert x0 < p.x < x0 + 0.5
+    field = to_manifest(layout)["field"]
+    assert (field["width"], field["path_gap"]) == (3.1, {"every_n_cols": 2, "width": 0.3})
+
+
+def test_path_gap_wider_than_the_field_is_no_gap(tmp_path):
+    layout = layout_of(tmp_path, "  C C\n", extra="path_gap: {every_n_cols: 2, width: 0.3}\n")
+    assert layout.spec.width == pytest.approx(1.0)

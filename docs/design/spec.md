@@ -88,6 +88,8 @@ path_gap:                # optional, off when absent
   width: 0.3
 ```
 
+A Path Gap of `width` meters follows every `every_n_cols` Pixel columns, only between column groups (never at the west or east edge). Pixels stay whole and the columns east of a gap shift east, so the Field gets wider; the soil covers the gaps. Path Gaps also work with a random Field.
+
 Random Field:
 
 ```yaml
@@ -146,7 +148,8 @@ The Field Layout is the only thing Exporters read. It is written next to every e
 ```json
 {
   "format_version": 1,
-  "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "seed": 42, "spec_sha256": "..."},
+  "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
+            "path_gap": {"every_n_cols": 2, "width": 0.3}, "seed": 42, "spec_sha256": "..."},
   "pixels": [
     {"row": 0, "col": 0, "crop": "carrot", "origin": [0.0, 1.0]}
   ],
@@ -227,7 +230,7 @@ Resolved:
 1. **Pixel boundaries**: soil runs continuously between Pixels; Pixels are not visibly marked.
 2. **Row direction**: a default per Crop, overridable by an optional Field-wide setting. Per-Pixel overrides only if real fields need them.
 3. **Random mode rules**: weights, an exact `empty_fraction`, and an optional `no_same_neighbour: true` over edge neighbours (section 5).
-4. **Path Gaps**: "every N columns, width W", off by default.
+4. **Path Gaps**: "every N columns, width W", off by default, columns only; they widen the Field instead of cutting into Pixels (section 5).
 5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
 6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
 7. **Crops for M3**: lettuce, onion and one CropCraft import (bean) as placeholders, to be replaced by the crops of the real field when known.
