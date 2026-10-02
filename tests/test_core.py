@@ -81,7 +81,59 @@ def test_bad_specs_are_rejected(tmp_path):
     with pytest.raises(ValueError, match="same number"):
         layout_of(tmp_path, "  C C\n  C\n")
     with pytest.raises(ValueError, match="M2"):
-        layout_of(tmp_path, "  C\n", extra="random: {}\n")
+        layout_of(tmp_path, "  C\n", extra="path_gap: {every_n_cols: 1, width: 0.3}\n")
+    with pytest.raises(ValueError, match="not both"):
+        layout_of(tmp_path, "  C\n", extra="random: {rows: 1, cols: 1, crops: {carrot: 1}}\n")
+
+
+def random_spec(tmp_path, request, seed=7):
+    path = tmp_path / "random.yaml"
+    path.write_text(f"seed: {seed}\nrandom: {request}\n")
+    return load_field_spec(path)
+
+
+def test_random_grid_is_reproducible_with_exact_empty_count(tmp_path):
+    request = "{rows: 10, cols: 10, crops: {carrot: 2, lettuce: 1}, empty_fraction: 0.1}"
+    grid = random_spec(tmp_path, request).grid
+    assert grid == random_spec(tmp_path, request).grid
+    assert grid != random_spec(tmp_path, request, seed=8).grid
+    cells = [name for row in grid for name in row]
+    assert (len(grid), len(grid[0]), cells.count(None)) == (10, 10, 10)
+    assert {"carrot", "lettuce"} <= set(cells)
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_no_same_neighbour_holds(tmp_path, seed):
+    request = ("{rows: 8, cols: 8, crops: {carrot: 1, lettuce: 1}, empty_fraction: 0.2, "
+               "no_same_neighbour: true}")  # fmt: skip
+    grid = random_spec(tmp_path, request, seed).grid
+    for r in range(8):
+        for c in range(8):
+            if grid[r][c]:
+                assert grid[r][c] not in (r and grid[r - 1][c], c and grid[r][c - 1])
+
+
+@pytest.mark.parametrize(
+    ("request_", "match"),
+    [
+        ("{rows: 1, cols: 2, crops: {carrot: 1}, no_same_neighbour: true}", "no grid"),
+        ("{rows: 0, cols: 2, crops: {carrot: 1}}", "rows and cols"),
+        ("{rows: 1, cols: 2, crops: {carrot: 0}}", "weight"),
+        ("{rows: 1, cols: 2, crops: {carrot: 1}, empty_fraction: 1}", "empty_fraction"),
+    ],
+)
+def test_bad_random_requests_are_rejected(tmp_path, request_, match):
+    with pytest.raises(ValueError, match=match):
+        random_spec(tmp_path, request_)
+
+
+def test_random_and_drawn_grid_give_the_same_plants(tmp_path):
+    spec = random_spec(
+        tmp_path, "{rows: 2, cols: 3, crops: {carrot: 1}, empty_fraction: 0.3}", seed=42
+    )
+    drawn = "\n".join("  " + " ".join("C" if name else "." for name in row) for row in spec.grid)
+    layout = build_layout(spec, {"carrot": CARROT})
+    assert layout.plants == layout_of(tmp_path, drawn + "\n").plants
 
 
 def test_build_writes_manifest_and_svg(tmp_path):

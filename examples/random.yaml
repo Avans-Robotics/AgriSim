@@ -1,0 +1,11 @@
+# Random Field: two Crops by weight, a few Empty Pixels, no two neighbours alike.
+pixel_size: 0.5
+seed: 7
+random:
+  rows: 4
+  cols: 6
+  crops:
+    carrot: 2
+    lettuce: 1
+  empty_fraction: 0.1
+  no_same_neighbour: true

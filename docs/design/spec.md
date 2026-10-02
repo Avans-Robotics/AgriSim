@@ -103,6 +103,12 @@ random:
   no_same_neighbour: true  # optional: no two adjacent Pixels share a Crop
 ```
 
+Random mode details:
+
+- `empty_fraction` is exact: `round(empty_fraction * rows * cols)` Pixels are Empty, the rest are drawn by weight.
+- `no_same_neighbour` compares Pixels that share an edge; Empty Pixels never clash. It skews the weights (with two Crops the Field becomes close to a checkerboard). If no grid satisfies it, building fails with an error.
+- The grid is drawn from its own random stream, so a hand-drawn copy of a random grid gives the same Plants.
+
 Optional Field-wide `row_direction` (radians) overrides each Crop's default.
 
 ## 6. Crop definition
@@ -220,7 +226,7 @@ Resolved:
 
 1. **Pixel boundaries**: soil runs continuously between Pixels; Pixels are not visibly marked.
 2. **Row direction**: a default per Crop, overridable by an optional Field-wide setting. Per-Pixel overrides only if real fields need them.
-3. **Random mode rules**: weights plus an optional `no_same_neighbour: true`.
+3. **Random mode rules**: weights, an exact `empty_fraction`, and an optional `no_same_neighbour: true` over edge neighbours (section 5).
 4. **Path Gaps**: "every N columns, width W", off by default.
 5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
 6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
