@@ -391,3 +391,18 @@ Branches m2c-random, m2d-path-gap (on m2c), m2e-perf (on m2d), not pushed. Valid
 ### Open items
 - User: view `out/random/field.svg` and `out/random/renders/`, run the GUI row, push and PR (stacked or squashed into one, user's call).
 - Discussion: the budget passes only at 2 Hz. Decide what "active camera" means (rate) and whether GI stays on for robot cameras on large Fields (GI off, GI only in `render`, or accept).
+
+## 2026-10-02 M2e: perf record corrected, CiVCT ruled out
+### Goal & outcome
+User asked whether GI could cover only what the camera sees. CiVCT does exactly that, but Harmonic's Sensors system rejects it (`GI CI VCT is not supported`, run confirmed). While testing VCT settings, single `/stats` RTF readings proved unreliable (0.04 to 1.0 in one run). Averaged over 20 s: 10x10 at 30 Hz is 0.60x with GI, 0.66x without, 0.07x with PNG saving; single Pixel 0.97x. perf.md rewritten (a68964c). The earlier "GI drops 10x10 to 0.05x" conclusion was wrong.
+### Decisions & why
+- Perf record uses averaged RTF (sim time over a wall window) only.
+- GI stays: it costs about 10%; the bottleneck is rendering two full-HD cameras of 2,760 detailed Plants at 30 Hz.
+### Lessons / gotchas
+- When sensors block the simulation, `real_time_factor` in `/stats` is an instantaneous value that swings wildly; never quote single readings. Camera rate ≈ update rate x RTF is a consistency check.
+- In `gz topic -e` text output, match `$1=="sec:"`, not `/sec:/` (also hits `nsec:`).
+### State
+Branch m2e-perf (stacked on m2d, m2c), not pushed. Validated: averaged headless runs. GUI row UNVERIFIED.
+### Open items
+- Discuss: 0.6x at 30 Hz passes the 0.5x budget but misses the 1.0x target. Levers: one robot camera instead of two render cameras, lower resolution, lower rate, simpler Plants far from the camera (LOD). Decide when the real camera is known (spec open item 1).
+- User: GUI row, SVG check, push and PR.
