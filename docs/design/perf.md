@@ -6,26 +6,29 @@ Laptop: Intel Arrow Lake iGPU plus NVIDIA RTX PRO 1000 Blackwell (8 GB), Ubuntu 
 
 ## Results
 
-| Date | Commit | World | Plants / models | Camera setup | RTF | Camera rate (wall) | VRAM (gz / GPU total) |
-|---|---|---|---|---|---|---|---|
-| 2026-10-01 | M2a, from AGENT_LOG | hand-drawn 10 x 10 carrot | 3,058 / 103 | as built, server | 1.00 | not measured | 514 MiB total |
-| 2026-10-01 | M2a, from AGENT_LOG | same, GUI on NVIDIA | 3,058 / 103 | as built | 1.00 (99.97%) | not measured | about 960 MiB total |
-| 2026-10-02 | 639fa54 | `random_10x10.yaml`, server | 2,760 / 93 | as built: 2 cameras at 2 Hz, PNG saving, VCT GI | 1.00 | 2.0 Hz | 435 / 613 MiB |
-| 2026-10-02 | 639fa54 | same, cameras at 30 Hz | 2,760 / 93 | 30 Hz, PNG saving, GI | 0.002 | 2.2 Hz | 435 / 613 MiB |
-| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, GI | 0.05 | 16.8 Hz | 435 / 613 MiB |
-| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, no GI | 1.00 | 18.9 Hz | 609 MiB total |
-| 2026-10-02 | 639fa54 | `carrot_pixel.yaml`, server | 33 / 4 | 30 Hz, no saving, GI | 1.00 | 27.5 Hz | 435 / 613 MiB |
-| pending | 639fa54 | `random_10x10.yaml`, GUI on NVIDIA | 2,760 / 93 | as built | | | |
+RTF is averaged: simulation time elapsed over a 20 s wall-clock window after warm-up. Single `real_time_factor` readings from `/stats` jump between 0.04 and 1.0 in the same run when cameras block the simulation, so they are not used.
+
+| Date | Commit | World | Plants / models | Camera setup | Avg RTF | VRAM (gz / GPU total) |
+|---|---|---|---|---|---|---|
+| 2026-10-01 | M2a, from AGENT_LOG | hand-drawn 10 x 10 carrot, server | 3,058 / 103 | as built | 1.00 (single reading) | 514 MiB total |
+| 2026-10-01 | M2a, from AGENT_LOG | same, GUI on NVIDIA | 3,058 / 103 | as built | 1.00 (99.97%, GUI) | about 960 MiB total |
+| 2026-10-02 | 639fa54 | `random_10x10.yaml`, server | 2,760 / 93 | as built: 2 cameras 1920 x 1080 at 2 Hz, PNG saving, VCT GI | 1.00 | 435 / 613 MiB |
+| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, PNG saving, GI | 0.07 | 435 / 613 MiB |
+| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, GI | 0.60 | 435 / 613 MiB |
+| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, GI `high_quality` and `anisotropic` off | 0.62 | not measured |
+| 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, no GI | 0.66 | 609 MiB total |
+| 2026-10-02 | 639fa54 | `carrot_pixel.yaml`, server | 33 / 4 | 30 Hz, no saving, GI | 0.97 | 435 / 613 MiB |
+| pending | 639fa54 | `random_10x10.yaml`, GUI on NVIDIA | 2,760 / 93 | as built | | |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
 Reading the numbers:
 
-- The world as built meets the budget, but only because its placeholder cameras run at 2 Hz.
-- At a robot-like 30 Hz, VCT GI is the cost, and it grows with the Field: the single Pixel keeps 1.0x with GI, 10 x 10 drops to 0.05x. Without GI, 10 x 10 stays at 1.0x.
-- Saving every frame as PNG costs another factor of about 20; saving is for `pixelfield render`, not for a robot camera.
-- Unexplained: with GI at 30 Hz the camera publishes 16.8 frames per wall second while RTF is 0.05, which do not fit together. Re-check before relying on that row.
-- Without GI, the sensor drops frames (18.9 of 30 Hz) instead of slowing the simulation.
+- As built (2 Hz placeholder cameras) the 10 x 10 Field runs at 1.0x.
+- With two full-HD cameras at 30 Hz it runs at 0.6x: above the 0.5x budget, below the 1.0x target. The simulation waits for the cameras, so each camera delivers about 30 x RTF frames per second.
+- VCT GI costs about 10% (0.60 vs 0.66); lowering its quality settings barely helps. The cost is rendering 2,760 detailed Plants twice per frame step.
+- Saving every frame as PNG drops it to 0.07x; saving is for `pixelfield render` only.
+- CiVCT (GI only around the camera) is not available: Harmonic's Sensors system logs `GI CI VCT is not supported`.
 
 ## How to measure
 
@@ -37,8 +40,9 @@ cd out/random_10x10
 gz sim -s -r --headless-rendering world.sdf &             # server only
 gz topic -e -t /camera/top > /dev/null &                  # cameras without a subscriber may not render
 gz topic -e -t /camera/oblique > /dev/null &
-sleep 40                                                  # warm-up
-gz topic -e -n 1 -t /world/pixelfield/stats | grep real_time_factor   # take three readings
+sleep 30                                                  # warm-up
+gz topic -e -n 1 -t /world/pixelfield/stats               # note sim_time, wait 20 s, read again:
+                                                          # avg RTF = sim time elapsed / 20 s
 gz topic -f -t /camera/oblique                            # camera rate per wall second
 nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader
 nvidia-smi --query-gpu=memory.used --format=csv,noheader
