@@ -369,3 +369,25 @@ Branch m2-defer-labels, doc-only change, committed, not pushed.
 ### Open items
 - User: push and merge if happy.
 - Next: grill round for random mode, Path Gaps and the M2 perf record.
+
+## 2026-10-02 M2c-e: random mode, Path Gaps, perf record
+### Goal & outcome
+Grill settled random mode, Path Gaps and the perf record; all three built as stacked branches m2c-random (9335191), m2d-path-gap (639fa54), m2e-perf (3d06471). Random Specs resolve to the same grid as hand-drawn ones; Path Gaps widen the Field; `docs/design/perf.md` holds the record. The 10x10 random Field (2,760 Plants, 93 models) runs at 1.00x headless as built. At 30 Hz cameras VCT GI drops it to 0.05x (single Pixel keeps 1.00x, no GI keeps 1.00x).
+### Decisions & why
+- `empty_fraction` exact count, not per-Pixel chance: predictable for tests and perf comparisons.
+- `no_same_neighbour` over edge neighbours only, Empty Pixels exempt, solved by backtracking (fails with an error, never silently empties a Pixel). Skews the weights: with two Crops the Field is near a checkerboard; documented, not corrected.
+- Grid draws use their own stream `"{seed}:grid"`, so a hand-drawn copy of a random grid gives identical Plants.
+- Path Gaps shift columns east (Field widens, Pixels stay whole), columns only, none at the edges; `every_n_cols >= cols` means no gap. Geometry lives on `FieldSpec.column_x/width/depth`.
+- Manifest field gains `width`, `depth`, `path_gap` (additive, format_version stays 1).
+- Perf measured manually with documented commands, no `pixelfield perf` command yet.
+- Extra perf rows at 30 Hz added (not in the plan) because the world's 2 Hz placeholder cameras make "active camera" meaningless.
+### Lessons / gotchas
+- Cameras without a subscriber may not render; subscribe with `gz topic -e` when measuring.
+- At 30 Hz, PNG saving costs another ~20x; GI cost grows with Plant count.
+- Unexplained: GI at 30 Hz shows 16.8 camera frames per wall second at RTF 0.05; re-check before relying on it.
+- `pkill -f "gz sim"` in a Bash tool command kills the tool's own shell (exit 1, no output); keep it in a script file.
+### State
+Branches m2c-random, m2d-path-gap (on m2c), m2e-perf (on m2d), not pushed. Validated: pytest (53), ruff, `gz sdf -k` and headless render of `examples/random.yaml`, headless perf runs. GUI row in perf.md UNVERIFIED (user runs it). Hand check of `out/random/field.svg` by the user pending.
+### Open items
+- User: view `out/random/field.svg` and `out/random/renders/`, run the GUI row, push and PR (stacked or squashed into one, user's call).
+- Discussion: the budget passes only at 2 Hz. Decide what "active camera" means (rate) and whether GI stays on for robot cameras on large Fields (GI off, GI only in `render`, or accept).
