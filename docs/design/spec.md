@@ -235,6 +235,7 @@ Open (deferred):
 1. **Real camera** on the Amiga (model, resolution, field of view, mounting height and angle). Not needed until render cameras are matched to real data; M1 uses a generic placeholder camera.
 2. **Real field values** for Planting Patterns and harvest sizes, per Crop.
 3. **Row crops and single-crop fields**: out of scope now. The core should not assume Pixels are small, so a large "Pixel" with one Crop or a row layout stays possible later.
+4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it (M5 oracle perception, or M6 detectors trained on Gazebo renders). Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
 
 ## 13. Publication angle
 
