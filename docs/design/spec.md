@@ -183,9 +183,9 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 
 ## 10. Physics
 
-- Until M4, Plants are static models.
+- Until M4, Plants are static. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
 - M4 implements Pull-out Force as proposed in [ADR 0006](../adr/0006-pull-out-via-force-threshold-detach.md).
-- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become dynamic).
+- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
 
 ## 11. Milestones
 
@@ -199,12 +199,13 @@ M1 chunks:
 | M1b | Fix local `gz`, Gazebo Exporter with soil plane and primitive Plants | The generated world opens in Gazebo, `gz sdf -k` passes |
 | M1c | First Crop Asset Generator (carrot) writing Variants to the Asset Library | Variants open in Gazebo or a glTF viewer and look like the Crop |
 | M1d | Exporter uses Variants; lighting (VCT GI), cameras, headless render script | Rendered images look like a real Pixel of the Crop |
-| M1e | Docker image | A colleague runs the world from the image |
+
+Deferred: a Docker image (ADR 0002), built when the first colleague or student needs to run the world; its check is that they run it from the image. Installing `ros-jazzy-ros-gz` is deferred until a chunk needs ROS topics.
 
 | # | Content | Done when |
 |---|---|---|
 | M0 | Design spec, ADRs, glossary, repo structure | Spec agreed, open questions resolved or deferred |
-| M1 | One carrot Pixel end to end: repo tooling (uv, ruff, pytest, CI), core (Field Spec, Pixel grid, Planting Pattern, Field Layout, Manifest), carrot Asset Generator and library, Gazebo Exporter (soil, sun, VCT GI, cameras), headless render check, Docker image, fixing the local `gz` PATH conflict and installing `ros-jazzy-ros-gz` | `pixelfield build examples/carrot_pixel.yaml` creates a world, Gazebo opens it, camera images show a believable carrot Pixel, core tests pass |
+| M1 | One carrot Pixel end to end: repo tooling (uv, ruff, pytest, CI), core (Field Spec, Pixel grid, Planting Pattern, Field Layout, Manifest), carrot Asset Generator and library, Gazebo Exporter (soil, sun, VCT GI, cameras), headless render check, fixing the local `gz` PATH conflict | `pixelfield build examples/carrot_pixel.yaml` creates a world, Gazebo opens it, camera images show a believable carrot Pixel, core tests pass |
 | M2 | Multi-Pixel Fields, random mode, Path Gaps, performance measurement | A 10 x 10 random Field loads in Gazebo, frame rate and VRAM recorded |
 | M3 | More Crops (CropCraft import, candidate lettuce and onion), iterate on looks | At least three Crops render believably side by side |
 | M4 | Pull-out physics (custom gz-sim system plus `DetachableJoint`) | A test pull detaches a Plant within its Pull-out Force range |
@@ -221,7 +222,7 @@ Resolved:
 2. **Row direction**: a default per Crop, overridable by an optional Field-wide setting. Per-Pixel overrides only if real fields need them.
 3. **Random mode rules**: weights plus an optional `no_same_neighbour: true`.
 4. **Path Gaps**: "every N columns, width W", off by default.
-5. **Detection labels**: Gazebo segmentation and bounding-box camera sensors in M2, YOLO export first.
+5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
 6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
 7. **Crops for M3**: lettuce, onion and one CropCraft import (bean) as placeholders, to be replaced by the crops of the real field when known.
 8. **Performance budget**: at least 0.5x real time on the development laptop with a 10 x 10 Pixel Field and an active camera; target 1.0x or better.
