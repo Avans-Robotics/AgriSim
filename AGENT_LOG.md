@@ -355,3 +355,17 @@ Branch m2a-grouping, PR #6 open. Validated as in the M2a entry; GUI RTF on 10x10
 ### Open items
 - User: GUI RTF check, review and merge PR #6.
 - Next: M2b labels (Label plugin per Pixel model plus semantic segmentation camera).
+
+## 2026-10-02 M2b labels deferred
+### Goal & outcome
+M2b (Label plugin per Pixel model plus a semantic segmentation camera) is deferred, not built. Spec §12 "Open (deferred)" item 4 records it with the decision already made.
+### Decisions & why
+- Deferred: no consumer yet. The M2 check does not need labels, ADR 0005 puts labelled datasets in Blender, and the robot stack (M5) is far off. Build it when M5 oracle perception or M6 Gazebo training data needs it.
+- Label id per Crop is stable and stored in the Crop definition (not per Field alphabetical), so datasets from different Fields agree. Soil and background are 0.
+### Lessons / gotchas
+- If the M2 perf record should include a segmentation camera, M2b has to come first; currently it does not.
+### State
+Branch m2-defer-labels, doc-only change, committed, not pushed.
+### Open items
+- User: push and merge if happy.
+- Next: grill round for random mode, Path Gaps and the M2 perf record.
