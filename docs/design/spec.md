@@ -194,7 +194,7 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 
 - Until M4, Plants are static. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
 - M4 implements Pull-out Force as proposed in [ADR 0006](../adr/0006-pull-out-via-force-threshold-detach.md).
-- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
+- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md). M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
 
 ## 11. Milestones
 
