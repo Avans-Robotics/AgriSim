@@ -468,3 +468,21 @@ Branch m3b-root-crop (on m3a-camera-perf), committed, not pushed. Validated: pyt
 - User: review m3a and m3b, push and PR (stacked).
 - `renders/` untracked in the repo root (from running `render` there): delete or gitignore.
 - Next: m3c beetroot; needs real beetroot photo links from the user.
+
+## 2026-10-16 Perf: gz upgrade fixes the 10x10 camera cost; active region parked
+### Goal & outcome
+User wanted a real fix instead of tweaks ("render only what the camera sees"). Research (gz source) found per-visual CPU fixes in gz-rendering 8.3.0 and gz-sim 8.15.0, already in apt. After the user upgraded: 10x10 with the OAK-D rig 0.96x nadir, 0.92x edge (was 0.61/0.59), old two-camera baseline 0.95x (was 0.37), single Pixel 1.01x. perf.md and CLAUDE.md (minimum versions) updated, commit on m3b-root-crop. The OAK-D rig worlds in `out/` now show a body box and yellow field-of-view lines in the GUI, hidden from the rig's own sensors.
+### Decisions & why
+- Active region (Field Manager gz-sim system: merged far Pixels, detailed near the robot, dynamic only for the grasped Plant) agreed as the right design if needed, as its own milestone merged with M4. Not needed for a 10x10 Field now; grill Q1-Q5 (performers plus radius, Pixel as swap unit, free-running camera, plugin in exporters/gazebo/systems/, opt-in fallback) left unanswered.
+- No event-driven Gazebo fork: lockstep sensor sync and repeatability are worth keeping.
+### Lessons / gotchas
+- Check upstream changelogs and apt candidates before designing around a performance problem: the "real solution" was a package upgrade.
+- From gz source: in-memory meshes (`name://`) are invisible to the separate GUI process; triggered cameras (`<triggered>`) stop blocking the sim between triggers; sensors without subscribers are skipped; gz-sim never marks visuals static and sets every pose every frame; gz-rendering 8 hardcodes 500 m shadow range and 3 PSSM splits.
+- SDF `<visibility_flags>` on visuals plus `<visibility_mask>` on sensors hides GUI-only markers from robot cameras (verified: 0 marker pixels). A plain OBJ with an SDF material rendered flat white and opaque; primitives work.
+- Heavy gz runs slow the user's laptop: ask for a slot before running them (memory saved).
+### State
+Branch m3b-root-crop, committed, not pushed. Validated: averaged headless runs after the upgrade. perf_event_paranoid still 4, no CPU profile taken (no longer needed).
+### Open items
+- User: review and push m3a and m3b.
+- Next: m3c beetroot (photo links from the user).
+- Active region grill when Fields grow beyond 10x10 or at M4.
