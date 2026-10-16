@@ -537,3 +537,16 @@ Branch m3f-soil, committed, not pushed. Validated: pytest (65), ruff, `gz sdf -k
 ### Open items
 - Suspicions not confirmed: mip bleed on the fading radish root at distance, irregular radish lobe notches at 4 pairs, lettuce lighting from below (no `_face_up`), rotated rows can leave lettuce Pixels empty (core, older).
 - Render slot, then the look check; review and merge m3a to m3f.
+
+## 2026-10-16 M3 render check against photos
+### Goal & outcome
+Headless renders (top, oblique) of beetroot_pixel, radish_pixel, lettuce_pixel and m3_crops compared with the user's photos. Beetroot matches best (crimson globes a third above soil, red stalks fanning out, red midribs). Radish reads as radish (red shoulders, pale stalks) but its leaves look like smooth round paddles, lobes barely show. Romaine reads as an upright head with a pale heart and white midribs, but faceted and too dark, no visible crinkle or frill. Soil: mild lighter and darker patches, no tile seams visible in any render.
+### Decisions & why
+None; gaps recorded for a look-iteration chunk.
+### Lessons / gotchas
+- At 1 m camera distance, flat single-color blades look plastic; venation and color variation across a leaf matter more than more geometry for beet and radish.
+- Geometric crinkle of 2.5 mm on 12 stations is invisible; lettuce needs finer mesh or a normal/detail texture.
+### State
+Branch m3f-soil, PR #10. Renders in gitignored out/<world>/renders/. Look judged by the agent only; user verdict pending.
+### Open items
+- Look iteration (proposed m3g): lettuce lighter yellow-green, more stations and stronger frill; radish deeper lobes with more stations; leaf textures with veins and color variation per Crop (palette design change, needs discussion).
