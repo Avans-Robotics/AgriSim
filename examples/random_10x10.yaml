@@ -1,0 +1,12 @@
+# M2 performance Field: 10 x 10 random carrot Pixels with Path Gaps (docs/design/perf.md).
+pixel_size: 0.5
+seed: 2
+random:
+  rows: 10
+  cols: 10
+  crops:
+    carrot: 1
+  empty_fraction: 0.1
+path_gap:                # guess until the Amiga wheel track is measured (spec section 12)
+  every_n_cols: 2
+  width: 0.3

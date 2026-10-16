@@ -1,0 +1,14 @@
+# Random Field: two Crops by weight, a few Empty Pixels, no two neighbours alike, Path Gaps.
+pixel_size: 0.5
+seed: 7
+random:
+  rows: 4
+  cols: 6
+  crops:
+    carrot: 2
+    lettuce: 1
+  empty_fraction: 0.1
+  no_same_neighbour: true
+path_gap:                # bare soil for robot wheels after every 2 Pixel columns
+  every_n_cols: 2
+  width: 0.3

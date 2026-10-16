@@ -88,6 +88,8 @@ path_gap:                # optional, off when absent
   width: 0.3
 ```
 
+A Path Gap of `width` meters follows every `every_n_cols` Pixel columns, only between column groups (never at the west or east edge). Pixels stay whole and the columns east of a gap shift east, so the Field gets wider; the soil covers the gaps. Path Gaps also work with a random Field.
+
 Random Field:
 
 ```yaml
@@ -102,6 +104,12 @@ random:
   empty_fraction: 0.1
   no_same_neighbour: true  # optional: no two adjacent Pixels share a Crop
 ```
+
+Random mode details:
+
+- `empty_fraction` is exact: `round(empty_fraction * rows * cols)` Pixels are Empty, the rest are drawn by weight.
+- `no_same_neighbour` compares Pixels that share an edge; Empty Pixels never clash. It skews the weights (with two Crops the Field becomes close to a checkerboard). If no grid satisfies it, building fails with an error.
+- The grid is drawn from its own random stream, so a hand-drawn copy of a random grid gives the same Plants.
 
 Optional Field-wide `row_direction` (radians) overrides each Crop's default.
 
@@ -140,7 +148,8 @@ The Field Layout is the only thing Exporters read. It is written next to every e
 ```json
 {
   "format_version": 1,
-  "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "seed": 42, "spec_sha256": "..."},
+  "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
+            "path_gap": {"every_n_cols": 2, "width": 0.3}, "seed": 42, "spec_sha256": "..."},
   "pixels": [
     {"row": 0, "col": 0, "crop": "carrot", "origin": [0.0, 1.0]}
   ],
@@ -185,7 +194,7 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 
 - Until M4, Plants are static. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
 - M4 implements Pull-out Force as proposed in [ADR 0006](../adr/0006-pull-out-via-force-threshold-detach.md).
-- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2. M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
+- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md). M4 decides how to keep that many Plants cheap (for example only Plants near the robot become their own dynamic model, see ADR 0007).
 
 ## 11. Milestones
 
@@ -220,8 +229,8 @@ Resolved:
 
 1. **Pixel boundaries**: soil runs continuously between Pixels; Pixels are not visibly marked.
 2. **Row direction**: a default per Crop, overridable by an optional Field-wide setting. Per-Pixel overrides only if real fields need them.
-3. **Random mode rules**: weights plus an optional `no_same_neighbour: true`.
-4. **Path Gaps**: "every N columns, width W", off by default.
+3. **Random mode rules**: weights, an exact `empty_fraction`, and an optional `no_same_neighbour: true` over edge neighbours (section 5).
+4. **Path Gaps**: "every N columns, width W", off by default, columns only; they widen the Field instead of cutting into Pixels (section 5).
 5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
 6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
 7. **Crops for M3**: lettuce, onion and one CropCraft import (bean) as placeholders, to be replaced by the crops of the real field when known.

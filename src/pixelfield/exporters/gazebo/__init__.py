@@ -55,7 +55,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     world.append(_scene())
     world.append(_sun())
 
-    width, depth = spec.cols * spec.pixel_size, spec.rows * spec.pixel_size
+    width, depth = spec.width, spec.depth
     soil_size = (width + 2 * SOIL_BORDER, depth + 2 * SOIL_BORDER, SOIL_THICKNESS)
     soil_pose = (width / 2, depth / 2, -SOIL_THICKNESS / 2, 0.0)
     soil = _model(world, "soil", soil_pose)

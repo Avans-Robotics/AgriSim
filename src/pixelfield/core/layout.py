@@ -71,7 +71,7 @@ def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
     pixels, plants = [], []
     for row, names in enumerate(spec.grid):
         for col, name in enumerate(names):
-            origin = (col * spec.pixel_size, (spec.rows - 1 - row) * spec.pixel_size)
+            origin = (spec.column_x(col), (spec.rows - 1 - row) * spec.pixel_size)
             pixels.append(Pixel(row, col, name, origin))
             if name is not None:
                 plants += _plant_pixel(spec, crops[name], row, col, origin)
@@ -128,6 +128,13 @@ def to_manifest(layout: FieldLayout) -> dict:
             "pixel_size": spec.pixel_size,
             "rows": spec.rows,
             "cols": spec.cols,
+            "width": round(spec.width, 6),
+            "depth": round(spec.depth, 6),
+            "path_gap": (
+                {"every_n_cols": spec.path_gap[0], "width": spec.path_gap[1]}
+                if spec.path_gap
+                else None
+            ),
             "seed": spec.seed,
             "spec_sha256": spec.sha256,
         },
