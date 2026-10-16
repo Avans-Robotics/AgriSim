@@ -236,6 +236,8 @@ Open (deferred):
 2. **Real field values** for Planting Patterns and harvest sizes, per Crop.
 3. **Row crops and single-crop fields**: out of scope now. The core should not assume Pixels are small, so a large "Pixel" with one Crop or a row layout stays possible later.
 4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it (M5 oracle perception, or M6 detectors trained on Gazebo renders). Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
+5. **Growth stages**: all Plants are harvest-ready for now. Farming games and CropCraft treat growth stage as a per-cell state with its own mesh; here it would be a Variant axis (Crop, stage, variation) chosen per Pixel or per Field. Keep Variant naming open for a stage so adding it later does not rename the library. See [prior-art.md](../research/prior-art.md).
+6. **Soil mechanics**: a rigid soil plane with a friction coefficient (value to be sourced in M5). Wheel slip via the gz-sim `WheelSlip` system when the Amiga drives (M5). Pull-out depends on soil state through ADR 0006. Deformable terrain (Project Chrono SCM, as a separate Exporter) only if wheel sinkage or ruts become a research question; particle soil (DEM) is out of scope.
 
 ## 13. Publication angle
 
