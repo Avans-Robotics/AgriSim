@@ -6,8 +6,8 @@
       "top": 0.0263
     },
     "foliage": {
-      "height": 0.3406,
-      "radius": 0.2006
+      "height": 0.3493,
+      "radius": 0.232
     }
   },
   "beetroot_harvest_v01": {
@@ -17,8 +17,8 @@
       "top": 0.0315
     },
     "foliage": {
-      "height": 0.3392,
-      "radius": 0.1898
+      "height": 0.3438,
+      "radius": 0.2228
     }
   },
   "beetroot_harvest_v02": {
@@ -28,8 +28,8 @@
       "top": 0.0208
     },
     "foliage": {
-      "height": 0.3613,
-      "radius": 0.2265
+      "height": 0.371,
+      "radius": 0.2615
     }
   },
   "beetroot_harvest_v03": {
@@ -39,8 +39,8 @@
       "top": 0.0255
     },
     "foliage": {
-      "height": 0.2956,
-      "radius": 0.1498
+      "height": 0.3023,
+      "radius": 0.1746
     }
   },
   "beetroot_harvest_v04": {
@@ -50,8 +50,8 @@
       "top": 0.0259
     },
     "foliage": {
-      "height": 0.3356,
-      "radius": 0.1823
+      "height": 0.3435,
+      "radius": 0.2173
     }
   },
   "beetroot_harvest_v05": {
@@ -61,8 +61,8 @@
       "top": 0.0319
     },
     "foliage": {
-      "height": 0.3793,
-      "radius": 0.2302
+      "height": 0.3859,
+      "radius": 0.2676
     }
   },
   "beetroot_harvest_v06": {
@@ -72,8 +72,8 @@
       "top": 0.0273
     },
     "foliage": {
-      "height": 0.3658,
-      "radius": 0.1937
+      "height": 0.3737,
+      "radius": 0.2265
     }
   },
   "beetroot_harvest_v07": {
@@ -83,8 +83,8 @@
       "top": 0.0298
     },
     "foliage": {
-      "height": 0.327,
-      "radius": 0.1559
+      "height": 0.3369,
+      "radius": 0.1937
     }
   },
   "beetroot_harvest_v08": {
@@ -94,8 +94,8 @@
       "top": 0.0219
     },
     "foliage": {
-      "height": 0.2972,
-      "radius": 0.1823
+      "height": 0.3047,
+      "radius": 0.2118
     }
   },
   "beetroot_harvest_v09": {
@@ -105,8 +105,8 @@
       "top": 0.0221
     },
     "foliage": {
-      "height": 0.3198,
-      "radius": 0.1563
+      "height": 0.3322,
+      "radius": 0.1885
     }
   },
   "beetroot_harvest_v10": {
@@ -116,8 +116,8 @@
       "top": 0.0287
     },
     "foliage": {
-      "height": 0.3685,
-      "radius": 0.2242
+      "height": 0.3818,
+      "radius": 0.2596
     }
   },
   "beetroot_harvest_v11": {
@@ -127,8 +127,8 @@
       "top": 0.0339
     },
     "foliage": {
-      "height": 0.3576,
-      "radius": 0.1534
+      "height": 0.3681,
+      "radius": 0.1916
     }
   },
   "beetroot_harvest_v12": {
@@ -138,8 +138,8 @@
       "top": 0.03
     },
     "foliage": {
-      "height": 0.3286,
-      "radius": 0.1934
+      "height": 0.3393,
+      "radius": 0.2275
     }
   },
   "beetroot_harvest_v13": {
@@ -149,8 +149,8 @@
       "top": 0.0303
     },
     "foliage": {
-      "height": 0.3257,
-      "radius": 0.1842
+      "height": 0.3301,
+      "radius": 0.2127
     }
   },
   "beetroot_harvest_v14": {
@@ -160,8 +160,8 @@
       "top": 0.0298
     },
     "foliage": {
-      "height": 0.3068,
-      "radius": 0.1908
+      "height": 0.3201,
+      "radius": 0.2203
     }
   },
   "beetroot_harvest_v15": {
@@ -171,8 +171,8 @@
       "top": 0.031
     },
     "foliage": {
-      "height": 0.2818,
-      "radius": 0.1737
+      "height": 0.2927,
+      "radius": 0.2007
     }
   },
   "beetroot_harvest_v16": {
@@ -182,8 +182,8 @@
       "top": 0.0263
     },
     "foliage": {
-      "height": 0.3469,
-      "radius": 0.2099
+      "height": 0.3632,
+      "radius": 0.2467
     }
   },
   "beetroot_harvest_v17": {
@@ -193,8 +193,8 @@
       "top": 0.0344
     },
     "foliage": {
-      "height": 0.3762,
-      "radius": 0.1958
+      "height": 0.3854,
+      "radius": 0.2295
     }
   },
   "beetroot_harvest_v18": {
@@ -204,8 +204,8 @@
       "top": 0.025
     },
     "foliage": {
-      "height": 0.3444,
-      "radius": 0.1909
+      "height": 0.3519,
+      "radius": 0.2276
     }
   },
   "beetroot_harvest_v19": {
@@ -215,8 +215,8 @@
       "top": 0.0278
     },
     "foliage": {
-      "height": 0.3924,
-      "radius": 0.2163
+      "height": 0.4071,
+      "radius": 0.2517
     }
   },
   "beetroot_harvest_v20": {
@@ -226,8 +226,8 @@
       "top": 0.0315
     },
     "foliage": {
-      "height": 0.3407,
-      "radius": 0.1755
+      "height": 0.3509,
+      "radius": 0.2048
     }
   },
   "beetroot_harvest_v21": {
@@ -237,8 +237,8 @@
       "top": 0.0295
     },
     "foliage": {
-      "height": 0.3794,
-      "radius": 0.2145
+      "height": 0.391,
+      "radius": 0.2511
     }
   },
   "beetroot_harvest_v22": {
@@ -248,8 +248,8 @@
       "top": 0.0204
     },
     "foliage": {
-      "height": 0.2844,
-      "radius": 0.1491
+      "height": 0.2926,
+      "radius": 0.1806
     }
   },
   "beetroot_harvest_v23": {
@@ -259,8 +259,8 @@
       "top": 0.0334
     },
     "foliage": {
-      "height": 0.345,
-      "radius": 0.1762
+      "height": 0.3532,
+      "radius": 0.2036
     }
   }
 }
