@@ -39,7 +39,9 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf, meshes/, textures/)
 - Open it: `gz sim out/carrot_pixel/world.sdf`
 - Render camera images headless: `uv run pixelfield render out/carrot_pixel/world.sdf` (writes `renders/top.png`, `renders/oblique.png`, about 12 s)
-- Regenerate carrot Variants: `uv run pixelfield generate carrot` (needs `uv sync --extra generate` or the dev group; preview: `gz sim out/carrot_variants/world.sdf`)
+- Regenerate a Crop's Variants: `uv run pixelfield generate <crop>` for carrot, beetroot, radish or lettuce (needs `uv sync --extra generate` or the dev group; preview: `gz sim out/<crop>_variants/world.sdf`). Rebuild worlds afterwards; a test fails if the committed library no longer matches its generator.
+- Rebake the soil tiles: `uv run python -m pixelfield.generators.soil` (writes `assets/library/textures/soil_tiles/`, about 7 s)
+- All four M3 Crops side by side: `uv run pixelfield build examples/m3_crops.yaml`
 - Tests: `uv run pytest`
 - Lint: `uv run ruff check . && uv run ruff format --check .`
 - Validate SDF: `gz sdf -k <world.sdf>`

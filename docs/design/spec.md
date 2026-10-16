@@ -180,7 +180,7 @@ See [ADR 0003](../adr/0003-committed-asset-library.md) and [ADR 0004](../adr/000
 - Lettuce Variants (romaine): an upright head of leaves in a golden-angle spiral, outer leaves darker and leaning out, a pale cupped heart, whitish midribs, crinkled surfaces and frilly margins. Head height, leaf count and lean vary per Variant. Own generator (`lettuce`), sharing the root crop generator's palette and file writing.
 - Default Asset Generator: pure Python with `trimesh`. A Blender generator may replace it for a Crop if the results look too crude, writing into the same library format.
 - Root crops (carrot, beetroot, long red radish) share one generator, `root_crop`, with per-Crop ranges. Head lettuce (romaine) has its own generator, `lettuce`. Weeds: exported once from CropCraft's Blender library to `.glb`.
-- Soil: a flat plane with a CC0 PBR soil texture (ambientCG or Poly Haven, 1 to 2K), committed to `assets/library/textures/`.
+- Soil: a flat plane of 1 m tiles with CC0 PBR soil textures (ambientCG), committed to `assets/library/textures/`. A moist base soil (Ground048) is blended with milder dry patches of a second soil (Ground066) and a faint moisture tint into a baked 4 x 4 atlas of tiles (`generators/soil.py`); its masks are periodic over the atlas, so tiles join without seams and the pattern repeats every 4 m. Normals stay the base soil's.
 - Library size estimate: about 5 MB per Crop. Move to Git LFS if the library passes about 100 MB.
 
 ## 9. Rendering
@@ -234,7 +234,7 @@ Resolved:
 3. **Random mode rules**: weights, an exact `empty_fraction`, and an optional `no_same_neighbour: true` over edge neighbours (section 5).
 4. **Path Gaps**: "every N columns, width W", off by default, columns only; they widen the Field instead of cutting into Pixels (section 5).
 5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
-6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
+6. **Soil appearance**: one texture in M1; in M3 mild variation by blending two soils plus a moisture tint into a seamless 4 x 4 m atlas (section 8).
 7. **Crops for M3**: carrot, beetroot, long red radish and head lettuce (Crop names `carrot`, `beetroot`, `radish`, `lettuce`; the variety goes in the Crop definition). Real plants are the target; shop props serve as visual reference for proportions and color only.
 8. **Performance budget**: at least 0.5x real time on the development laptop with a 10 x 10 Pixel Field and an active camera; target 1.0x or better.
 9. **License**: AGPL-3.0 is intended, so that commercial users contribute back. Relicensing later needs agreement of all copyright holders, which gets harder as outside contributions accumulate.

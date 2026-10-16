@@ -1,0 +1,15 @@
+# All four M3 Crops mixed at random, for the M3 check: they render believably side by side.
+pixel_size: 0.5
+seed: 8                  # picked for an even mix: 7 to 9 Pixels per Crop
+random:
+  rows: 6
+  cols: 6
+  crops:
+    carrot: 1
+    beetroot: 1
+    radish: 1
+    lettuce: 1
+  empty_fraction: 0.1
+path_gap:                # guess until the Amiga wheel track is measured (spec section 12)
+  every_n_cols: 2
+  width: 0.3

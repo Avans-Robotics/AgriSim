@@ -109,8 +109,12 @@ def test_soil_visual_is_textured_tiles_covering_the_collision_box(mixed):
     ys = [float(t.findtext("pose").split()[1]) for t in tiles]
     assert max(xs) - min(xs) + 1.0 >= sx and max(ys) - min(ys) + 1.0 >= sy  # 1 m tiles
     for tile in tiles:
+        i, j = (int(n) % 4 for n in tile.get("name").split("_")[1:])  # baked atlas, 4 x 4
         uri = tile.findtext(".//albedo_map")
-        assert uri == "textures/color.jpg" and (world_sdf.parent / uri).is_file()
+        assert (
+            uri == f"textures/tiles/tile_{i}_{j}_color.jpg" and (world_sdf.parent / uri).is_file()
+        )
+        assert tile.findtext(".//normal_map") == "textures/normal.jpg"  # shared
 
 
 def test_cameras_look_at_field_centre(mixed):
