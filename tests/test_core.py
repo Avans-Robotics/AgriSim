@@ -144,7 +144,7 @@ def test_build_writes_manifest_and_svg(tmp_path):
     assert manifest["field"]["rows"] == manifest["field"]["cols"] == 1
     assert len(manifest["field"]["spec_sha256"]) == 64
     assert manifest["plants"][0]["id"].startswith("r0c0-")
-    assert manifest["plants"][0]["variant"].startswith("carrot_v")
+    assert manifest["plants"][0]["variant"].startswith("carrot_harvest_v")
     svg = (out / "field.svg").read_text()
     assert svg.count("</circle>") == len(manifest["plants"])  # legend circles self-close
     assert f"carrot ({len(manifest['plants'])})" in svg
@@ -167,7 +167,7 @@ def test_two_crops_in_one_field():
     assert len(planting_positions(lettuce.planting, 0.5, 0.0)) == 4
     for p in layout.plants:
         assert p.crop == spec.grid[p.pixel[0]][p.pixel[1]]
-        assert p.variant.startswith(p.crop + "_v")
+        assert p.variant.startswith(p.crop + "_harvest_v")
     assert {p.pixel for p in layout.plants if p.crop == "lettuce"} == {(0, 1), (1, 0), (1, 2)}
     assert not [p for p in layout.plants if p.pixel == (0, 2)]
 

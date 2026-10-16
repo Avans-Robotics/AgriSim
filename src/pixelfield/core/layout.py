@@ -108,7 +108,7 @@ def _plant_pixel(
                 id=f"r{row}c{col}-{i:03d}",
                 crop=crop.name,
                 pixel=(row, col),
-                variant=f"{crop.name}_v{variant:02d}",
+                variant=f"{crop.name}_{crop.stage}_v{variant:02d}",
                 x=cx + x,
                 y=cy + y,
                 z=0.0,

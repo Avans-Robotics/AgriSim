@@ -1,5 +1,5 @@
 {
-  "carrot_v00": {
+  "carrot_harvest_v00": {
     "root": {
       "length": 0.1922,
       "radius": 0.0182,
@@ -10,7 +10,7 @@
       "radius": 0.1723
     }
   },
-  "carrot_v01": {
+  "carrot_harvest_v01": {
     "root": {
       "length": 0.1567,
       "radius": 0.0189,
@@ -21,7 +21,7 @@
       "radius": 0.1747
     }
   },
-  "carrot_v02": {
+  "carrot_harvest_v02": {
     "root": {
       "length": 0.1978,
       "radius": 0.0196,
@@ -32,7 +32,7 @@
       "radius": 0.206
     }
   },
-  "carrot_v03": {
+  "carrot_harvest_v03": {
     "root": {
       "length": 0.1619,
       "radius": 0.0166,
@@ -43,7 +43,7 @@
       "radius": 0.1418
     }
   },
-  "carrot_v04": {
+  "carrot_harvest_v04": {
     "root": {
       "length": 0.1618,
       "radius": 0.0133,
@@ -54,7 +54,7 @@
       "radius": 0.1944
     }
   },
-  "carrot_v05": {
+  "carrot_harvest_v05": {
     "root": {
       "length": 0.1811,
       "radius": 0.0181,
@@ -65,7 +65,7 @@
       "radius": 0.1712
     }
   },
-  "carrot_v06": {
+  "carrot_harvest_v06": {
     "root": {
       "length": 0.1897,
       "radius": 0.0187,
@@ -76,7 +76,7 @@
       "radius": 0.2079
     }
   },
-  "carrot_v07": {
+  "carrot_harvest_v07": {
     "root": {
       "length": 0.1662,
       "radius": 0.0136,
@@ -87,7 +87,7 @@
       "radius": 0.1795
     }
   },
-  "carrot_v08": {
+  "carrot_harvest_v08": {
     "root": {
       "length": 0.1613,
       "radius": 0.0197,
@@ -98,7 +98,7 @@
       "radius": 0.1802
     }
   },
-  "carrot_v09": {
+  "carrot_harvest_v09": {
     "root": {
       "length": 0.1732,
       "radius": 0.0153,
@@ -109,7 +109,7 @@
       "radius": 0.2158
     }
   },
-  "carrot_v10": {
+  "carrot_harvest_v10": {
     "root": {
       "length": 0.1786,
       "radius": 0.0157,
@@ -120,7 +120,7 @@
       "radius": 0.2024
     }
   },
-  "carrot_v11": {
+  "carrot_harvest_v11": {
     "root": {
       "length": 0.1726,
       "radius": 0.0167,
@@ -131,7 +131,7 @@
       "radius": 0.212
     }
   },
-  "carrot_v12": {
+  "carrot_harvest_v12": {
     "root": {
       "length": 0.1737,
       "radius": 0.0174,
@@ -142,7 +142,7 @@
       "radius": 0.1866
     }
   },
-  "carrot_v13": {
+  "carrot_harvest_v13": {
     "root": {
       "length": 0.163,
       "radius": 0.0176,
@@ -153,7 +153,7 @@
       "radius": 0.1339
     }
   },
-  "carrot_v14": {
+  "carrot_harvest_v14": {
     "root": {
       "length": 0.1553,
       "radius": 0.0178,
@@ -164,7 +164,7 @@
       "radius": 0.1886
     }
   },
-  "carrot_v15": {
+  "carrot_harvest_v15": {
     "root": {
       "length": 0.1983,
       "radius": 0.0126,
@@ -175,7 +175,7 @@
       "radius": 0.1569
     }
   },
-  "carrot_v16": {
+  "carrot_harvest_v16": {
     "root": {
       "length": 0.1681,
       "radius": 0.0161,
@@ -186,7 +186,7 @@
       "radius": 0.2191
     }
   },
-  "carrot_v17": {
+  "carrot_harvest_v17": {
     "root": {
       "length": 0.1761,
       "radius": 0.0186,
@@ -197,7 +197,7 @@
       "radius": 0.1931
     }
   },
-  "carrot_v18": {
+  "carrot_harvest_v18": {
     "root": {
       "length": 0.1591,
       "radius": 0.0175,
@@ -208,7 +208,7 @@
       "radius": 0.1861
     }
   },
-  "carrot_v19": {
+  "carrot_harvest_v19": {
     "root": {
       "length": 0.1839,
       "radius": 0.0184,
@@ -219,7 +219,7 @@
       "radius": 0.2095
     }
   },
-  "carrot_v20": {
+  "carrot_harvest_v20": {
     "root": {
       "length": 0.1953,
       "radius": 0.0176,
@@ -230,7 +230,7 @@
       "radius": 0.2099
     }
   },
-  "carrot_v21": {
+  "carrot_harvest_v21": {
     "root": {
       "length": 0.1582,
       "radius": 0.0177,
@@ -241,7 +241,7 @@
       "radius": 0.2277
     }
   },
-  "carrot_v22": {
+  "carrot_harvest_v22": {
     "root": {
       "length": 0.1979,
       "radius": 0.0136,
@@ -252,7 +252,7 @@
       "radius": 0.1732
     }
   },
-  "carrot_v23": {
+  "carrot_harvest_v23": {
     "root": {
       "length": 0.1962,
       "radius": 0.0196,

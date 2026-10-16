@@ -1,7 +1,9 @@
-"""Carrot Asset Generator: harvest-stage carrot Variants as glTF binaries (trimesh).
+"""Root crop Asset Generator: harvest-stage Variants as glTF binaries (trimesh).
 
-Built z up with the origin on the soil surface at the root axis, then written y up as the
-glTF spec requires. Ranges are provisional, like crops/carrot.yaml (Nantes type).
+One generator for Crops with a root body of revolution under a crown of leaves; per-Crop
+ranges live in CROPS. Built z up with the origin on the soil surface at the root axis,
+then written y up as the glTF spec requires. Ranges are provisional, like the Crop
+definitions in crops/.
 """
 
 import json
@@ -13,14 +15,25 @@ import numpy as np
 import trimesh
 from trimesh.visual.material import PBRMaterial
 
-ROOT_LENGTH = (0.15, 0.20)  # meters, crown top to tip
-SHOULDER_DIAMETER = (0.025, 0.04)
-SHOULDER_HEIGHT = (0.005, 0.02)  # crown top above the soil
-ROOT_BEND = (0.0, 0.01)  # meters, sideways offset of the tip
+# ponytail: the only stage generated so far; per-stage ranges in CROPS when a second comes
+STAGE = "harvest"
+# Each Variant mixes its colors between two ends with one sampled shade, so the library
+# holds one shade per Variant; per-Plant hue_shift is not applied (see the Gazebo Exporter).
+CROPS = {
+    "carrot": {  # Nantes type
+        "root_length": (0.15, 0.20),  # meters, crown top to tip
+        "shoulder_diameter": (0.025, 0.04),
+        "shoulder_height": (0.005, 0.02),  # crown top above the soil
+        "root_bend": (0.0, 0.01),  # meters, sideways offset of the tip
+        "foliage_height": (0.25, 0.40),  # meters, tallest leaf above the crown
+        "leaf_count": (6, 10),
+        "root_color": ((225, 105, 25), (245, 140, 40)),
+        "leaf_color": ((40, 95, 35), (80, 125, 40)),
+        "petiole_color": ((95, 135, 55), (130, 165, 70)),
+    },
+}
 ROOT_SECTIONS = 20  # facets around the root
 ROOT_RINGS = 16  # profile points along the taper
-FOLIAGE_HEIGHT = (0.25, 0.40)  # meters, tallest leaf above the crown
-LEAF_COUNT = (6, 10)
 LEAFLET_PAIRS = (5, 7)  # along each leaf, plus one leaflet at the tip
 SEGMENT_PAIRS = (3, 4)  # narrow segments along each leaflet, plus one at its tip
 LEAFLET_LENGTH = 0.12  # fraction of the leaf length, shrinking toward the tip
@@ -29,25 +42,19 @@ PETIOLE_SIDES = 3
 PETIOLE_SEGMENTS = 6
 PETIOLE_RADIUS = (0.0015, 0.0007)  # meters, at the crown and at the leaf tip
 MAX_TRIANGLES = 8000
-
-# Each Variant mixes its colors between these two ends with one sampled shade, so the
-# library holds 24 shades; per-Plant hue_shift is not applied (see the Gazebo Exporter).
-ROOT_COLOR = ((225, 105, 25), (245, 140, 40))
-LEAF_COLOR = ((40, 95, 35), (80, 125, 40))
-PETIOLE_COLOR = ((95, 135, 55), (130, 165, 70))
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
 
 
-def generate(variants: int, out_dir: Path) -> list[Path]:
-    """Write carrot_v00.glb ... and variants.json to out_dir, replacing old Variants."""
+def generate(crop: str, variants: int, out_dir: Path) -> list[Path]:
+    """Write <crop>_harvest_v00.glb ... and variants.json to out_dir, replacing old Variants."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("carrot_v*.glb"):
+    for old in out_dir.glob(f"{crop}_*.glb"):
         old.unlink()
     paths, sizes = [], {}
     for index in range(variants):
-        name = f"carrot_v{index:02d}"
-        meshes, sizes[name] = variant(random.Random(index))
+        name = f"{crop}_{STAGE}_v{index:02d}"
+        meshes, sizes[name] = variant(random.Random(index), CROPS[crop])
         path = out_dir / f"{name}.glb"
         path.write_bytes(to_glb(meshes))
         paths.append(path)
@@ -55,17 +62,18 @@ def generate(variants: int, out_dir: Path) -> list[Path]:
     return paths
 
 
-def variant(rng: random.Random) -> tuple[dict[str, trimesh.Trimesh], dict]:
-    """Meshes by part name (z up) and their sizes in meters for collision shapes."""
-    length = rng.uniform(*ROOT_LENGTH)
-    radius = rng.uniform(*SHOULDER_DIAMETER) / 2
-    top = rng.uniform(*SHOULDER_HEIGHT)
+def variant(rng: random.Random, crop: dict) -> tuple[dict[str, trimesh.Trimesh], dict]:
+    """Meshes by part name (z up) and their sizes in meters, for one entry of CROPS."""
+    length = rng.uniform(*crop["root_length"])
+    radius = rng.uniform(*crop["shoulder_diameter"]) / 2
+    top = rng.uniform(*crop["shoulder_height"])
     shade = rng.random()
-    root = _root(length, radius, top, rng.uniform(*ROOT_BEND))
-    root.visual = trimesh.visual.TextureVisuals(material=_material(_mix(ROOT_COLOR, shade)))
-    petioles, leaves = _foliage(rng, radius, top, rng.uniform(*FOLIAGE_HEIGHT))
-    _part(petioles, _mix(PETIOLE_COLOR, shade))
-    _part(leaves, _mix(LEAF_COLOR, shade))
+    root = _root(length, radius, top, rng.uniform(*crop["root_bend"]))
+    root.visual = trimesh.visual.TextureVisuals(material=_material(_mix(crop["root_color"], shade)))
+    height = rng.uniform(*crop["foliage_height"])
+    petioles, leaves = _foliage(rng, radius, top, height, crop["leaf_count"])
+    _part(petioles, _mix(crop["petiole_color"], shade))
+    _part(leaves, _mix(crop["leaf_color"], shade))
     foliage = np.vstack([petioles.vertices, leaves.vertices])
     sizes = {
         "root": {"length": length, "radius": radius, "top": top},
@@ -104,10 +112,10 @@ def _root(length: float, radius: float, top: float, bend: float) -> trimesh.Trim
 
 
 def _foliage(
-    rng: random.Random, radius: float, top: float, height: float
+    rng: random.Random, radius: float, top: float, height: float, leaf_count: tuple[int, int]
 ) -> tuple[trimesh.Trimesh, trimesh.Trimesh]:
     """Petiole tubes and leaflet blades of all leaves, fanned out from the crown."""
-    count = rng.randint(*LEAF_COUNT)
+    count = rng.randint(*leaf_count)
     petioles, blades = [], []
     for i in range(count):
         azimuth = 2 * math.pi * i / count + rng.uniform(-0.3, 0.3)
