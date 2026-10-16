@@ -17,6 +17,3 @@ physics:
 assets:
   library: assets/library/lettuce
   variants: 24
-collision:
-  root: capsule
-  foliage: cylinder

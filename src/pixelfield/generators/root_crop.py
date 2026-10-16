@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
+from PIL import Image
 from trimesh.visual.material import PBRMaterial
 
 # ponytail: the only stage generated so far; per-stage ranges in CROPS when a second comes
@@ -87,11 +88,28 @@ def variant(rng: random.Random, crop: dict) -> tuple[dict[str, trimesh.Trimesh],
 
 
 def to_glb(meshes: dict[str, trimesh.Trimesh]) -> bytes:
+    """All parts as one mesh with one material, so a Plant is a single render item
+    (rendering is CPU-bound on render items, docs/design/perf.md). Each part samples its
+    own block of a small palette texture; one UV per part keeps the sampling at mip 0."""
+    # part colors are linear (glTF baseColorFactor); texture texels are sRGB
+    linear = np.array([[m.visual.material.baseColorFactor for m in meshes.values()]]) / 255
+    srgb = np.where(linear <= 0.0031308, 12.92 * linear, 1.055 * linear ** (1 / 2.4) - 0.055)
+    srgb[..., 3] = linear[..., 3]
+    palette = np.repeat(np.repeat(np.round(srgb * 255).astype(np.uint8), 8, axis=0), 8, axis=1)
+    colors = linear[0]
+    uv = np.vstack([
+        np.tile([(i + 0.5) / len(colors), 0.5], (len(mesh.vertices), 1))
+        for i, mesh in enumerate(meshes.values())
+    ])  # fmt: skip
+    merged = trimesh.util.concatenate(
+        [trimesh.Trimesh(m.vertices, m.faces, process=False) for m in meshes.values()]
+    )
+    material = PBRMaterial(baseColorTexture=Image.fromarray(palette, "RGBA"),
+                           metallicFactor=0.0, roughnessFactor=0.7, doubleSided=True)  # fmt: skip
+    merged.visual = trimesh.visual.TextureVisuals(uv=uv, material=material)
+    merged.apply_transform(Z_UP_TO_Y_UP)
     scene = trimesh.Scene()
-    for name, mesh in meshes.items():
-        scene.add_geometry(
-            mesh.copy().apply_transform(Z_UP_TO_Y_UP), node_name=name, geom_name=name
-        )
+    scene.add_geometry(merged, node_name="plant", geom_name="plant")
     return scene.export(file_type="glb")
 
 

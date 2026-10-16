@@ -17,6 +17,3 @@ assets:
   library: assets/library/carrot
   generator: carrot      # key in GENERATORS, optional
   variants: 24
-collision:               # simple shapes, the visual mesh is only for rendering
-  root: capsule
-  foliage: cylinder

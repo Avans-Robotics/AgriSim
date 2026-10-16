@@ -26,6 +26,8 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 | 2026-10-16 | c2ac344 | same | 2,760 / 93 | OAK-D rig, nadir, no GI | 0.53 | 495 MiB total |
 | 2026-10-16 | c2ac344 | same | 2,760 / 93 | OAK-D rig, nadir, sun `cast_shadows` off | 0.62 | 311 / 422 MiB |
 | 2026-10-16 | c2ac344 | `carrot_pixel.yaml`, server, same system | 33 / 4 | OAK-D rig, nadir | 0.83 | 384 / 495 MiB |
+| 2026-10-16 | m3b, one mesh per Variant | `random_10x10.yaml`, server, same system | 2,760 / 93 | OAK-D rig, nadir | 0.61 | 384 / 495 MiB |
+| 2026-10-16 | m3b, one mesh per Variant | same | 2,760 / 93 | OAK-D rig, pose A at the west Field edge | 0.59 | 384 / 495 MiB |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
@@ -46,6 +48,7 @@ The robot camera is an OAK-D Pro. The rig stands in for it with one RGB `camera`
 - The cost comes from Plants outside the view. The sun's shadow pass draws every Plant in the Field (shadows off: 0.62x); the rest is per-object work.
 - During the nadir run the GPU sits at about 16% utilization at a low clock, while one gz server thread runs at 100% of a CPU core. Rendering is CPU-bound on the number of render items (each carrot Variant has 3 meshes with their own material, so about 8,300 items), not on triangles.
 - Conclusion: triangle LOD would not help and is not part of M3. Levers that do reduce CPU work: fewer meshes per Variant (one mesh, one material), a shorter shadow distance, or merging a Pixel's Plants into one render mesh.
+- m3b merged each Variant into one mesh with one material (ADR 0008): 3x fewer render items, 0.50x to 0.61x (nadir) and 0.51x to 0.59x (pose A at the edge), renders unchanged.
 
 Rig worlds are hand-edited copies of `world.sdf` (camera models replaced by one model with both sensors). Subscribe to both `/oakd/rgb` and `/oakd/depth`.
 
