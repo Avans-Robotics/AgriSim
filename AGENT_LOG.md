@@ -406,3 +406,21 @@ Branch m2e-perf (stacked on m2d, m2c), not pushed. Validated: averaged headless 
 ### Open items
 - Discuss: 0.6x at 30 Hz passes the 0.5x budget but misses the 1.0x target. Levers: one robot camera instead of two render cameras, lower resolution, lower rate, simpler Plants far from the camera (LOD). Decide when the real camera is known (spec open item 1).
 - User: GUI row, SVG check, push and PR.
+
+## 2026-10-12 Prior art: plant physics, soil, games, asset generation
+### Goal & outcome
+Side research recorded so later design chats see it: `docs/research/prior-art.md` gained sections on plant physics for manipulation, soil and terrain, farming games and asset generation, plus AgriGen and Agri-Sim rows. ADR 0006 (still proposed) lists M4 candidates; spec §12 deferred items 5 (growth stages) and 6 (soil mechanics). Commit 51ab8b8.
+### Decisions & why
+- Nothing decided, only recorded: ADR 0006 stays `proposed`, no new ADR, CONTEXT.md untouched (no new terms fixed).
+- Leading M4 candidate: leaves as a pseudo-rigid-body spring chain in plain SDF (field-validated, cheap), root kept as the force-threshold detach (OrchardBench uses the same tether pattern).
+- Soil stays a rigid plane; deformable terrain (Chrono SCM) only as a separate Exporter if sinkage becomes a research question.
+### Lessons / gotchas
+- No uprooting simulation exists in any simulator found; supports publication point 2.
+- Games (Farming Simulator 25) offer ideas only: proprietary engine and assets, no plant contact physics.
+- Artisan (LLM articulated asset generator) does not fit Variants (no plants, not deterministic); borrow only its simulation stability check.
+- Unverified: gz-sim `WheelSlip` details, whether Gazebo Plants targets gz-sim.
+### State
+Branch docs-prior-art-physics (from origin/main), doc-only, committed, not pushed. Branch m2e-perf left untouched.
+### Open items
+- User: review, push and merge.
+- Missing sources: soil friction coefficient, root slip distance before detach.
