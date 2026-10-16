@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from pixelfield.cli import main
+from pixelfield.exporters import gazebo
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -109,7 +110,7 @@ def test_soil_visual_is_textured_tiles_covering_the_collision_box(mixed):
     ys = [float(t.findtext("pose").split()[1]) for t in tiles]
     assert max(xs) - min(xs) + 1.0 >= sx and max(ys) - min(ys) + 1.0 >= sy  # 1 m tiles
     for tile in tiles:
-        i, j = (int(n) % 4 for n in tile.get("name").split("_")[1:])  # baked atlas, 4 x 4
+        i, j = (int(n) % gazebo.SOIL_ATLAS for n in tile.get("name").split("_")[1:])
         uri = tile.findtext(".//albedo_map")
         assert (
             uri == f"textures/tiles/tile_{i}_{j}_color.jpg" and (world_sdf.parent / uri).is_file()

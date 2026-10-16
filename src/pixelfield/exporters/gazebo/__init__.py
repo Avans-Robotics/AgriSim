@@ -67,7 +67,8 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
     # centred on the soil; the outer tiles may overhang the collision box a little.
     textures = Path(out_dir) / "textures"
-    shutil.copytree(SOIL_TEXTURES, textures, dirs_exist_ok=True)
+    textures.mkdir(parents=True, exist_ok=True)
+    shutil.copy(SOIL_TEXTURES / "normal.jpg", textures)  # shared; color and roughness are baked
     shutil.copytree(SOIL_TILES, textures / "tiles", dirs_exist_ok=True)
     nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size[:2])
     for i in range(nx):

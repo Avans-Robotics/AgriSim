@@ -258,6 +258,8 @@ def _bezier(curve, t: float) -> tuple[np.ndarray, np.ndarray]:
 def _frame(tangent: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Side and up vectors across a curve; the side stays horizontal."""
     side = np.cross([0.0, 0.0, 1.0], tangent)
+    if np.linalg.norm(side) < 1e-9:
+        raise ValueError("leaf curve runs straight up; its reach or tilt must be above 0")
     side /= np.linalg.norm(side)
     return side, np.cross(tangent, side)
 

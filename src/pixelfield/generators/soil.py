@@ -27,6 +27,8 @@ def generate(out_dir: Path = TEXTURES / "soil_tiles") -> list[Path]:
     """Write tile_<i>_<j>_color.jpg and _roughness.jpg for every atlas tile to out_dir."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("tile_*.jpg"):
+        old.unlink()
     base, dry = (_load(TEXTURES / name) for name in ("soil", "soil_dry"))
     rng = random.Random(SEED)
     dry_noise, damp_noise = _noise(rng, 4), _noise(rng, 3)

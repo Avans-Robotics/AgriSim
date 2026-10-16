@@ -76,11 +76,12 @@ def test_preview_has_one_mesh_model_per_variant(library, tmp_path):
 
 
 @pytest.mark.parametrize("name", list(root_crop.CROPS))
-def test_committed_library_matches_generator(name):
+def test_committed_library_matches_generator(name, tmp_path):
     """Catches a generator change committed without regenerating the Asset Library."""
-    committed = REPO / "assets" / "library" / name / f"{name}_{root_crop.STAGE}_v00.glb"
-    parts, _ = root_crop.variant(random.Random(0), root_crop.CROPS[name])
-    assert committed.read_bytes() == root_crop.to_glb(parts)
+    library = REPO / "assets" / "library" / name
+    root_crop.generate(name, len(list(library.glob("*.glb"))), tmp_path)
+    for path in tmp_path.iterdir():
+        assert path.read_bytes() == (library / path.name).read_bytes(), path.name
 
 
 def test_radish_root_fades_to_a_white_tip(tmp_path):

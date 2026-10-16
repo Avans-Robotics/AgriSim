@@ -6,7 +6,7 @@ import pytest
 
 trimesh = pytest.importorskip("trimesh")
 
-from pixelfield.generators import lettuce, root_crop  # noqa: E402
+from pixelfield.generators import lettuce  # noqa: E402
 
 LETTUCE = lettuce.CROPS["lettuce"]
 REPO = Path(__file__).resolve().parents[1]
@@ -27,8 +27,14 @@ def test_variants_within_ranges_and_budget(tmp_path):
         assert plant.bounds[0][1] >= 0  # nothing below the soil
 
 
-def test_committed_library_matches_generator():
+def test_committed_library_matches_generator(tmp_path):
     """Catches a generator change committed without regenerating the Asset Library."""
-    committed = REPO / "assets" / "library" / "lettuce" / f"lettuce_{root_crop.STAGE}_v00.glb"
-    parts, _ = lettuce.variant(random.Random(0), LETTUCE)
-    assert committed.read_bytes() == root_crop.to_glb(parts)
+    library = REPO / "assets" / "library" / "lettuce"
+    lettuce.generate("lettuce", len(list(library.glob("*.glb"))), tmp_path)
+    for path in tmp_path.iterdir():
+        assert path.read_bytes() == (library / path.name).read_bytes(), path.name
+
+
+def test_upright_leaf_is_rejected():
+    with pytest.raises(ValueError, match="straight up"):
+        lettuce.variant(random.Random(0), LETTUCE | {"inner_tilt": 0.0})
