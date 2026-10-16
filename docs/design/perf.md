@@ -18,7 +18,7 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 | 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, GI `high_quality` and `anisotropic` off | 0.62 | not measured |
 | 2026-10-02 | 639fa54 | same | 2,760 / 93 | 30 Hz, no saving, no GI | 0.66 | 609 MiB total |
 | 2026-10-02 | 639fa54 | `carrot_pixel.yaml`, server | 33 / 4 | 30 Hz, no saving, GI | 0.97 | 435 / 613 MiB |
-| pending | 639fa54 | `random_10x10.yaml`, GUI on NVIDIA | 2,760 / 93 | as built | | |
+| 2026-10-16 | a1a4eff | `random_10x10.yaml`, GUI on NVIDIA | 2,760 / 93 | as built | 1.00 (99.95% or higher, GUI reading, not averaged) | 399 server + 446 GUI / 983 MiB total |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
