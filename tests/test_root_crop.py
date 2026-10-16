@@ -24,26 +24,26 @@ def test_same_index_same_bytes():
     assert a == b
 
 
-def test_variants_within_ranges_and_budget(library):
-    out, paths = library
+@pytest.mark.parametrize("name", list(root_crop.CROPS))
+def test_variants_within_ranges_and_budget(name, tmp_path):
+    crop, out = root_crop.CROPS[name], tmp_path
+    paths = root_crop.generate(name, 4, out)
     sizes = json.loads((out / "variants.json").read_text())
-    assert list(sizes) == [p.stem for p in paths] == [f"carrot_harvest_v{i:02d}" for i in range(4)]
+    assert list(sizes) == [p.stem for p in paths] == [f"{name}_harvest_v{i:02d}" for i in range(4)]
     for index, path in enumerate(paths):
-        parts, _ = root_crop.variant(random.Random(index), CARROT)
+        parts, _ = root_crop.variant(random.Random(index), crop)
         root, foliage = sizes[path.stem]["root"], sizes[path.stem]["foliage"]
         mesh = parts["root"]
         assert mesh.is_watertight and mesh.volume > 0  # closed, normals outward
         (_, _, z_min), (_, _, z_max) = mesh.bounds
         assert z_max == pytest.approx(root["top"], abs=1e-4)
         assert z_max - z_min == pytest.approx(root["length"], abs=1e-4)
-        assert CARROT["root_length"][0] <= root["length"] <= CARROT["root_length"][1]
-        assert CARROT["shoulder_height"][0] <= root["top"] <= CARROT["shoulder_height"][1]
-        assert (
-            CARROT["shoulder_diameter"][0] <= 2 * root["radius"] <= CARROT["shoulder_diameter"][1]
-        )
+        assert crop["root_length"][0] <= root["length"] <= crop["root_length"][1]
+        assert crop["shoulder_height"][0] <= root["top"] <= crop["shoulder_height"][1]
+        assert crop["shoulder_diameter"][0] <= 2 * root["radius"] <= crop["shoulder_diameter"][1]
         top = max(parts[part].bounds[1][2] for part in ("petioles", "leaves"))
         assert top == pytest.approx(foliage["height"], abs=1e-4)
-        assert 0.8 * CARROT["foliage_height"][0] <= foliage["height"] <= CARROT["foliage_height"][1]
+        assert 0.8 * crop["foliage_height"][0] <= foliage["height"] <= crop["foliage_height"][1]
         assert parts["leaves"].face_normals[:, 2].min() >= 0  # blades face up
 
         # the file holds one mesh with one textured material, y up as glTF requires

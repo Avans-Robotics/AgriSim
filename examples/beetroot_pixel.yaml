@@ -1,0 +1,7 @@
+# One beetroot Pixel, for the M3 look check against photos.
+pixel_size: 0.5
+seed: 42
+legend:
+  B: beetroot
+grid: |
+  B

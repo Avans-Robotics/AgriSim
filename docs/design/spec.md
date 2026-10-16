@@ -175,6 +175,7 @@ See [ADR 0003](../adr/0003-committed-asset-library.md) and [ADR 0004](../adr/000
 - Variants are named `<crop>_<stage>_v<NN>` (for example `carrot_harvest_v07`), see [ADR 0008](../adr/0008-variant-naming-with-growth-stage.md). The `.glb` is one mesh with one material, for the static Field only.
 - Plants have no collision yet. Direction for M4 (to be settled in its grill): a low-poly convex copy of the real root profile from the generator, and per-leaf petiole chains with springs for the foliage, so a gripper closing on the leaf bunch bends and holds it. Not capsules and cylinders.
 - Carrot Variants: a tapered orange root, mostly below ground with the shoulder visible, plus a crown of divided leaves. Root length, root diameter, foliage height and leaf count vary per Variant.
+- Beetroot Variants: a top-shaped crimson globe with a thin taproot, a third to half above ground, plus red-magenta stalks fanning out in a V with simple ovate blades (wavy margin, red midrib). Globe size, foliage height and leaf count vary per Variant.
 - Default Asset Generator: pure Python with `trimesh`. A Blender generator may replace it for a Crop if the results look too crude, writing into the same library format.
 - Root crops (carrot, beetroot, long red radish) share one generator, `root_crop`, with per-Crop ranges. Head lettuce gets its own generator. Weeds: exported once from CropCraft's Blender library to `.glb`.
 - Soil: a flat plane with a CC0 PBR soil texture (ambientCG or Poly Haven, 1 to 2K), committed to `assets/library/textures/`.
