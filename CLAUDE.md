@@ -30,6 +30,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Known issue: `libEGL warning: egl: failed to create dri2 screen` comes from Mesa probing the NVIDIA GPU. Fix: `export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json`.
 - Known issue: hybrid graphics (Intel iGPU + NVIDIA, PRIME on-demand), so the gz GUI renders on Intel by default (nvidia-smi shows about 100 MiB with gz open). Fix in `~/.bashrc`, gz only: `gz() { __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia command gz "$@"; }`. Headless rendering (`pixelfield render`) already uses NVIDIA through the EGL setting above.
 - Known issue: after an NVIDIA driver upgrade (apt or unattended-upgrades), the new userspace libraries no longer match the loaded kernel module until a reboot: `nvidia-smi` fails with `Failed to initialize NVML: Driver/library version mismatch` and GPU rendering breaks. Fix: reboot. Perf numbers can also shift after a driver or kernel upgrade, so re-measure a known row before comparing with older rows in `docs/design/perf.md`.
+- Keep gz-rendering 8.3.0 or newer and gz-sim 8.15.0 or newer: with 8.2.3 and 8.14.0 the 10 x 10 Field with a 30 Hz camera ran at 0.6x instead of about 0.95x (`docs/design/perf.md`).
 - `ros-jazzy-ros-gz` is not installed yet; deferred until a chunk needs ROS topics.
 
 ## Commands
