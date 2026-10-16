@@ -1,0 +1,22 @@
+# Provisional values, to be tuned against real field data (spec section 6).
+# Long red radish at harvest, matched by eye to photos: a crimson-pink root 15 to 25 cm
+# long, white towards the tip, its red shoulder a few cm above the soil; pale green
+# stalks with rough lyrate leaves (large end lobe, small side lobes), 25 to 38 cm tall.
+name: radish
+planting:
+  row_spacing: 0.25      # two rows per 0.5 m Pixel
+  in_row_spacing: 0.06
+  margin: 0.05           # seven Plants per row
+  row_direction: 0.0
+  jitter: 0.01
+  missing_rate: 0.08
+variation:
+  scale: [0.85, 1.15]
+  yaw: [0.0, 6.283]
+  hue_shift: [-0.03, 0.03]
+physics:
+  pull_out_force: [15.0, 35.0]   # newtons, guess, no literature value for radish yet
+assets:
+  library: assets/library/radish
+  generator: radish
+  variants: 24

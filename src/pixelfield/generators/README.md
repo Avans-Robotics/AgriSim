@@ -11,4 +11,6 @@ Variant files are named `<crop>_<stage>_v<NN>.glb` (ADR 0008) and are glTF binar
 - `root.length`: crown top to tip; `root.radius`: shoulder radius; `root.top`: crown top above the soil.
 - `foliage.height`: highest leaf point above the soil; `foliage.radius`: widest reach from the root axis.
 
-Each `.glb` holds one mesh with one double-sided material (single-faced blades show from below too). The parts (root, petioles, leaves) each sample their own block of a small sRGB palette texture. `variant()` still returns the parts separately.
+Root crop shapes are picked per Crop in `CROPS`: root profile `taper` (carrot), `globe` (beetroot) or `spindle` (radish); leaf `divided`, `simple` or `lobed`. An optional `tip_color` fades the root to a second color towards the tip (radish).
+
+Each `.glb` holds one mesh with one double-sided material (single-faced blades show from below too). The parts (root, petioles, leaves) each sample their own column of a small sRGB palette texture; a fading root samples a vertical gradient in its column by height. `variant()` still returns the parts separately.

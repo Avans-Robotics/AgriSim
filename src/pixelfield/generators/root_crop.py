@@ -55,7 +55,32 @@ CROPS = {
         "leaf_reach": (0.35, 0.7),
         "leaf_arch": 0.7,  # stalks fan out in a V, blades keep pointing up and out
         "leaf_tip": (0.9, 1.0),
+        "blade_start": (0.4, 0.5),  # blade starts this far along the leaf
+        "blade_width": (0.45, 0.6),  # blade width, fraction of the blade length
         "petiole_radius": (0.003, 0.0008),  # the midrib continues the stalk to the leaf tip
+        "petiole_sides": 5,
+    },
+    "radish": {  # long red radish, white at the tip
+        "root_length": (0.15, 0.25),
+        "shoulder_diameter": (0.025, 0.045),
+        "shoulder_height": (0.02, 0.05),  # the red shoulder pushes out of the soil
+        "root_bend": (0.0, 0.02),
+        "foliage_height": (0.25, 0.38),
+        "leaf_count": (6, 10),
+        # linear factors (sRGB in brackets): crimson-pink root, pale green stalks, dark green
+        "root_color": ((130, 3, 10), (170, 6, 22)),  # (200-212, 25-35, 55-80)
+        "tip_color": ((205, 185, 185), (225, 205, 205)),  # (232-243, 222-233, 222-233)
+        "tip_start": (0.65, 0.8),  # root fades to the tip color this far down
+        "leaf_color": ((22, 65, 9), (40, 95, 16)),  # (80-110, 140-170, 50-70)
+        "petiole_color": ((95, 135, 55), (125, 160, 75)),  # (170-190, 190-208, 130-145)
+        "root_profile": "spindle",
+        "leaf": "lobed",
+        "leaf_reach": (0.3, 0.6),
+        "leaf_arch": 0.8,
+        "leaf_tip": (0.85, 1.0),
+        "blade_start": (0.25, 0.35),  # side lobes reach far down the stalk
+        "blade_width": (0.4, 0.5),
+        "petiole_radius": (0.0035, 0.001),
         "petiole_sides": 5,
     },
 }
@@ -66,7 +91,7 @@ SEGMENT_PAIRS = (3, 4)  # narrow segments along each leaflet, plus one at its ti
 LEAFLET_LENGTH = 0.12  # fraction of the leaf length, shrinking toward the tip
 SEGMENT_WIDTH = 0.12  # half-width of a segment, fraction of its length
 PETIOLE_SEGMENTS = 6
-BLADE_STATIONS = 10  # cross-sections along a simple leaf blade
+BLADE_STATIONS = 10  # cross-sections along a simple leaf blade, three times that if lobed
 BLADE_COLUMNS = 3  # points per side across the blade, plus the midrib
 MAX_TRIANGLES = 8000
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
@@ -96,6 +121,10 @@ def variant(rng: random.Random, crop: dict) -> tuple[dict[str, trimesh.Trimesh],
     top = rng.uniform(*crop["shoulder_height"])
     shade = rng.random()
     root = ROOTS[crop["root_profile"]](length, radius, top, rng.uniform(*crop["root_bend"]))
+    if "tip_color" in crop:  # fade to the tip color around tip_start, drawn last
+        middle = top - rng.uniform(*crop["tip_start"]) * length
+        root.metadata["fade"] = (_mix(crop["tip_color"], shade), middle + 0.1 * length,
+                                 middle - 0.1 * length)  # fmt: skip
     root.visual = trimesh.visual.TextureVisuals(material=_material(_mix(crop["root_color"], shade)))
     height = rng.uniform(*crop["foliage_height"])
     petioles, leaves = _foliage(rng, radius, top, height, crop)
@@ -118,15 +147,26 @@ def to_glb(meshes: dict[str, trimesh.Trimesh]) -> bytes:
     (rendering is CPU-bound on render items, docs/design/perf.md). Each part samples its
     own block of a small palette texture; one UV per part keeps the sampling at mip 0."""
     # part colors are linear (glTF baseColorFactor); texture texels are sRGB
-    linear = np.array([[m.visual.material.baseColorFactor for m in meshes.values()]]) / 255
+    # A part with a "fade" (tip color, z where it starts, z where it ends) gets a vertical
+    # gradient in its column and v by height; other parts sample the middle of a flat column.
+    parts = list(meshes.values())
+    rows = 32 if any("fade" in m.metadata for m in parts) else 8
+    linear = np.empty((rows, len(parts), 4))
+    uv = []
+    for i, mesh in enumerate(parts):
+        color = np.array(mesh.visual.material.baseColorFactor) / 255
+        v = np.full(len(mesh.vertices), 0.5)
+        linear[:, i] = color
+        if "fade" in mesh.metadata:
+            tip, z0, z1 = mesh.metadata["fade"]
+            linear[:, i] = color + np.linspace(0, 1, rows)[:, None] * (np.array(tip) / 255 - color)
+            s = np.clip((z0 - mesh.vertices[:, 2]) / (z0 - z1), 0.0, 1.0)
+            v = 1 - (0.5 + s * (rows - 1)) / rows  # trimesh flips v to glTF's top-left origin
+        uv.append(np.column_stack([np.full(len(v), (i + 0.5) / len(parts)), v]))
     srgb = np.where(linear <= 0.0031308, 12.92 * linear, 1.055 * linear ** (1 / 2.4) - 0.055)
     srgb[..., 3] = linear[..., 3]
-    palette = np.repeat(np.repeat(np.round(srgb * 255).astype(np.uint8), 8, axis=0), 8, axis=1)
-    colors = linear[0]
-    uv = np.vstack([
-        np.tile([(i + 0.5) / len(colors), 0.5], (len(mesh.vertices), 1))
-        for i, mesh in enumerate(meshes.values())
-    ])  # fmt: skip
+    palette = np.repeat(np.round(srgb * 255).astype(np.uint8), 8, axis=1)
+    uv = np.vstack(uv)
     merged = trimesh.util.concatenate(
         [trimesh.Trimesh(m.vertices, m.faces, process=False) for m in meshes.values()]
     )
@@ -164,6 +204,15 @@ def _globe_root(length: float, radius: float, top: float, bend: float) -> trimes
     return _revolve(profile, length, top, bend)
 
 
+def _spindle_root(length: float, radius: float, top: float, bend: float) -> trimesh.Trimesh:
+    """Solid of revolution: narrow crown, rounded shoulder, a long taper to a pointed tip."""
+    profile = [(0.0, top)]
+    for t in np.linspace(0.0, 1.0, 24):
+        shoulder = 0.35 + 0.65 * math.sin(min(t / 0.1, 1.0) * math.pi / 2)
+        profile.append((radius * shoulder * (1 - t) ** 1.2, top - t * length))
+    return _revolve(profile, length, top, bend)
+
+
 def _revolve(profile, length: float, top: float, bend: float) -> trimesh.Trimesh:
     """Revolve a crown-to-tip profile; the tip bends sideways by `bend`."""
     # tip to crown, so the normals point outward
@@ -189,7 +238,7 @@ def _foliage(
         bezier = (start, start + 0.3 * reach * out + [0, 0, crop["leaf_arch"] * rise],
                   start + reach * out + [0, 0, rise * rng.uniform(*crop["leaf_tip"])])  # fmt: skip
         petioles.append(_tube(bezier, crop["petiole_radius"], crop["petiole_sides"]))
-        blades.append(LEAVES[crop["leaf"]](rng, bezier))
+        blades.append(LEAVES[crop["leaf"]](rng, bezier, crop))
     return trimesh.util.concatenate(petioles), trimesh.util.concatenate(blades)
 
 
@@ -225,7 +274,7 @@ def _tube(curve, radius: tuple[float, float], n: int) -> trimesh.Trimesh:
     return trimesh.Trimesh(vertices, faces, process=False)
 
 
-def _leaflets(rng: random.Random, curve) -> trimesh.Trimesh:
+def _leaflets(rng: random.Random, curve, crop: dict) -> trimesh.Trimesh:
     """Leaflet pairs along the outer part of the leaf plus one at the tip."""
     _, _, tip = curve
     leaf_length = np.linalg.norm(np.asarray(tip) - curve[0])
@@ -259,25 +308,49 @@ def _leaflets(rng: random.Random, curve) -> trimesh.Trimesh:
     return _face_up(trimesh.Trimesh(vertices, faces, process=False))
 
 
-def _simple_blade(rng: random.Random, curve) -> trimesh.Trimesh:
-    """One ovate blade with a wavy margin on the outer part of the leaf, slightly cupped.
+def _simple_blade(rng: random.Random, curve, crop: dict) -> trimesh.Trimesh:
+    """One ovate blade with a blunt tip: widest about 40% along, rounded towards the tip."""
+    return _blade(rng, curve, crop, lambda rng: lambda u: math.sin(math.pi * u**0.75) ** 0.6,
+                  BLADE_STATIONS)  # fmt: skip
+
+
+def _lobed_blade(rng: random.Random, curve, crop: dict) -> trimesh.Trimesh:
+    """Lyrate blade: a large rounded end lobe and smaller side lobes down the stalk."""
+
+    def outline(rng: random.Random):
+        pairs = rng.randint(2, 4)
+
+        def width(u: float) -> float:
+            end = math.sin(math.pi * ((u - 0.45) / 0.55) ** 0.8) ** 0.6 if u > 0.45 else 0.0
+            side = (0.25 + 0.9 * u) * abs(math.sin(math.pi * pairs * u / 0.5)) ** 0.7
+            return max(end, side if u < 0.5 else 0.0)
+
+        return width
+
+    return _blade(rng, curve, crop, outline, 3 * BLADE_STATIONS)
+
+
+def _blade(rng: random.Random, curve, crop: dict, outline, stations: int) -> trimesh.Trimesh:
+    """Blade on the outer part of the leaf, slightly cupped, with a wavy margin.
 
     The stalk tube runs on to the tip as the midrib, so the blade spans both sides of it.
+    `outline(rng)` returns the half-width (0 to 1) as a function of u, 0 at the blade base
+    and 1 at the tip.
     """
     _, _, tip = curve
     leaf_length = np.linalg.norm(np.asarray(tip) - curve[0])
-    start = rng.uniform(0.4, 0.5)  # blade starts this far along the leaf
-    half_width = 0.5 * rng.uniform(0.45, 0.6) * (1 - start) * leaf_length
+    start = rng.uniform(*crop["blade_start"])
+    half_width = 0.5 * rng.uniform(*crop["blade_width"]) * (1 - start) * leaf_length
     cup = 0.15 * half_width
     wave, phase = 0.06 * half_width, rng.uniform(0.0, 2 * math.pi)
+    shape = outline(rng)
     n = 2 * BLADE_COLUMNS + 1
     vertices, faces = [], []
-    for j, t in enumerate(np.linspace(start, 1.0, BLADE_STATIONS)):
+    for j, t in enumerate(np.linspace(start, 1.0, stations)):
         point, tangent = _bezier(curve, t)
         side, up = _frame(tangent)
         u = (t - start) / (1 - start)
-        # ovate with a blunt tip: widest about 40% along, rounded towards the tip
-        w = half_width * math.sin(math.pi * u**0.75) ** 0.6
+        w = half_width * shape(u)
         for k in range(-BLADE_COLUMNS, BLADE_COLUMNS + 1):
             a = k / BLADE_COLUMNS
             # cupped across, wavy at the margin, both fading to the base and the tip
@@ -297,8 +370,8 @@ def _face_up(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     return mesh
 
 
-ROOTS = {"taper": _taper_root, "globe": _globe_root}
-LEAVES = {"divided": _leaflets, "simple": _simple_blade}
+ROOTS = {"taper": _taper_root, "globe": _globe_root, "spindle": _spindle_root}
+LEAVES = {"divided": _leaflets, "simple": _simple_blade, "lobed": _lobed_blade}
 
 
 def _mix(ends: tuple[tuple[int, ...], tuple[int, ...]], shade: float) -> tuple[int, ...]:

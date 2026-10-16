@@ -1,7 +1,9 @@
 import json
 import random
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
+import numpy as np
 import pytest
 
 trimesh = pytest.importorskip("trimesh")
@@ -10,6 +12,7 @@ from pixelfield.exporters import gazebo  # noqa: E402
 from pixelfield.generators import root_crop  # noqa: E402
 
 CARROT = root_crop.CROPS["carrot"]
+REPO = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
@@ -70,3 +73,27 @@ def test_preview_has_one_mesh_model_per_variant(library, tmp_path):
     assert uris == [str(p.resolve()) for p in paths]
     rolls = [float(v.findtext("pose").split()[3]) for v in ET.parse(world).iter("visual")]
     assert rolls == pytest.approx([1.5708] * len(paths), abs=1e-4)  # y-up glTF stood up
+
+
+@pytest.mark.parametrize("name", list(root_crop.CROPS))
+def test_committed_library_matches_generator(name):
+    """Catches a generator change committed without regenerating the Asset Library."""
+    committed = REPO / "assets" / "library" / name / f"{name}_{root_crop.STAGE}_v00.glb"
+    parts, _ = root_crop.variant(random.Random(0), root_crop.CROPS[name])
+    assert committed.read_bytes() == root_crop.to_glb(parts)
+
+
+def test_radish_root_fades_to_a_white_tip(tmp_path):
+    (path,) = root_crop.generate("radish", 1, tmp_path)
+    (plant,) = trimesh.load(path).geometry.values()
+    image = np.asarray(plant.visual.material.baseColorTexture.convert("RGB"))
+
+    def texel(vertex: int) -> np.ndarray:
+        u, v = plant.visual.uv[vertex]  # trimesh flips v to the bottom-left origin
+        height, width, _ = image.shape
+        return image[min(int((1 - v) * height), height - 1), int(u * width)]
+
+    tip, crown = np.argmin(plant.vertices[:, 1]), np.argmax(plant.visual.uv[:, 1])
+    assert texel(tip).min() > 180  # near white
+    red = texel(crown)
+    assert red[0] > 150 and red[1] < 80  # crimson
