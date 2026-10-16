@@ -445,3 +445,26 @@ Branch m3a-camera-perf, doc-only, committed, not pushed. Validated: averaged hea
 - `renders/` untracked on main: delete or gitignore (user's call).
 - Spec §12 item 7 still lists lettuce, onion, bean; update during the naming grill.
 - Next: grill on Variant naming with a growth stage slot and a shared root crop generator.
+
+## 2026-10-16 M3 grill and m3b: root_crop generator, stage slot, one mesh per Variant
+### Goal & outcome
+Grill settled Variant naming and the root crop generator design; m3b built it (stacked on m3a). `carrot.py` became `root_crop.py` with per-Crop ranges in `CROPS`; Variants are `<crop>_harvest_v<NN>`; each `.glb` is one mesh with one material sampling an sRGB palette texture. 10x10 OAK-D rig: 0.50x to 0.61x (nadir), 0.51x to 0.59x (edge). ADR 0008; spec M3 row, items 1, 5, 7 and §8 updated. Commits fd8c8ea (refactor, byte-identical Variants), 00d851f (merge plus docs).
+### Decisions & why
+- Name `<crop>_<stage>_v<NN>`, flat folder, stage as a plain word, optional `assets.stage` (default `harvest`); Manifest keeps only `variant`. Rename done now so later stages never rename the library.
+- Crop names `carrot`, `beetroot`, `radish`, `lettuce`; variety in the Crop definition. Lettuce gets its own generator (m3e).
+- One generator module for root crops; leaf shapes as named builders come with beetroot (m3c), not before.
+- Palette texture over vertex colors: gz-common `SubMesh` has no color channel. Parts keep separate inside `variant()`, merge only on write, so M4 can export articulated foliage for the spawned Plant.
+- User rejected capsule plus cylinder collision as unrealistic for grasping. Unused `collision:` keys removed from Crop YAMLs and spec; M4 direction recorded: convex low-poly root from the real profile, per-leaf spring petiole chains. Where the gripper grasps (leaf bunch or shoulder) is the first M4 question.
+- Chunk order: m3c beetroot, m3d radish, m3e head lettuce, m3f soil blend plus a four-Crop example Field. User supplies real photo links per Crop for the look check; nothing committed.
+- Pillow added to the `generate` extra and dev group only (trimesh needs it for textures).
+### Lessons / gotchas
+- glTF `baseColorFactor` is linear, texture texels are sRGB: writing the factor values straight into the palette made Plants clearly darker. Encoded, renders match main within 0.1/255 mean.
+- One UV per part gives a zero UV gradient, so sampling stays at mip 0 and part colors do not bleed at distance.
+- `pkill -f "gz sim"` also matches a tool command whose heredoc only writes a script containing that text. Write scripts and run them in separate calls.
+- 3x fewer render items gave about 20% more RTF, not 3x: shadows and per-frame overhead remain.
+### State
+Branch m3b-root-crop (on m3a-camera-perf), committed, not pushed. Validated: pytest (53), ruff, `gz sdf -k`, render comparison against main, averaged headless perf runs. Look of the merged Variants in the GUI UNVERIFIED (renders identical, GUI not opened).
+### Open items
+- User: review m3a and m3b, push and PR (stacked).
+- `renders/` untracked in the repo root (from running `render` there): delete or gitignore.
+- Next: m3c beetroot; needs real beetroot photo links from the user.
