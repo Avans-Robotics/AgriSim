@@ -241,7 +241,7 @@ Resolved:
 
 Open (deferred):
 
-1. **Real camera** on the Amiga (model, resolution, field of view, mounting height and angle). Not needed until render cameras are matched to real data; M1 uses a generic placeholder camera.
+1. **Real camera** on the Amiga: an OAK-D Pro (RGB IMX378, HFOV 66 or 69 degrees depending on the focus version; stereo OV9282 pair, 1280 x 800, HFOV 80 degrees). Currently mounted at the Amiga front looking straight down; a mount pitched about 45 degrees down, looking along the rows, is planned. Still open: exact height, angle and focus version. The M3a perf check used an OAK-D-like rig and found triangle LOD unnecessary (see [perf.md](perf.md)).
 2. **Real field values** for Planting Patterns and harvest sizes, per Crop.
 3. **Row crops and single-crop fields**: out of scope now. The core should not assume Pixels are small, so a large "Pixel" with one Crop or a row layout stays possible later.
 4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it (M5 oracle perception, or M6 detectors trained on Gazebo renders). Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
