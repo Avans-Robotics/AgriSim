@@ -524,3 +524,16 @@ Branches m3d-radish, m3e-lettuce, m3f-soil (stacked on m3c, m3b, m3a), committed
 - User: render slot for the M3 look check (about 70 s), then compare with photos.
 - Look gaps: no side veins on beet, no rough crown, one roughness per Plant, shared soil normals, lettuce crinkle only geometric.
 - Review and merge the six stacked branches (m3a to m3f).
+
+## 2026-10-16 M3 validation fixes
+### Goal & outcome
+Validator agent found no blocking bugs (all 96 Variants fresh and deterministic, no NaN, UVs inside their palette columns, radish fade correct, CreateBox mapping confirmed by a compiled probe against libgz-common5). Fixed its confirmed findings in 26eda5e on m3f-soil: freshness tests over every Variant, ValueError for leaves running straight up (was NaN), stronger soil seam test, atlas size tied to the Exporter, stale tiles removed on rebake, only the shared normal map copied into builds, README parts list.
+### Decisions & why
+- All fixes on the top branch m3f-soil; the stack merges in order, so m3d and m3e do not carry them on their own.
+### Lessons / gotchas
+- Seam tests on full-resolution textures drown in texture grain; low-pass to the scale of the mask first (32 px per m), then wrong mappings score 3.9+ against 1.36.
+### State
+Branch m3f-soil, committed, not pushed. Validated: pytest (65), ruff, `gz sdf -k` for all 9 examples. Gazebo look of radish, lettuce, soil and the four-Crop Field UNVERIFIED (render slot).
+### Open items
+- Suspicions not confirmed: mip bleed on the fading radish root at distance, irregular radish lobe notches at 4 pairs, lettuce lighting from below (no `_face_up`), rotated rows can leave lettuce Pixels empty (core, older).
+- Render slot, then the look check; review and merge m3a to m3f.
