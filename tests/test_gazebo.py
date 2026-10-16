@@ -56,14 +56,26 @@ def test_soil_covers_field_plus_border(mixed):
     assert size[:2] == pytest.approx([field["cols"] * 0.5 + 1.0, field["rows"] * 0.5 + 1.0])
 
 
-def test_carrots_use_copied_variant_meshes_and_lettuce_falls_back(mixed):
+def test_crop_without_variants_falls_back_to_a_cylinder(tmp_path):
+    crops = tmp_path / "crops"
+    crops.mkdir()
+    shutil.copy(REPO / "crops" / "carrot.yaml", crops)
+    lettuce = (REPO / "crops" / "lettuce.yaml").read_text()
+    (crops / "lettuce.yaml").write_text(lettuce.replace("assets/library/lettuce", str(tmp_path)))
+    out = tmp_path / "out"
+    main(["build", str(REPO / "examples" / "mixed.yaml"), "-o", str(out), "--crops", str(crops)])
+    manifest = json.loads((out / "manifest.json").read_text())
+    visuals = _plant_visuals(out / "world.sdf")
+    for p in manifest["plants"]:
+        model = visuals[p["id"]][0]
+        assert (model.find(".//cylinder") is not None) == (p["crop"] == "lettuce")
+
+
+def test_plants_use_copied_variant_meshes(mixed):
     world_sdf, manifest = mixed
     visuals = _plant_visuals(world_sdf)
     for p in manifest["plants"]:
         model = visuals[p["id"]][0]
-        if p["crop"] == "lettuce":  # no lettuce Variants yet
-            assert model.find(".//cylinder") is not None
-            continue
         assert model.findtext(".//mesh/uri") == f"meshes/{p['variant']}.glb"
         assert (world_sdf.parent / "meshes" / f"{p['variant']}.glb").is_file()
         scale = [float(v) for v in model.findtext(".//mesh/scale").split()]

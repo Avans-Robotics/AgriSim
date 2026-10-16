@@ -177,8 +177,9 @@ See [ADR 0003](../adr/0003-committed-asset-library.md) and [ADR 0004](../adr/000
 - Carrot Variants: a tapered orange root, mostly below ground with the shoulder visible, plus a crown of divided leaves. Root length, root diameter, foliage height and leaf count vary per Variant.
 - Beetroot Variants: a top-shaped crimson globe with a thin taproot, a third to half above ground, plus red-magenta stalks fanning out in a V with simple ovate blades (wavy margin, red midrib). Globe size, foliage height and leaf count vary per Variant.
 - Radish Variants (long red): a slender crimson-pink spindle fading to white at the tip, its shoulder a few cm above ground, plus pale green stalks with lyrate leaves (a large end lobe and small side lobes). Root size, fade point, foliage height and leaf count vary per Variant.
+- Lettuce Variants (romaine): an upright head of leaves in a golden-angle spiral, outer leaves darker and leaning out, a pale cupped heart, whitish midribs, crinkled surfaces and frilly margins. Head height, leaf count and lean vary per Variant. Own generator (`lettuce`), sharing the root crop generator's palette and file writing.
 - Default Asset Generator: pure Python with `trimesh`. A Blender generator may replace it for a Crop if the results look too crude, writing into the same library format.
-- Root crops (carrot, beetroot, long red radish) share one generator, `root_crop`, with per-Crop ranges. Head lettuce gets its own generator. Weeds: exported once from CropCraft's Blender library to `.glb`.
+- Root crops (carrot, beetroot, long red radish) share one generator, `root_crop`, with per-Crop ranges. Head lettuce (romaine) has its own generator, `lettuce`. Weeds: exported once from CropCraft's Blender library to `.glb`.
 - Soil: a flat plane with a CC0 PBR soil texture (ambientCG or Poly Haven, 1 to 2K), committed to `assets/library/textures/`.
 - Library size estimate: about 5 MB per Crop. Move to Git LFS if the library passes about 100 MB.
 

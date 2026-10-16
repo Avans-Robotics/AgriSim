@@ -1,0 +1,146 @@
+{
+  "lettuce_harvest_v00": {
+    "foliage": {
+      "height": 0.3213,
+      "radius": 0.1325
+    }
+  },
+  "lettuce_harvest_v01": {
+    "foliage": {
+      "height": 0.2372,
+      "radius": 0.1141
+    }
+  },
+  "lettuce_harvest_v02": {
+    "foliage": {
+      "height": 0.3265,
+      "radius": 0.1391
+    }
+  },
+  "lettuce_harvest_v03": {
+    "foliage": {
+      "height": 0.2446,
+      "radius": 0.1097
+    }
+  },
+  "lettuce_harvest_v04": {
+    "foliage": {
+      "height": 0.2354,
+      "radius": 0.1345
+    }
+  },
+  "lettuce_harvest_v05": {
+    "foliage": {
+      "height": 0.2805,
+      "radius": 0.1802
+    }
+  },
+  "lettuce_harvest_v06": {
+    "foliage": {
+      "height": 0.2946,
+      "radius": 0.1602
+    }
+  },
+  "lettuce_harvest_v07": {
+    "foliage": {
+      "height": 0.2372,
+      "radius": 0.1213
+    }
+  },
+  "lettuce_harvest_v08": {
+    "foliage": {
+      "height": 0.2458,
+      "radius": 0.1042
+    }
+  },
+  "lettuce_harvest_v09": {
+    "foliage": {
+      "height": 0.2743,
+      "radius": 0.1252
+    }
+  },
+  "lettuce_harvest_v10": {
+    "foliage": {
+      "height": 0.2656,
+      "radius": 0.1456
+    }
+  },
+  "lettuce_harvest_v11": {
+    "foliage": {
+      "height": 0.2579,
+      "radius": 0.1728
+    }
+  },
+  "lettuce_harvest_v12": {
+    "foliage": {
+      "height": 0.2581,
+      "radius": 0.1506
+    }
+  },
+  "lettuce_harvest_v13": {
+    "foliage": {
+      "height": 0.2449,
+      "radius": 0.144
+    }
+  },
+  "lettuce_harvest_v14": {
+    "foliage": {
+      "height": 0.2235,
+      "radius": 0.1545
+    }
+  },
+  "lettuce_harvest_v15": {
+    "foliage": {
+      "height": 0.3067,
+      "radius": 0.1615
+    }
+  },
+  "lettuce_harvest_v16": {
+    "foliage": {
+      "height": 0.2639,
+      "radius": 0.1292
+    }
+  },
+  "lettuce_harvest_v17": {
+    "foliage": {
+      "height": 0.2622,
+      "radius": 0.1805
+    }
+  },
+  "lettuce_harvest_v18": {
+    "foliage": {
+      "height": 0.237,
+      "radius": 0.1183
+    }
+  },
+  "lettuce_harvest_v19": {
+    "foliage": {
+      "height": 0.2939,
+      "radius": 0.1254
+    }
+  },
+  "lettuce_harvest_v20": {
+    "foliage": {
+      "height": 0.321,
+      "radius": 0.1521
+    }
+  },
+  "lettuce_harvest_v21": {
+    "foliage": {
+      "height": 0.2372,
+      "radius": 0.1408
+    }
+  },
+  "lettuce_harvest_v22": {
+    "foliage": {
+      "height": 0.318,
+      "radius": 0.1495
+    }
+  },
+  "lettuce_harvest_v23": {
+    "foliage": {
+      "height": 0.2905,
+      "radius": 0.1921
+    }
+  }
+}

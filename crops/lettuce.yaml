@@ -1,5 +1,7 @@
-# Placeholder Crop to check that the core is not carrot-specific. All values are provisional
-# guesses, to be replaced with measured values (spec section 12, open item 2).
+# Provisional values, to be tuned against real field data (spec section 6).
+# Romaine (cos) head lettuce at harvest, matched by eye to photos: an upright head 22 to
+# 32 cm tall, crinkled light green outer leaves leaning out, a pale cupped heart, broad
+# whitish midribs.
 name: lettuce
 planting:
   row_spacing: 0.25
@@ -16,4 +18,5 @@ physics:
   pull_out_force: [20.0, 40.0]   # newtons, guess, no literature value yet
 assets:
   library: assets/library/lettuce
+  generator: lettuce
   variants: 24

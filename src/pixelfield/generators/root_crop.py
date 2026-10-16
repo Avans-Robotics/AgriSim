@@ -97,8 +97,13 @@ MAX_TRIANGLES = 8000
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
 
 
-def generate(crop: str, variants: int, out_dir: Path) -> list[Path]:
-    """Write <crop>_harvest_v00.glb ... and variants.json to out_dir, replacing old Variants."""
+def generate(crop: str, variants: int, out_dir: Path, table=None, make=None) -> list[Path]:
+    """Write <crop>_harvest_v00.glb ... and variants.json to out_dir, replacing old Variants.
+
+    `table` and `make` default to this module's CROPS and variant(); other generators pass
+    their own and reuse the file writing.
+    """
+    table, make = table or CROPS, make or variant
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     for old in out_dir.glob(f"{crop}_*.glb"):
@@ -106,7 +111,7 @@ def generate(crop: str, variants: int, out_dir: Path) -> list[Path]:
     paths, sizes = [], {}
     for index in range(variants):
         name = f"{crop}_{STAGE}_v{index:02d}"
-        meshes, sizes[name] = variant(random.Random(index), CROPS[crop])
+        meshes, sizes[name] = make(random.Random(index), table[crop])
         path = out_dir / f"{name}.glb"
         path.write_bytes(to_glb(meshes))
         paths.append(path)
