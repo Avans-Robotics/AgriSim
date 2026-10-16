@@ -424,3 +424,24 @@ Branch docs-prior-art-physics (from origin/main), doc-only, committed, not pushe
 ### Open items
 - User: review, push and merge.
 - Missing sources: soil friction coefficient, root slip distance before detach.
+
+## 2026-10-16 M3a: OAK-D camera perf check, LOD ruled out
+### Goal & outcome
+M3 started (Crops: carrot, beetroot, long red radish, head lettuce; decofoodshop.nl props as visual reference only). First chunk measured an OAK-D-like rig (RGB 1920 x 1080 HFOV 66, depth 640 x 400 HFOV 80, both 30 Hz, 1.0 m) on `random_10x10`. Result: 0.50x in every pose (45 degrees along rows at Field edge or centre, nadir), 0.83x on a single Pixel. Triangle LOD is not part of M3. perf.md, spec open item 1 and CLAUDE.md (driver gotcha) updated, commit 4c527c9.
+### Decisions & why
+- No LOD: GPU at about 16% while one gz server thread is pegged at 100%, so rendering is CPU-bound on render items (3 meshes per carrot Variant, about 8,300 items), not triangles.
+- Pose A (45 degrees down, along rows) is the planned mount; nadir is the current real mount. Both measured; they give the same RTF.
+- Rig measured as hand-edited worlds (M2e method), no Exporter change until the real mount height and angle are known.
+### Lessons / gotchas
+- The 0.60x row from 2026-10-02 re-measures at 0.37x today, after the NVIDIA 595.84 to 595.99 and kernel -34 to -38 upgrades. Cause not isolated; compare only rows from the same system.
+- The cost scales with all Plants in the Field, not those in view: sun shadows draw every Plant (shadows off 0.62x).
+- `pkill -f "gz sim"` also matches any tool command line that merely contains that text, including a heredoc that writes a script. Write the script in one call, run it in another. Piping a measure script into `head` kills it before cleanup and leaves a server running that skews the next run.
+- Driver/library mismatch confirmed in the journal at the 11:18 upgrade (`Failed to initialize NVML`).
+### State
+Branch m3a-camera-perf, doc-only, committed, not pushed. Validated: averaged headless runs (numbers in perf.md). Rig worlds and scripts only in gitignored `out/` and the session scratchpad.
+### Open items
+- Cheap CPU levers for later: one mesh and material per Variant (fold into the shared root generator design), shorter shadow distance, merged render mesh per Pixel.
+- Optional: isolate the driver vs kernel regression.
+- `renders/` untracked on main: delete or gitignore (user's call).
+- Spec §12 item 7 still lists lettuce, onion, bean; update during the naming grill.
+- Next: grill on Variant naming with a growth stage slot and a shared root crop generator.
