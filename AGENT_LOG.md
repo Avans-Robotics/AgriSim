@@ -486,3 +486,21 @@ Branch m3b-root-crop, committed, not pushed. Validated: averaged headless runs a
 - User: review and push m3a and m3b.
 - Next: m3c beetroot (photo links from the user).
 - Active region grill when Fields grow beyond 10x10 or at M4.
+
+## 2026-10-16 m3c: beetroot Variants
+### Goal & outcome
+Beetroot added through the root crop generator: `globe` root profile (top-shaped, thin taproot, a third to half above soil), `simple` leaf builder (ovate blade, blunt tip, wavy margin, slight cup; the red stalk tube runs on as the midrib), per-Crop leaf curve so stalks fan out in a V. 24 Variants (2.1k to 3.2k triangles, 1.6 MB), `crops/beetroot.yaml`, `examples/beetroot_pixel.yaml` (12 Plants), spec §8 bullet. Commit a9f8fc1 on m3c-beetroot (from m3b).
+### Decisions & why
+- Grill: midrib only (no vein texture, side veins are a few pixels at 1 m), round red table beet at harvest, 2 rows 0.25 m apart at 0.08 m in-row, pull-out 30 to 60 N guessed, user photos stay out of the repo.
+- Margin 0.05 instead of the discussed 0.125: with 0.125 the layout fits only 4 Plants per row (8 per Pixel), not the intended 12.
+- Of the 7 user photos, 1 to 4 are the reference; 5 and 6 look AI-generated (layout only); 7 is Swiss chard.
+- Beet colors are written as linear factors with their sRGB targets in comments, since the palette encodes linear to sRGB.
+### Lessons / gotchas
+- A quick flat-shaded PIL sketch of `variant()` parts (scratchpad `sketch.py`) catches shape errors in seconds without Gazebo: it showed the first beet as an umbrella (blades flat on top) because the carrot curve droops; per-Crop `leaf_arch`, `leaf_reach`, `leaf_tip` fixed it.
+- Keeping carrot rng call order unchanged keeps its Variants byte-identical; checked after each generator change.
+### State
+Branch m3c-beetroot, committed, not pushed. Validated: pytest (54), ruff, `gz sdf -k` on beetroot_pixel and beetroot_variants, carrot bytes unchanged, PIL sketches. Gazebo render and look vs photos UNVERIFIED (render needs a slot from the user).
+### Open items
+- Headless render of `out/beetroot_pixel/world.sdf` (about 15 s) when the user allows, then compare with photos 1 to 4.
+- Known look gaps: no side veins, no rough crown, one roughness for the whole Plant (beet leaves are glossier).
+- Next: m3d radish.
