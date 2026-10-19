@@ -591,3 +591,46 @@ Branch m4b-physics-export (stacked on m4a-design), commits 1312b95 and a fix, no
 - Carrot tops 14 g for v00 look light (thin visual petioles); calibration later.
 - Beetroot root hull is a cone (1.3 to 2.4x root volume); drooping carrot tips give small sail-shaped hulls; whole blade rides on the last link.
 - Root crop library 6.8 MB to 14.9 MB.
+
+## 2026-10-19 M4c articulated SDF and settle check (first part)
+### Goal & outcome
+`exporters/gazebo/plant.py` builds the scaled SDF of one Plant from its Variant physics export (OBJ hulls as collisions, articulated glb submeshes as visuals, universal joints with springs and damping) and a settle world (root welded to the world, soil plane, 1 ms step). `settle_check.py` runs it headless in the system Python through the gz-sim bindings. `pixelfield settle <variant>...` and a slow test over all 72 root crop Variants (`PIXELFIELD_SLOW=1`). Result: carrot v00 does NOT settle by 2 s (19.7 mm/s, leaves travel up to 102 mm, below 1 mm/s only after about 4.5 s); radish v00 settles (0.42 mm/s, 15 mm travel).
+### Decisions & why
+- Settle check through the gz-sim Python bindings (TestFixture, link velocities from the ECM) instead of parsing topics: in process, tied to the physics step, about 4 s per Variant.
+- The script rewrites the world with real_time_factor 0 for the run, so the written world still plays at real time when opened in the GUI.
+### Lessons / gotchas
+- dartsim silently drops a collision mesh without normals (CustomMeshShape error, submesh ignored): hull OBJs need `vn` lines.
+- gz.sim8 bindings return entity ids from `model_by_name`, wrap in `Model(...)`; `world_pose` returns Pose3d only after `import gz.math7`, otherwise a pybind11 abort.
+- Carrot leaves stand nearly upright on soft springs (crown about 0.008 N m/rad), an inverted pendulum that leans several cm under gravity with spring_reference 0. A scratch preload (spring_reference = minus gravity torque over stiffness at the generated pose, at most 0.12 rad) kept carrot v00 within 0.1 mm and settled at once.
+### State
+Branch m4c-articulated-sdf (stacked on m4b-physics-export), commit 87e4c16, not pushed. Validated: pytest (71 passed, 72 slow skipped), ruff, `gz sdf -k`, settle runs of carrot v00 and radish v00. Link visuals in the GUI UNVERIFIED (submesh names not yet seen loaded). Slow test over 72 Variants not run yet (needs a slot).
+### Open items
+- Decide: gravity-preloaded spring references (generated pose is the equilibrium) versus spring_reference 0 as in ADR 0006.
+- Run the 72-Variant slow test, then the GUI hand check.
+
+## 2026-10-19 M4c spring preload
+### Goal & outcome
+Petiole joints now carry a spring reference that holds the generated shape against gravity, computed by the generator at scale 1 and scaled by s in the SDF. Library physics exports regenerated (glb files unchanged). Settle check: carrot, beetroot and radish v00 all settle (at most 0.03 mm/s after 2 s, 0.1 mm travel).
+### Decisions & why
+- The generated shape is the shape under gravity (agreed): a spawned Plant must look like its static Variant, and a reference of 0 made carrot leaves lean up to 10 cm. ADR 0006 and spec updated.
+- Gravity 9.81 in the generator against Gazebo's default 9.8: the 0.1% mismatch leaves sub-millimetre sag, not worth an engine-specific value.
+### Lessons / gotchas
+- A spring reference scales with s (gravity torque s^4 over stiffness s^3).
+- `gz sim world.sdf` opens paused; a preloaded Plant does not visibly move on play, by design.
+### State
+Branch m4c-articulated-sdf, commits 87e4c16 and the preload commit, not pushed. Validated: pytest (71 passed, 72 slow skipped), ruff, settle runs of three Variants. 72-Variant slow test not run (needs a slot). Link visuals in the GUI UNVERIFIED.
+### Open items
+- GUI hand check of link visuals; scale extremes (0.85, 1.15) not checked.
+
+## 2026-10-19 M4c slow settle test
+### Goal & outcome
+`PIXELFIELD_SLOW=1 uv run pytest -k settles`: all 72 root crop Variants settle at scale 1 (72 passed, 5 min 14 s). User checked the carrot settle world in the GUI: link visuals look right.
+### Decisions & why
+None
+### Lessons / gotchas
+- Leaf blades have no visual thickness by design; their mass comes from `blade_mass_per_area`, so thickness would add triangles, not mass.
+### State
+Branch m4c-articulated-sdf, commits 87e4c16 and 2839af8, not pushed. Validated: slow test over 72 Variants, GUI visual check by the user. m4c done.
+### Open items
+- Scale extremes (0.85, 1.15) not checked.
+- Next chunk m4d-pullout-system (C++), needs IMPLEMENT.

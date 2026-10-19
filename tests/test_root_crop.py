@@ -126,6 +126,7 @@ def test_physics_export(name):
         assert sorted(j["child"] for j in model["joints"]) == sorted(set(links) - {"root"})
         assert all(j["parent"] in links and j["type"] == "universal" for j in model["joints"])
         assert all(min(j["stiffness"] + j["damping"]) > 0 for j in model["joints"])
+        assert all(max(map(abs, j["spring_reference"])) < 0.5 for j in model["joints"])
 
         for link in links.values():
             i = link["inertia"]
