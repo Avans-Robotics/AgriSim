@@ -560,6 +560,7 @@ Grilled the M4 pull-out design (28 questions) and wrote it down: ADR 0006 rewrit
 - Petioles: 3 links per leaf on universal joints, because dartsim ignores springs on ball joints and revolute bends in one plane only.
 - Engine-agnostic Variant physics export (JSON plus convex OBJ hulls) so a later MuJoCo Exporter and Gazebo share one Plant model.
 - Crown tear-off dropped for M4: tops take 212 to 243 N against 20 to 22 N pull-out in loose soil.
+- Pull-out Curve gets a damping term `c * v` (`pull_out_damping`, default 0), agreed after the grill: a guessed `c` would invent a speed penalty, so it stays off until the protocol's second pull speed measures it. A speed-dependent peak, if measured, needs a curve change, not just `c`.
 - Added during writing, not explicitly grilled: once past the peak the curve does not climb back if the root is pushed down (soil bond broken), and the prismatic range is 0 to root length.
 ### Lessons / gotchas
 - dartsim freezes a body welded to a static model (`setMobile(!Static())`): anchor in a non-static model.
