@@ -40,6 +40,10 @@ _Avoid_: layout (reserved for Field Layout), grid
 The force in newtons needed to pull one Plant out of the soil.
 _Avoid_: extraction force, uprooting force
 
+**Pull-out Curve**:
+The resisting force on a Plant's root as a function of how far the root has moved up, ending in detach; its peak is the Pull-out Force.
+_Avoid_: pull-out profile, force profile
+
 ### Descriptions
 
 **Field Spec**:
