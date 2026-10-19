@@ -3,6 +3,9 @@
 import os
 
 # Asset Generators must give the same bytes on every machine (the committed Asset Library is
-# checked against them). numpy's AVX512 kernels (SVML sin, cos, power, ...) differ from libm by
-# a few ULP, which flips convex hulls and printed digits, so they are off before numpy loads.
-os.environ.setdefault("NPY_DISABLE_CPU_FEATURES", "X86_V4 AVX512_ICL AVX512_SPR")
+# checked against them). OpenBLAS picks its matrix kernels per CPU (AVX512 kernels on newer
+# CPUs), which changes the last bits of numpy matrix products and with them convex hulls and
+# printed digits, so one kernel is pinned before numpy loads OpenBLAS.
+# ponytail: x86-64 only; an ARM machine ignores it and may regenerate a slightly different
+# library.
+os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
