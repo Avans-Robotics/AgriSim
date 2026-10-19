@@ -1,6 +1,7 @@
 """Command line interface: `pixelfield build <field spec>`, `pixelfield generate <crop>`,
 `pixelfield render <world.sdf>`, `pixelfield settle <variant>...`,
-`pixelfield pick <world folder> <plant id>`, `pixelfield pull <world folder> <plant id>`."""
+`pixelfield pick <world folder> <plant id>`, `pixelfield pull <world folder> <plant id>`,
+`pixelfield grip <world folder> <plant id>`, `pixelfield squeeze <variant>...`."""
 
 import argparse
 import json
@@ -10,7 +11,7 @@ from pathlib import Path
 from pixelfield.core.layout import build_layout, to_manifest
 from pixelfield.core.spec import load_crop, load_field_spec
 from pixelfield.exporters import EXPORTERS, gazebo
-from pixelfield.exporters.gazebo import plant
+from pixelfield.exporters.gazebo import gripper, plant
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -37,13 +38,27 @@ def main(argv: list[str] | None = None) -> None:
     settle.add_argument("variants", nargs="+", type=Path,
                         help="library path without extension, e.g. "
                              "assets/library/carrot/carrot_harvest_v00")  # fmt: skip
-    settle.add_argument("--scale", type=float, default=1.0, help="Plant scale")
+    squeeze = commands.add_parser("squeeze", help="squeeze check of articulated Variants, "
+                                                   "headless")  # fmt: skip
+    for command in (settle, squeeze):
+        command.add_argument("--scale", type=float, default=1.0, help="Plant scale")
+    squeeze.add_argument("variants", nargs="+", type=Path,
+                         help="library path without extension")  # fmt: skip
     pick = commands.add_parser("pick", help="pick a Plant in a running Field world")
     pull = commands.add_parser("pull", help="scripted pull of a Plant of a Field, headless")
-    for command in (pick, pull):
+    grip = commands.add_parser("grip", help="pull a Plant of a Field by its leaves with the "
+                                             "test gripper, headless")  # fmt: skip
+    for command in (pick, pull, grip):
         command.add_argument("world", type=Path, help="folder written by build")
         command.add_argument("plant", help="Plant id from the Manifest, e.g. r0c0-017")
-    pull.add_argument("--speed", type=float, default=plant.PULL_SPEED, help="lift speed, m/s")
+    for command in (pull, grip):
+        command.add_argument("--speed", type=float, default=plant.PULL_SPEED,
+                             help="lift speed, m/s")  # fmt: skip
+    for command in (grip, squeeze):
+        command.add_argument("--force", type=float, default=gripper.GRIP_FORCE,
+                             help="grip force per jaw, N")  # fmt: skip
+    grip.add_argument("--lift", type=float,
+                      help="lift this far, m (default: past the root depth)")  # fmt: skip
     pull.add_argument("--release", type=float,
                       help="let go at this lift, m (default: past the root depth)")  # fmt: skip
     args = parser.parse_args(argv)
@@ -52,6 +67,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "settle":
         _settle(parser, args)
+        return
+    if args.command == "squeeze":
+        _squeeze(parser, args)
+        return
+    if args.command == "grip":
+        _grip(parser, args)
         return
     if args.command == "generate":
         _generate(parser, args)
@@ -105,6 +126,41 @@ def _settle(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
               f"view: gz sim {world}")  # fmt: skip
     if failed:
         parser.exit(1, f"{failed} of {len(args.variants)} Variants did not settle\n")
+
+
+def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    failed = 0
+    for variant in args.variants:
+        out = Path("out") / f"squeeze_{variant.name}"
+        r = gripper.squeeze(variant, out, args.scale, args.force)
+        failed += not r["held"]
+        print(f"{variant.name}: {'held' if r['held'] else 'NOT held'}, "
+              f"gap {r['gap'] * 1000:.1f} mm, {len(r['escaped'])} of {r['leaves']} leaves "
+              f"outside the jaws {r['escaped']}{', NaN' if r['nan'] else ''}")  # fmt: skip
+    if failed:
+        parser.exit(1, f"{failed} of {len(args.variants)} Variants were not held\n")
+
+
+def _grip(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    try:
+        r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift)
+    except subprocess.CalledProcessError as e:
+        parser.exit(1, f"error: the grip check failed:\n{e.stderr[-2000:]}\n")
+    except (OSError, ValueError) as e:
+        parser.exit(1, f"error: {e}\n")
+    if not r["requested"]:
+        parser.exit(1, "error: the pull-out system refused the pick or is not loaded; build it "
+                       "(see CLAUDE.md)\n")  # fmt: skip
+    if r["detach_d"]:
+        result = f"detached at d = {r['detach_d'] * 1000:.1f} mm"
+    else:
+        result = (
+            f"NOT detached, slipped {r['slip'] * 1000:.1f} mm, d up to {r['max_d'] * 1000:.1f} mm"
+        )
+    print(f"{args.plant}: {result} (root depth {r['depth'] * 1000:.1f} mm), "
+          f"grip {args.force:g} N per jaw, peak wrist force {r['peak_wrist']:.2f} N "
+          f"(Pull-out Force {r['pull_out_force']:.2f} N plus weight {r['weight']:.2f} N), "
+          f"log: {r['log']}")  # fmt: skip
 
 
 def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:

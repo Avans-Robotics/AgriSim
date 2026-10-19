@@ -61,7 +61,7 @@ Per Variant, in a headless world for about 5 s of sim time at a 1 ms step:
 - settling: every link slower than 1 mm/s after 2 s, no NaN;
 - squeeze: box jaws closing 3 cm above the crown hold every petiole link, none tunnels out.
 
-The step size is a knob if a Variant fails. It runs as a slow test, skipped by default.
+The step size is a knob if a Variant fails. It runs as a slow test, skipped by default. The squeeze uses the test gripper (`exporters/gazebo/gripper.py`): jaw servos limited to the grip force, 20 N per jaw by default, with friction 1 on the jaws (a guess).
 
 ### Scope
 
