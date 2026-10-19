@@ -550,3 +550,22 @@ None; gaps recorded for a look-iteration chunk.
 Branch m3f-soil, PR #10. Renders in gitignored out/<world>/renders/. Look judged by the agent only; user verdict pending.
 ### Open items
 - Look iteration (proposed m3g): lettuce lighter yellow-green, more stations and stronger frill; radish deeper lobes with more stations; leaf textures with veins and color variation per Crop (palette design change, needs discussion).
+
+## 2026-10-19 M4 design settled (m4a)
+### Goal & outcome
+Grilled the M4 pull-out design (28 questions) and wrote it down: ADR 0006 rewritten and accepted (renamed to match its new title), spec sections 2, 3, 6, 8, 10, 11 (M4 chunk table m4a to m4e) and 12 (deferred items 7 soil state and tear-off, 8 MuJoCo training engine) updated, `docs/research/measurement-protocol.md` added, uprooting and MuJoCo research added to prior-art.md, Pull-out Curve added to CONTEXT.md.
+### Decisions & why
+- Target is a learned pull policy on low-dimensional state, so realism goes into the force on the gripper over the pull and the leaf bunch bending, both as cheap lumped models with measurable parameters. No particle soil (geotechnics cost, unmeasurable parameters).
+- Pull-out Curve (rise to the Pull-out Force at 5 mm, drop to 0.3 of it, linear decay to 0 over the root length, then detach) on an anchor link with a vertical prismatic joint, root welded by a DetachableJoint our system creates. Reason: Gazebo has no break-at-force joint and DetachableJoint has no force readout.
+- Petioles: 3 links per leaf on universal joints, because dartsim ignores springs on ball joints and revolute bends in one plane only.
+- Engine-agnostic Variant physics export (JSON plus convex OBJ hulls) so a later MuJoCo Exporter and Gazebo share one Plant model.
+- Crown tear-off dropped for M4: tops take 212 to 243 N against 20 to 22 N pull-out in loose soil.
+- Added during writing, not explicitly grilled: once past the peak the curve does not climb back if the root is pushed down (soil bond broken), and the prismatic range is 0 to root length.
+### Lessons / gotchas
+- dartsim freezes a body welded to a static model (`setMobile(!Static())`): anchor in a non-static model.
+- MuJoCo has no glTF import and collides meshes as convex hulls, so the physics export uses OBJ hulls.
+### State
+Branch m4a-design, commit 601b2a5, not pushed. Docs only. Validated: relative links resolve, no em-dashes, ruff, pytest (65). Design itself UNVERIFIED until m4c and m4d run.
+### Open items
+- Maintainer reads the docs (m4a check), then m4b-physics-export.
+- Measurement protocol pull speed (about 5 cm/s) is a suggestion, not a decision.
