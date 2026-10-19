@@ -655,3 +655,16 @@ Branch m4d-pullout-system. Validated: pytest (74 passed, 72 slow skipped; the pu
 - The scripted pull lifts with a vertical force only; a detached Plant tips over after a while (test ends 0.6 s after detach).
 - Library paths in the Manifest are relative to the repo root, so pick and pull run from there.
 - Next: m4e test gripper.
+
+## 2026-10-19 M4d detached root lands on the soil
+### Goal & outcome
+User test in the GUI: a detached carrot dropped back through the soil to its old spot, because the root never collided with the soil. The system now sets `CollideBitmaskCmd` 0xFFFF on the root's collisions at detach (gz-sim 8.15 changes the bitmask at runtime), so a dropped Plant lands. The scripted pull now lets go past the root depth and logs one more second; carrot, beetroot and radish roots end with their lowest hull point at the soil (about 0 mm, was about minus the root depth).
+### Decisions & why
+- Fix on the open PR without a new plan: it is m4d's own "Plant moves freely after detach".
+### Lessons / gotchas
+- The GUI Apply Force Torque button applies the wrench for one step only: an impulse, so it takes hundreds of newtons to pull a carrot out with it. Use the scripted pull or a persistent wrench for a realistic pull.
+- A link's world axis-aligned box is the world box of its rotated local box: on a lying beetroot it overshoots the real hull by about 2 cm. Use hull vertices for contact checks.
+### State
+Branch m4d-pullout-system. Validated: pytest (74 passed, 72 skipped), ruff, scripted pull with drop for three Crops. GUI removal of the grouped visual still UNVERIFIED: the server's scene info still lists the static visual after a pick.
+### Open items
+- GUI check of the grouped visual (does a static copy stay behind after pulling the picked Plant away?).
