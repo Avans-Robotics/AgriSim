@@ -120,6 +120,7 @@ PETIOLE_LINKS = 3  # rigid links per petiole in the articulated export (ADR 0006
 assert PETIOLE_SEGMENTS % PETIOLE_LINKS == 0  # each link takes whole tube segments
 HULL_SECTIONS = 8  # facets around the root's collision hull
 MASS_SAMPLES = 8  # point masses along each petiole link
+GRAVITY = np.array([0.0, 0.0, -9.81])  # m/s^2, for the spring preload of the petiole joints
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
 
 
@@ -246,9 +247,10 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
     inertia about it in the link frame, and a convex collision hull in the link frame.
     A petiole link's frame sits at its start: x along the petiole, y sideways, z up.
     Joints are universal, at the child link's frame, bending about its y and z axes, with
-    stiffness k = E I / l per axis and damping from a damping ratio. Leaf blades have no
-    collision; their mass is on the last link of their leaf. The glTF holds one mesh per
-    link, named like the link and in the link frame.
+    stiffness k = E I / l per axis, damping from a damping ratio and a spring reference that
+    holds the generated shape against gravity (the generated shape is the shape under load).
+    Leaf blades have no collision; their mass is on the last link of their leaf. The glTF
+    holds one mesh per link, named like the link and in the link frame.
     """
     const = {k: rng.uniform(*v) if isinstance(v, tuple) else v for k, v in crop["physics"].items()}
     material, uv = _palette(list(meshes.values()))
@@ -296,13 +298,18 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
             # damping per axis from the inertia of the rest of the leaf about this joint
             beyond = [s for _, samples, _, _ in chain[i:] for s in samples]
             inertia = _inertia(beyond, frame[:3, 3])
+            axes = (frame[:3, 1], frame[:3, 2])
             damping = [2 * const["petiole_damping_ratio"] * math.sqrt(stiffness * a @ inertia @ a)
-                       for a in (frame[:3, 1], frame[:3, 2])]  # fmt: skip
+                       for a in axes]  # fmt: skip
+            # spring torque k * reference balances the gravity torque of the rest of the leaf
+            torque = sum(np.cross(p - frame[:3, 3], m * GRAVITY) for p, m, _ in beyond)
+            reference = [-float(torque @ a) / stiffness for a in axes]
             parent = "root" if i == 0 else chain[i - 1][0]["name"]
             joints.append({"name": f"leaf{k:02d}_joint{i}", "type": "universal",
                            "parent": parent, "child": link["name"],
                            "axis": [0, 1, 0], "axis2": [0, 0, 1],
-                           "stiffness": [stiffness, stiffness], "damping": damping})  # fmt: skip
+                           "stiffness": [stiffness, stiffness], "damping": damping,
+                           "spring_reference": reference})  # fmt: skip
     model = {
         "format_version": 1,
         "root_length": sizes["root"]["length"],  # crown top to tip

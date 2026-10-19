@@ -60,6 +60,9 @@ def test_plant_model_scales_the_physics_export(tmp_path):
             assert float(dynamics.findtext("damping")) == pytest.approx(
                 expected["damping"][i] * s**4
             )
+            assert float(dynamics.findtext("spring_reference")) == pytest.approx(
+                expected["spring_reference"][i] * s
+            )
     assert (tmp_path / "meshes" / "carrot_harvest_v00.articulated.glb").is_file()
 
 

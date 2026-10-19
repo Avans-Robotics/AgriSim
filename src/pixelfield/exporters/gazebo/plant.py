@@ -2,7 +2,8 @@
 headless settle check per Variant.
 
 The physics export is at scale 1; a Plant of scale s gets lengths times s, masses and joint
-stiffnesses times s^3, joint damping times s^4 and inertias times s^5. Collision hulls are
+stiffnesses times s^3, joint damping times s^4, inertias times s^5 and spring references
+times s (gravity torque s^4 over stiffness s^3). Collision hulls are
 written as OBJ files next to the SDF; link visuals are submeshes of the articulated glb.
 """
 
@@ -68,13 +69,14 @@ def plant_model(variant: Path, scale: float, out_dir: Path, name: str | None = N
         element = ET.SubElement(model, "joint", name=joint["name"], type=joint["type"])
         _text(element, "parent", joint["parent"])
         _text(element, "child", joint["child"])  # the joint frame is the child link frame
-        for tag, axis, k, c in zip(("axis", "axis2"), (joint["axis"], joint["axis2"]),
-                                   joint["stiffness"], joint["damping"], strict=True):  # fmt: skip
+        for tag, axis, k, c, ref in zip(("axis", "axis2"), (joint["axis"], joint["axis2"]),
+                                        joint["stiffness"], joint["damping"],
+                                        joint["spring_reference"], strict=True):  # fmt: skip
             element_axis = ET.SubElement(element, tag)
             _text(element_axis, "xyz", _join(tuple(axis)))
             dynamics = ET.SubElement(element_axis, "dynamics")
             _text(dynamics, "damping", _num(c * s**4))
-            _text(dynamics, "spring_reference", "0")
+            _text(dynamics, "spring_reference", _num(ref * s))
             _text(dynamics, "spring_stiffness", _num(k * s**3))
     return model
 
