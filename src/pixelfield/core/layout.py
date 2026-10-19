@@ -2,7 +2,7 @@
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from pixelfield.core.spec import Crop, FieldSpec, PlantingPattern
 
@@ -138,6 +138,13 @@ def to_manifest(layout: FieldLayout) -> dict:
             "seed": spec.seed,
             "spec_sha256": spec.sha256,
         },
+        "crops": {
+            name: {
+                "library": crop.library,
+                "pull_out_curve": asdict(crop.pull_out_curve) if crop.pull_out_curve else None,
+            }
+            for name, crop in sorted(layout.crops.items())
+        },
         "pixels": [
             {
                 "row": p.row,
@@ -159,7 +166,7 @@ def to_manifest(layout: FieldLayout) -> dict:
                     "z": round(p.z, 4),
                     "yaw": round(p.yaw, 4),
                 },
-                "scale": round(p.scale, 3),
+                "scale": round(p.scale, 4),  # the picked Plant matches its visual
                 "pull_out_force": round(p.pull_out_force, 2),
             }
             for p in layout.plants

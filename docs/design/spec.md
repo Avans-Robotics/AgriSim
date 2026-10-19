@@ -153,6 +153,10 @@ The Field Layout is the only thing Exporters read. It is written next to every e
   "format_version": 1,
   "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
             "path_gap": {"every_n_cols": 2, "width": 0.3}, "seed": 42, "spec_sha256": "..."},
+  "crops": {
+    "carrot": {"library": "assets/library/carrot",
+               "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0}}
+  },
   "pixels": [
     {"row": 0, "col": 0, "crop": "carrot", "origin": [0.0, 1.0]}
   ],

@@ -46,13 +46,20 @@ SYSTEMS = {
     "gz-sim-user-commands-system": "gz::sim::systems::UserCommands",
     "gz-sim-scene-broadcaster-system": "gz::sim::systems::SceneBroadcaster",
 }
+WORLD_NAME = "pixelfield"
+# Our pull-out system (ADR 0006), built into build/systems/ and found through
+# GZ_SIM_SYSTEM_PLUGIN_PATH; a world without it still runs, gz only logs that it is missing.
+PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
+# A picked root starts inside the soil box, so it must not collide with the soil: the soil
+# keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK).
+SOIL_BITMASK = 0x1
 
 
 def export(layout: FieldLayout, out_dir: Path) -> Path:
     spec = layout.spec
     sdf = ET.Element("sdf", version=SDF_VERSION)
-    world = ET.SubElement(sdf, "world", name="pixelfield")
-    for filename, name in SYSTEMS.items():
+    world = ET.SubElement(sdf, "world", name=WORLD_NAME)
+    for filename, name in [*SYSTEMS.items(), PULL_OUT_SYSTEM]:
         ET.SubElement(world, "plugin", filename=filename, name=name)
     world.append(_sensors())
     world.append(_scene())
@@ -64,6 +71,8 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     soil = _model(world, "soil", soil_pose)
     collision = ET.SubElement(soil, "collision", name="collision")
     _text(ET.SubElement(ET.SubElement(collision, "geometry"), "box"), "size", _join(soil_size))
+    contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
+    _text(contact, "collide_bitmask", str(SOIL_BITMASK))
     # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
     # centred on the soil; the outer tiles may overhang the collision box a little.
     textures = Path(out_dir) / "textures"

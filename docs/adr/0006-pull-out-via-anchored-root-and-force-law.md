@@ -26,15 +26,17 @@ With `d` the upward displacement of the root, `v` its upward speed and `F` the r
 - Every physics step the system reads the prismatic joint position `d` and velocity `v` and commands the joint force `-F`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
 - Only vertical pull-out is modelled: sideways and rotational motion of the root is rigid until detach. An angled pull is a later knob.
 - The system computes the force itself, so the resisting force is known exactly each step. It publishes `d`, `F` and the attached state on a topic.
+- The buried root starts inside the soil collision, so the root's collision leaves out the soil's collide bit: otherwise contact forces add to the force law. A detached root therefore falls through the soil if dropped.
+- The anchor model is removed one step after the weld: dartsim keeps the root in the anchor's skeleton until the weld is gone, so removing both in one step freezes the root.
 
 ### Picking a Plant
 
 Plants stay visuals grouped per Pixel ([ADR 0007](0007-gazebo-plants-grouped-per-pixel.md)). A pick of one Plant id:
 
-1. Python (a `pixelfield` command in the Gazebo Exporter) reads the Manifest and the Variant physics export, writes the scaled SDF for that one Plant, and sends the request (Plant id, SDF path, Pull-out Curve parameters) with the `gz` CLI.
+1. Python (a `pixelfield` command in the Gazebo Exporter) reads the Manifest (Plant pose, scale and Pull-out Force; per-Crop Pull-out Curve knobs) and the Variant physics export, writes the scaled SDF for that one Plant with its Pull-out Curve as a custom element `<pixelfield:pull_out>`, and sends the request with the `gz` CLI: a standard `gz.msgs.EntityFactory` (SDF path, Plant id, pose) on `/world/<world>/pixelfield/pick`, so the SDF file alone describes the pick.
 2. A C++ gz-sim system in `src/pixelfield/exporters/gazebo/systems/` removes the grouped visual (`RequestRemoveEntity`), spawns the Plant model (`SdfEntityCreator`), creates the anchor and the weld, then runs the force law.
 
-All per-step logic is C++. The Python SDF build runs once per pick; it moves to C++ if pick latency matters in M5. The system only spawns, holds and detaches picked Plants: choosing which Plants near the robot become dynamic is not part of it.
+One Plant is picked at a time: a request while one is still attached is refused. The state topic is `/world/<world>/pixelfield/pull_out` (`gz.msgs.Param`: plant, d, force, attached), published every step while attached. All per-step logic is C++. The Python SDF build runs once per pick; it moves to C++ if pick latency matters in M5. The system only spawns, holds and detaches picked Plants: choosing which Plants near the robot become dynamic is not part of it.
 
 ### Plant model
 

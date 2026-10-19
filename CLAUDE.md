@@ -43,6 +43,9 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Rebake the soil tiles: `uv run python -m pixelfield.generators.soil` (writes `assets/library/textures/soil_tiles/`, about 7 s)
 - All four M3 Crops side by side: `uv run pixelfield build examples/m3_crops.yaml`
 - Settle check of an articulated root crop Variant, headless (about 4 s each, writes `out/settle_<variant>/world.sdf` to open in `gz sim`): `uv run pixelfield settle assets/library/carrot/carrot_harvest_v00`
-- Tests: `uv run pytest`; the settle check of all 72 root crop Variants (about 5 minutes): `PIXELFIELD_SLOW=1 uv run pytest -k settles`
+- Build the C++ pull-out system (about 5 s; Field worlds load it from `GZ_SIM_SYSTEM_PLUGIN_PATH`, without it gz logs that the plugin is missing): `cmake -S src/pixelfield/exporters/gazebo/systems -B build/systems && cmake --build build/systems`, then `export GZ_SIM_SYSTEM_PLUGIN_PATH=$PWD/build/systems` before `gz sim`
+- Pick a Plant in a running Field world (spawns it articulated, anchored to its Pull-out Curve): `uv run pixelfield pick out/carrot_pixel r0c0-000`
+- Scripted pull of a Plant, headless (about 6 s, writes `out/carrot_pixel/picks/<plant id>/pull.csv`): `uv run pixelfield pull out/carrot_pixel r0c0-000`
+- Tests: `uv run pytest` (the scripted pull test is skipped until the pull-out system is built); the settle check of all 72 root crop Variants (about 5 minutes): `PIXELFIELD_SLOW=1 uv run pytest -k settles`
 - Lint: `uv run ruff check . && uv run ruff format --check .`
 - Validate SDF: `gz sdf -k <world.sdf>`

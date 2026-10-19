@@ -1,8 +1,10 @@
 """Command line interface: `pixelfield build <field spec>`, `pixelfield generate <crop>`,
-`pixelfield render <world.sdf>`, `pixelfield settle <variant>...`."""
+`pixelfield render <world.sdf>`, `pixelfield settle <variant>...`,
+`pixelfield pick <world folder> <plant id>`, `pixelfield pull <world folder> <plant id>`."""
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 from pixelfield.core.layout import build_layout, to_manifest
@@ -36,7 +38,16 @@ def main(argv: list[str] | None = None) -> None:
                         help="library path without extension, e.g. "
                              "assets/library/carrot/carrot_harvest_v00")  # fmt: skip
     settle.add_argument("--scale", type=float, default=1.0, help="Plant scale")
+    pick = commands.add_parser("pick", help="pick a Plant in a running Field world")
+    pull = commands.add_parser("pull", help="scripted pull of a Plant of a Field, headless")
+    for command in (pick, pull):
+        command.add_argument("world", type=Path, help="folder written by build")
+        command.add_argument("plant", help="Plant id from the Manifest, e.g. r0c0-017")
+    pull.add_argument("--speed", type=float, default=plant.PULL_SPEED, help="lift speed, m/s")
     args = parser.parse_args(argv)
+    if args.command in ("pick", "pull"):
+        _pick(parser, args)
+        return
     if args.command == "settle":
         _settle(parser, args)
         return
@@ -92,3 +103,31 @@ def _settle(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
               f"view: gz sim {world}")  # fmt: skip
     if failed:
         parser.exit(1, f"{failed} of {len(args.variants)} Variants did not settle\n")
+
+
+def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    try:
+        if args.command == "pick":
+            if not plant.pick(args.world, args.plant):
+                parser.exit(1, "error: pick refused or no reply: the Plant was already picked, "
+                               "another is still attached (see the gz log), or the world is "
+                               "not running with the pull-out system on "
+                               "GZ_SIM_SYSTEM_PLUGIN_PATH\n")  # fmt: skip
+            print(f"picked {args.plant}")
+            return
+        r = plant.pull(args.world, args.plant, args.speed)
+    except subprocess.CalledProcessError as e:
+        parser.exit(1, f"error: the pull check failed:\n{e.stderr[-2000:]}\n")
+    except (OSError, ValueError) as e:
+        parser.exit(1, f"error: {e}\n")
+    if not r["requested"]:
+        parser.exit(1, "error: the pull-out system refused the pick or is not loaded; build it "
+                       "(see CLAUDE.md)\n")  # fmt: skip
+    detach = f"detached at d = {r['detach_d'] * 1000:.1f} mm" if r["detach_d"] else "NOT detached"
+    print(f"{args.plant}: {detach} (root depth {r['depth'] * 1000:.1f} mm), "
+          f"peak soil force {r['peak_force']:.2f} N (Pull-out Force {r['pull_out_force']:.2f} N), "
+          f"peak pull {r['peak_pull']:.2f} N with weight {r['weight']:.2f} N, "
+          f"grouped visual removed: {r['visual_before'] and not r['visual_after']}, "
+          f"log: {r['log']}")  # fmt: skip
+    if not r["detach_d"]:
+        parser.exit(1, "error: the Plant did not detach\n")
