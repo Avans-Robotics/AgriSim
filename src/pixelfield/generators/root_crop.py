@@ -12,6 +12,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import scipy.spatial  # noqa: F401  trimesh needs it for convex hulls; fail early on import
 import trimesh
 from PIL import Image
 from trimesh.visual.material import PBRMaterial
@@ -38,6 +39,13 @@ CROPS = {
         "leaf_tip": (0.75, 0.95),  # tip height, fraction of the rise
         "petiole_radius": (0.0015, 0.0007),  # meters, at the crown and at the leaf tip
         "petiole_sides": 3,
+        "physics": {  # ADR 0006; ranges are sampled per Variant
+            "root_density": (1000.0, 1050.0),  # kg/m3, guess
+            "petiole_density": 1000.0,  # kg/m3, guess
+            "blade_mass_per_area": (0.2, 0.3),  # kg/m2 of leaf blade, guess (fresh leaf)
+            "petiole_modulus": (3e8, 7e8),  # Pa, guess (taro petiole about 500 MPa, prior-art.md)
+            "petiole_damping_ratio": (0.1, 0.3),  # of each petiole joint, guess
+        },
     },
     "beetroot": {  # round red table beet (Detroit or Boltardy type)
         "root_length": (0.12, 0.20),  # meters, crown top to the taproot tip
@@ -59,6 +67,13 @@ CROPS = {
         "blade_width": (0.45, 0.6),  # blade width, fraction of the blade length
         "petiole_radius": (0.003, 0.0008),  # the midrib continues the stalk to the leaf tip
         "petiole_sides": 5,
+        "physics": {  # ADR 0006; ranges are sampled per Variant
+            "root_density": (1000.0, 1060.0),  # kg/m3, guess
+            "petiole_density": 1000.0,  # kg/m3, guess
+            "blade_mass_per_area": (0.2, 0.3),  # kg/m2 of leaf blade, guess (fresh leaf)
+            "petiole_modulus": (3e8, 7e8),  # Pa, guess (taro petiole about 500 MPa, prior-art.md)
+            "petiole_damping_ratio": (0.1, 0.3),  # of each petiole joint, guess
+        },
     },
     "radish": {  # long red radish, white at the tip
         "root_length": (0.15, 0.25),
@@ -82,6 +97,13 @@ CROPS = {
         "blade_width": (0.4, 0.5),
         "petiole_radius": (0.0035, 0.001),
         "petiole_sides": 5,
+        "physics": {  # ADR 0006; ranges are sampled per Variant
+            "root_density": (950.0, 1000.0),  # kg/m3, guess (radishes sometimes float)
+            "petiole_density": 1000.0,  # kg/m3, guess
+            "blade_mass_per_area": (0.2, 0.3),  # kg/m2 of leaf blade, guess (fresh leaf)
+            "petiole_modulus": (3e8, 7e8),  # Pa, guess (taro petiole about 500 MPa, prior-art.md)
+            "petiole_damping_ratio": (0.1, 0.3),  # of each petiole joint, guess
+        },
     },
 }
 ROOT_SECTIONS = 20  # facets around the root
@@ -94,19 +116,24 @@ PETIOLE_SEGMENTS = 6
 BLADE_STATIONS = 10  # cross-sections along a simple leaf blade, three times that if lobed
 BLADE_COLUMNS = 3  # points per side across the blade, plus the midrib
 MAX_TRIANGLES = 8000
+PETIOLE_LINKS = 3  # rigid links per petiole in the articulated export (ADR 0006)
+assert PETIOLE_SEGMENTS % PETIOLE_LINKS == 0  # each link takes whole tube segments
+HULL_SECTIONS = 8  # facets around the root's collision hull
+MASS_SAMPLES = 8  # point masses along each petiole link
 Z_UP_TO_Y_UP = trimesh.transformations.rotation_matrix(-math.pi / 2, [1, 0, 0])
 
 
 def generate(crop: str, variants: int, out_dir: Path, table=None, make=None) -> list[Path]:
     """Write <crop>_harvest_v00.glb ... and variants.json to out_dir, replacing old Variants.
 
-    `table` and `make` default to this module's CROPS and variant(); other generators pass
-    their own and reuse the file writing.
+    Crops with a "physics" entry also get <name>.physics.json and <name>.articulated.glb
+    (see articulated()). `table` and `make` default to this module's CROPS and variant();
+    other generators pass their own and reuse the file writing.
     """
     table, make = table or CROPS, make or variant
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob(f"{crop}_*.glb"):
+    for old in [*out_dir.glob(f"{crop}_*.glb"), *out_dir.glob(f"{crop}_*.physics.json")]:
         old.unlink()
     paths, sizes = [], {}
     for index in range(variants):
@@ -115,6 +142,14 @@ def generate(crop: str, variants: int, out_dir: Path, table=None, make=None) -> 
         path = out_dir / f"{name}.glb"
         path.write_bytes(to_glb(meshes))
         paths.append(path)
+        if "physics" in table[crop]:
+            # own stream, so physics constants never shift the visual Variant
+            model, glb = articulated(random.Random(f"physics-{index}"), meshes, sizes[name],
+                                     table[crop])  # fmt: skip
+            # compact: mostly hull coordinates, half the size of indented JSON
+            text = json.dumps(model, separators=(",", ":"))
+            (out_dir / f"{name}.physics.json").write_text(text + "\n")
+            (out_dir / f"{name}.articulated.glb").write_bytes(glb)
     (out_dir / "variants.json").write_text(json.dumps(sizes, indent=2) + "\n")
     return paths
 
@@ -132,7 +167,8 @@ def variant(rng: random.Random, crop: dict) -> tuple[dict[str, trimesh.Trimesh],
                                  middle - 0.1 * length)  # fmt: skip
     root.visual = trimesh.visual.TextureVisuals(material=_material(_mix(crop["root_color"], shade)))
     height = rng.uniform(*crop["foliage_height"])
-    petioles, leaves = _foliage(rng, radius, top, height, crop)
+    petioles, leaves, per_leaf = _foliage(rng, radius, top, height, crop)
+    petioles.metadata["leaves"] = per_leaf  # for articulated()
     _part(petioles, _mix(crop["petiole_color"], shade))
     _part(leaves, _mix(crop["leaf_color"], shade))
     foliage = np.vstack([petioles.vertices, leaves.vertices])
@@ -155,33 +191,198 @@ def to_glb(meshes: dict[str, trimesh.Trimesh]) -> bytes:
     # A part with a "fade" (tip color, z where it starts, z where it ends) gets a vertical
     # gradient in its column and v by height; other parts sample the middle of a flat column.
     parts = list(meshes.values())
+    material, uv = _palette(parts)
+    merged = trimesh.util.concatenate(
+        [trimesh.Trimesh(m.vertices, m.faces, process=False) for m in parts]
+    )
+    uv = np.vstack([uv(i, m.vertices) for i, m in enumerate(parts)])
+    return _scene_glb({"plant": (merged, uv)}, material)
+
+
+def _palette(parts: list[trimesh.Trimesh]):
+    """Palette material with one column per part, and uv(part index, vertices) into it."""
     rows = 32 if any("fade" in m.metadata for m in parts) else 8
     linear = np.empty((rows, len(parts), 4))
-    uv = []
     for i, mesh in enumerate(parts):
         color = np.array(mesh.visual.material.baseColorFactor) / 255
-        v = np.full(len(mesh.vertices), 0.5)
         linear[:, i] = color
         if "fade" in mesh.metadata:
-            tip, z0, z1 = mesh.metadata["fade"]
+            tip = mesh.metadata["fade"][0]
             linear[:, i] = color + np.linspace(0, 1, rows)[:, None] * (np.array(tip) / 255 - color)
-            s = np.clip((z0 - mesh.vertices[:, 2]) / (z0 - z1), 0.0, 1.0)
-            v = 1 - (0.5 + s * (rows - 1)) / rows  # trimesh flips v to glTF's top-left origin
-        uv.append(np.column_stack([np.full(len(v), (i + 0.5) / len(parts)), v]))
     srgb = np.where(linear <= 0.0031308, 12.92 * linear, 1.055 * linear ** (1 / 2.4) - 0.055)
     srgb[..., 3] = linear[..., 3]
     palette = np.repeat(np.round(srgb * 255).astype(np.uint8), 8, axis=1)
-    uv = np.vstack(uv)
-    merged = trimesh.util.concatenate(
-        [trimesh.Trimesh(m.vertices, m.faces, process=False) for m in meshes.values()]
-    )
     material = PBRMaterial(baseColorTexture=Image.fromarray(palette, "RGBA"),
                            metallicFactor=0.0, roughnessFactor=0.7, doubleSided=True)  # fmt: skip
-    merged.visual = trimesh.visual.TextureVisuals(uv=uv, material=material)
-    merged.apply_transform(Z_UP_TO_Y_UP)
+
+    def uv(i: int, vertices: np.ndarray) -> np.ndarray:
+        v = np.full(len(vertices), 0.5)
+        if "fade" in parts[i].metadata:
+            _, z0, z1 = parts[i].metadata["fade"]
+            s = np.clip((z0 - vertices[:, 2]) / (z0 - z1), 0.0, 1.0)
+            v = 1 - (0.5 + s * (rows - 1)) / rows  # trimesh flips v to glTF's top-left origin
+        return np.column_stack([np.full(len(v), (i + 0.5) / len(parts)), v])
+
+    return material, uv
+
+
+def _scene_glb(meshes: dict[str, tuple[trimesh.Trimesh, np.ndarray]], material) -> bytes:
+    """One named glTF mesh per entry (z up mesh, uv), all sharing the material, written y up."""
     scene = trimesh.Scene()
-    scene.add_geometry(merged, node_name="plant", geom_name="plant")
+    for name, (mesh, uv) in meshes.items():
+        mesh = trimesh.Trimesh(mesh.vertices, mesh.faces, process=False)
+        mesh.visual = trimesh.visual.TextureVisuals(uv=uv, material=material)
+        mesh.apply_transform(Z_UP_TO_Y_UP)
+        scene.add_geometry(mesh, node_name=name, geom_name=name)
     return scene.export(file_type="glb")
+
+
+def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tuple[dict, bytes]:
+    """Engine-agnostic articulated model of one Variant (ADR 0006), and its link visuals.
+
+    The model is plain JSON at scale 1, z up, in the Variant frame (origin on the soil
+    surface at the root axis). Links: a rigid root plus PETIOLE_LINKS links per leaf, each
+    with a pose [x, y, z, roll, pitch, yaw] (SDF convention), mass, center of mass and
+    inertia about it in the link frame, and a convex collision hull in the link frame.
+    A petiole link's frame sits at its start: x along the petiole, y sideways, z up.
+    Joints are universal, at the child link's frame, bending about its y and z axes, with
+    stiffness k = E I / l per axis and damping from a damping ratio. Leaf blades have no
+    collision; their mass is on the last link of their leaf. The glTF holds one mesh per
+    link, named like the link and in the link frame.
+    """
+    const = {k: rng.uniform(*v) if isinstance(v, tuple) else v for k, v in crop["physics"].items()}
+    material, uv = _palette(list(meshes.values()))
+    root = meshes["root"]
+    density = const["root_density"]
+    hull = _revolve(*root.metadata["revolve"], sections=HULL_SECTIONS).convex_hull
+    samples = [(root.center_mass, root.volume * density, root.moment_inertia * density)]
+    links = [_link("root", np.eye(4), samples, hull)]
+    visuals = {"root": (root, uv(0, root.vertices))}  # the root frame is the Variant frame
+    joints = []
+    sides = crop["petiole_sides"]
+    r0, r1 = crop["petiole_radius"]
+    per = PETIOLE_SEGMENTS // PETIOLE_LINKS  # tube segments per link
+    for k, (curve, tube, blade) in enumerate(meshes["petioles"].metadata["leaves"]):
+        chain = []  # (link, samples, frame, stiffness) per petiole link, crown first
+        for i in range(PETIOLE_LINKS):
+            t0, t1 = i / PETIOLE_LINKS, (i + 1) / PETIOLE_LINKS
+            point, tangent = _bezier(curve, t0)
+            frame = np.eye(4)
+            frame[:3, :3] = np.column_stack([tangent, *_frame(tangent)])
+            frame[:3, 3] = point
+            samples, length = _rod(curve, t0, t1, (r0, r1), const["petiole_density"])
+            # the tube rings and faces of this link
+            ring = slice(i * per * sides, ((i + 1) * per + 1) * sides)
+            faces = tube.faces[i * per * 2 * sides : (i + 1) * per * 2 * sides] - i * per * sides
+            parts = [(trimesh.Trimesh(tube.vertices[ring], faces, process=False), 1)]
+            if i == PETIOLE_LINKS - 1:
+                # ponytail: the whole blade rides on the last link, also where it starts lower
+                # down the petiole (beetroot, radish); split it per link if that looks wrong
+                masses = blade.area_faces * const["blade_mass_per_area"]
+                centers = blade.triangles_center
+                samples += [(c, m, np.zeros((3, 3))) for c, m in zip(centers, masses, strict=True)]
+                parts.append((blade, 2))
+            name = f"leaf{k:02d}_link{i}"
+            hull = trimesh.convex.convex_hull(_to_frame(tube.vertices[ring], frame))
+            link = _link(name, frame, samples, hull)
+            links.append(link)
+            visual = trimesh.util.concatenate([m for m, _ in parts])
+            visual.vertices = _to_frame(visual.vertices, frame)
+            visuals[name] = (visual, np.vstack([uv(c, m.vertices) for m, c in parts]))
+            r = r0 + t0 * (r1 - r0)
+            stiffness = const["petiole_modulus"] * math.pi * (2 * r) ** 4 / 64 / length
+            chain.append((link, samples, frame, stiffness))
+        for i, (link, _, frame, stiffness) in enumerate(chain):
+            # damping per axis from the inertia of the rest of the leaf about this joint
+            beyond = [s for _, samples, _, _ in chain[i:] for s in samples]
+            inertia = _inertia(beyond, frame[:3, 3])
+            damping = [2 * const["petiole_damping_ratio"] * math.sqrt(stiffness * a @ inertia @ a)
+                       for a in (frame[:3, 1], frame[:3, 2])]  # fmt: skip
+            parent = "root" if i == 0 else chain[i - 1][0]["name"]
+            joints.append({"name": f"leaf{k:02d}_joint{i}", "type": "universal",
+                           "parent": parent, "child": link["name"],
+                           "axis": [0, 1, 0], "axis2": [0, 0, 1],
+                           "stiffness": [stiffness, stiffness], "damping": damping})  # fmt: skip
+    model = {
+        "format_version": 1,
+        "root_length": sizes["root"]["length"],  # crown top to tip
+        "root_depth": sizes["root"]["length"] - sizes["root"]["top"],  # below the soil
+        "links": links,
+        "joints": joints,
+    }
+    return _rounded(model), _scene_glb(visuals, material)
+
+
+def _to_frame(points: np.ndarray, frame: np.ndarray) -> np.ndarray:
+    """Points from the Variant frame into a link frame (4 x 4 pose of the link)."""
+    return (points - frame[:3, 3]) @ frame[:3, :3]
+
+
+def _rod(curve, t0: float, t1: float, radius: tuple[float, float], density: float):
+    """Point masses along a tapered round rod on the curve from t0 to t1, and its length.
+
+    Each sample is (point, mass, inertia about the point) with the inertia of a short solid
+    cylinder, so the sum stays well conditioned about the rod's own axis too.
+    """
+    samples, length = [], 0.0
+    ts = np.linspace(t0, t1, MASS_SAMPLES + 1)
+    for a, b in zip(ts[:-1], ts[1:], strict=True):
+        ds = float(np.linalg.norm(_bezier(curve, b)[0] - _bezier(curve, a)[0]))
+        point, tangent = _bezier(curve, (a + b) / 2)
+        r = radius[0] + (a + b) / 2 * (radius[1] - radius[0])
+        m = density * math.pi * r**2 * ds
+        across = m * (r**2 / 4 + ds**2 / 12)
+        own = across * np.eye(3) + (m * r**2 / 2 - across) * np.outer(tangent, tangent)
+        samples.append((point, m, own))
+        length += ds
+    return samples, length
+
+
+def _inertia(samples, origin: np.ndarray) -> np.ndarray:
+    """Inertia tensor of (point, mass, own inertia) samples about origin, Variant axes."""
+    total = np.zeros((3, 3))
+    for point, m, own in samples:
+        d = np.asarray(point) - origin
+        total += own + m * (d @ d * np.eye(3) - np.outer(d, d))
+    return total
+
+
+def _link(name: str, frame: np.ndarray, samples, hull: trimesh.Trimesh) -> dict:
+    """One link of the articulated model from its samples; the hull is in the link frame."""
+    mass = sum(m for _, m, _ in samples)
+    com = sum(m * np.asarray(p) for p, m, _ in samples) / mass
+    rotation = frame[:3, :3]
+    i = rotation.T @ _inertia(samples, com) @ rotation
+    i[np.abs(i) < 1e-9 * np.abs(i).max()] = 0.0  # float noise from the frame rotation
+    roll, pitch, yaw = trimesh.transformations.euler_from_matrix(frame, "sxyz")
+    return {
+        "name": name,
+        "pose": [*frame[:3, 3], roll, pitch, yaw],
+        "mass": mass,
+        "com": _to_frame(com[None], frame)[0],
+        "inertia": {
+            "ixx": i[0, 0],
+            "iyy": i[1, 1],
+            "izz": i[2, 2],
+            "ixy": i[0, 1],
+            "ixz": i[0, 2],
+            "iyz": i[1, 2],
+        },  # fmt: skip
+        "hull": {"vertices": hull.vertices, "faces": hull.faces},
+    }
+
+
+def _rounded(value):
+    """Plain JSON values, floats to 6 significant digits, so files stay small and stable."""
+    if isinstance(value, dict):
+        return {k: _rounded(v) for k, v in value.items()}
+    if isinstance(value, list | tuple | np.ndarray):
+        return [_rounded(v) for v in value]
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int | np.integer):
+        return int(value)
+    return float(f"{float(value):.6g}") + 0.0  # + 0.0 turns -0.0 into 0.0
 
 
 def _taper_root(length: float, radius: float, top: float, bend: float) -> trimesh.Trimesh:
@@ -218,21 +419,25 @@ def _spindle_root(length: float, radius: float, top: float, bend: float) -> trim
     return _revolve(profile, length, top, bend)
 
 
-def _revolve(profile, length: float, top: float, bend: float) -> trimesh.Trimesh:
+def _revolve(
+    profile, length: float, top: float, bend: float, sections: int = ROOT_SECTIONS
+) -> trimesh.Trimesh:
     """Revolve a crown-to-tip profile; the tip bends sideways by `bend`."""
     # tip to crown, so the normals point outward
-    mesh = trimesh.creation.revolve(profile[::-1], sections=ROOT_SECTIONS)
+    mesh = trimesh.creation.revolve(profile[::-1], sections=sections)
     depth = (top - mesh.vertices[:, 2]) / length
     mesh.vertices[:, 0] += bend * depth**2
+    mesh.metadata["revolve"] = (profile, length, top, bend)  # for a low-poly copy
     return mesh
 
 
 def _foliage(
     rng: random.Random, radius: float, top: float, height: float, crop: dict
 ) -> tuple[trimesh.Trimesh, trimesh.Trimesh]:
-    """Petiole tubes and leaf blades of all leaves, fanned out from the crown."""
+    """Petiole tubes and leaf blades of all leaves, fanned out from the crown, plus
+    (curve, tube, blade) per leaf."""
     count = rng.randint(*crop["leaf_count"])
-    petioles, blades = [], []
+    petioles, blades, curves = [], [], []
     for i in range(count):
         azimuth = 2 * math.pi * i / count + rng.uniform(-0.3, 0.3)
         out = np.array([math.cos(azimuth), math.sin(azimuth), 0.0])
@@ -242,9 +447,11 @@ def _foliage(
         # quadratic Bezier: up and out; with arch above 1 the tip droops back below the peak
         bezier = (start, start + 0.3 * reach * out + [0, 0, crop["leaf_arch"] * rise],
                   start + reach * out + [0, 0, rise * rng.uniform(*crop["leaf_tip"])])  # fmt: skip
+        curves.append(bezier)
         petioles.append(_tube(bezier, crop["petiole_radius"], crop["petiole_sides"]))
         blades.append(LEAVES[crop["leaf"]](rng, bezier, crop))
-    return trimesh.util.concatenate(petioles), trimesh.util.concatenate(blades)
+    per_leaf = list(zip(curves, petioles, blades, strict=True))
+    return trimesh.util.concatenate(petioles), trimesh.util.concatenate(blades), per_leaf
 
 
 def _bezier(curve, t: float) -> tuple[np.ndarray, np.ndarray]:

@@ -14,7 +14,7 @@ With `d` the upward displacement of the root, `v` its upward speed and `F` the r
 
 - `0 <= d < d_peak`: `F` rises linearly from 0 to `F_peak`.
 - At `d_peak`: `F` drops to `residual_fraction * F_peak`.
-- `d_peak <= d < L`: `F` decays linearly to 0, with `L` the root length (the Variant's root length times the Plant's scale).
+- `d_peak <= d < L`: `F` decays linearly to 0, with `L` the root depth: the length of root below the soil (the Variant's `root_depth` times the Plant's scale).
 - `d >= L`: the Plant is free.
 
 `F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. `F_peak` is sampled independently of root size until measurements show a correlation. The damping term `c * v` (per-Crop knob `pull_out_damping` in N s/m, default 0) acts only while the root is attached; it is off until measurements at two pull speeds give a value, and turning it on needs no code change. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and its parameters, `c` included, are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
@@ -39,7 +39,7 @@ All per-step logic is C++. The Python SDF build runs once per pick; it moves to 
 ### Plant model
 
 - **Root**: one rigid link. Its collision is the convex hull of a low-poly copy of the generator's root profile, so a shoulder grip works too.
-- **Foliage**: per leaf, a chain of 3 petiole links joined by universal joints (two bending axes, twist rigid) with `spring_stiffness`, `spring_reference` 0 and `damping`. Stiffness per joint is `k = E * I / l`, with `I = pi * D^4 / 64` from the petiole diameter `D`, `l` the segment length and `E` the per-Crop `petiole_modulus` (guess about 500 MPa, measured for taro petioles; no carrot data found). Damping is a per-Crop knob.
+- **Foliage**: per leaf, a chain of 3 petiole links joined by universal joints (two bending axes, twist rigid) with `spring_stiffness`, `spring_reference` 0 and `damping`. Stiffness per joint is `k = E * I / l`, with `I = pi * D^4 / 64` from the petiole diameter `D`, `l` the segment length and `E` the per-Crop `petiole_modulus` (guess about 500 MPa, measured for taro petioles; no carrot data found). Damping per joint and axis is `c = 2 * zeta * sqrt(k * J)`, with `J` the inertia of the rest of the leaf about that axis and the per-Crop damping ratio `zeta` (guess 0.1 to 0.3).
 - **Collision**: each petiole segment collides as its convex hull. Leaf blades are visual only; their mass goes to the last petiole link of their leaf.
 - About 25 links per carrot. The main grip is the leaf bunch at the crown.
 
@@ -47,10 +47,10 @@ All per-step logic is C++. The Python SDF build runs once per pick; it moves to 
 
 Engine-agnostic. The root crop Asset Generator writes next to each Variant's `.glb`:
 
-- `<variant>.physics.json`: links (mass, inertia, pose, hull file), joints (type, axes, stiffness, damping) and the root length, all at scale 1;
-- convex OBJ hulls for the root and every petiole segment.
+- `<variant>.physics.json`: links (pose, mass, center of mass, inertia, convex collision hull as vertices and faces in the link frame), joints (type, axes, stiffness, damping), root length and root depth, all at scale 1;
+- `<variant>.articulated.glb`: the visual of each link as its own mesh, named like the link and in the link frame.
 
-Masses and stiffnesses come from the Variant geometry plus per-Crop material constants in the Crop YAML, each marked with its source or `guess`. Exporters only translate this file to their engine (Gazebo SDF now, MuJoCo later) and apply the Plant's scale `s` consistently: lengths by `s`, masses and joint stiffnesses by `s^3`, inertias by `s^5`. Per-Plant values (Pull-out Force, scale) stay in the Manifest.
+Hulls live inside the JSON rather than as separate mesh files (about 30 per Variant); an Exporter writes the mesh files its engine needs. Masses and stiffnesses come from the Variant geometry plus per-Crop material constants (densities, `petiole_modulus`, damping ratio). These are generation-time inputs, so they sit in the generator's per-Crop table next to the geometry ranges, as ranges sampled per Variant, each marked with its source or `guess`; the runtime Pull-out Curve knobs stay in the Crop YAML. Exporters only translate the file to their engine (Gazebo SDF now, MuJoCo later) and apply the Plant's scale `s` consistently: lengths by `s`, masses and joint stiffnesses by `s^3`, joint damping by `s^4`, inertias by `s^5`. Per-Plant values (Pull-out Force, scale) stay in the Manifest.
 
 ### Stability check
 
