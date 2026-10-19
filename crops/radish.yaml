@@ -16,6 +16,10 @@ variation:
   hue_shift: [-0.03, 0.03]
 physics:
   pull_out_force: [15.0, 35.0]   # newtons, guess, no literature value for radish yet
+  pull_out_curve:                # ADR 0006
+    d_peak: 0.005                # meters of root travel to the peak, guess
+    residual_fraction: 0.3       # force right after the peak, fraction of the peak, guess
+    pull_out_damping: 0.0        # N s/m, speed effect, off until measured
 assets:
   library: assets/library/radish
   generator: radish

@@ -21,6 +21,15 @@ class PlantingPattern:
 
 
 @dataclass(frozen=True)
+class PullOutCurve:
+    """Per-Crop knobs of the Pull-out Curve (ADR 0006); the peak is each Plant's Pull-out Force."""
+
+    d_peak: float  # meters of root travel to the peak
+    residual_fraction: float  # force right after the peak, fraction of the peak
+    pull_out_damping: float  # N s/m
+
+
+@dataclass(frozen=True)
 class Crop:
     name: str
     planting: PlantingPattern
@@ -30,6 +39,7 @@ class Crop:
     variants: int
     library: str  # Asset Library folder of this Crop's Variants
     stage: str  # growth stage slot in Variant names, e.g. carrot_harvest_v07
+    pull_out_curve: PullOutCurve | None = None  # root crops only
 
 
 @dataclass(frozen=True)
@@ -66,6 +76,11 @@ class FieldSpec:
 def load_crop(path: Path) -> Crop:
     data = yaml.safe_load(Path(path).read_text())
     variation = data["variation"]
+    curve = data["physics"].get("pull_out_curve")
+    if curve and not (curve["d_peak"] > 0 and 0 <= curve["residual_fraction"] <= 1
+                      and curve["pull_out_damping"] >= 0):  # fmt: skip
+        raise ValueError("pull_out_curve needs d_peak above 0, residual_fraction in [0, 1] "
+                         "and pull_out_damping of at least 0")  # fmt: skip
     return Crop(
         name=data["name"],
         planting=PlantingPattern(**data["planting"]),
@@ -75,6 +90,7 @@ def load_crop(path: Path) -> Crop:
         variants=data["assets"].get("variants", 24),
         library=data["assets"].get("library", f"assets/library/{data['name']}"),
         stage=data["assets"].get("stage", "harvest"),
+        pull_out_curve=PullOutCurve(**curve) if curve else None,
     )
 
 

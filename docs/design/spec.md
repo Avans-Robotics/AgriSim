@@ -153,6 +153,10 @@ The Field Layout is the only thing Exporters read. It is written next to every e
   "format_version": 1,
   "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
             "path_gap": {"every_n_cols": 2, "width": 0.3}, "seed": 42, "spec_sha256": "..."},
+  "crops": {
+    "carrot": {"library": "assets/library/carrot",
+               "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0}}
+  },
   "pixels": [
     {"row": 0, "col": 0, "crop": "carrot", "origin": [0.0, 1.0]}
   ],
@@ -200,7 +204,7 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 ## 10. Physics
 
 - Plants are static by default. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
-- M4 makes one picked root crop Plant dynamic at a time ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and-force-law.md)): a C++ gz-sim system removes its grouped visual, spawns it as an articulated model (rigid root, spring-jointed petiole chains), welds the root to an anchor on a vertical prismatic joint, and applies the Plant's Pull-out Curve as a joint force until the root has travelled its own length, then detaches it. Lettuce stays static (cut, not pulled).
+- M4 makes picked root crop Plants dynamic, one model each ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and-force-law.md)): a C++ gz-sim system removes its grouped visual, spawns it as an articulated model (rigid root, spring-jointed petiole chains), welds the root to an anchor on a vertical prismatic joint, and applies the Plant's Pull-out Curve as a joint force until the root has travelled its own length, then detaches it. Lettuce stays static (cut, not pulled).
 - Soil is not simulated: loose soil only, no soil state per Pixel, no crown tear-off in M4. All Plant physics parameters are uncalibrated until the [measurement protocol](../research/measurement-protocol.md) has run.
 - Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md). Choosing which Plants near the robot become dynamic (an active region) is left to M5.
 

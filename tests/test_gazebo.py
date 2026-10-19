@@ -80,7 +80,7 @@ def test_plants_use_copied_variant_meshes(mixed):
         assert model.findtext(".//mesh/uri") == f"meshes/{p['variant']}.glb"
         assert (world_sdf.parent / "meshes" / f"{p['variant']}.glb").is_file()
         scale = [float(v) for v in model.findtext(".//mesh/scale").split()]
-        assert scale == pytest.approx([p["scale"]] * 3, abs=1e-3)  # Manifest rounds to 3
+        assert scale == pytest.approx([p["scale"]] * 3, abs=1e-4)  # Manifest rounds to 4
 
 
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")

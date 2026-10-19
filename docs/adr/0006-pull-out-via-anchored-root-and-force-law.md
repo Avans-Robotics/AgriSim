@@ -17,7 +17,7 @@ With `d` the upward displacement of the root, `v` its upward speed and `F` the r
 - `d_peak <= d < L`: `F` decays linearly to 0, with `L` the root depth: the length of root below the soil (the Variant's `root_depth` times the Plant's scale).
 - `d >= L`: the Plant is free.
 
-`F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. `F_peak` is sampled independently of root size until measurements show a correlation. The damping term `c * v` (per-Crop knob `pull_out_damping` in N s/m, default 0) acts only while the root is attached; it is off until measurements at two pull speeds give a value, and turning it on needs no code change. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and its parameters, `c` included, are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
+`F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. A loosened root is held by friction: after the peak the root cannot sink below the highest point it reached (the anchor's lower limit follows it), so a part-pulled root that is let go stays where it is instead of being pushed back by the residual force. `F_peak` is sampled independently of root size until measurements show a correlation. The damping term `c * v` (per-Crop knob `pull_out_damping` in N s/m, default 0) acts only while the root is attached; it is off until measurements at two pull speeds give a value, and turning it on needs no code change. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and its parameters, `c` included, are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
 
 ### Mechanism in Gazebo
 
@@ -26,15 +26,17 @@ With `d` the upward displacement of the root, `v` its upward speed and `F` the r
 - Every physics step the system reads the prismatic joint position `d` and velocity `v` and commands the joint force `-F`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
 - Only vertical pull-out is modelled: sideways and rotational motion of the root is rigid until detach. An angled pull is a later knob.
 - The system computes the force itself, so the resisting force is known exactly each step. It publishes `d`, `F` and the attached state on a topic.
+- The buried root starts inside the soil collision, so the root's collision leaves out the soil's collide bit while attached: otherwise contact forces add to the force law. At detach the system gives it the full bitmask (`CollideBitmaskCmd`), so a dropped Plant lands on the soil.
+- The anchor model is removed one step after the weld: dartsim keeps the root in the anchor's skeleton until the weld is gone, so removing both in one step freezes the root.
 
 ### Picking a Plant
 
 Plants stay visuals grouped per Pixel ([ADR 0007](0007-gazebo-plants-grouped-per-pixel.md)). A pick of one Plant id:
 
-1. Python (a `pixelfield` command in the Gazebo Exporter) reads the Manifest and the Variant physics export, writes the scaled SDF for that one Plant, and sends the request (Plant id, SDF path, Pull-out Curve parameters) with the `gz` CLI.
+1. Python (a `pixelfield` command in the Gazebo Exporter) reads the Manifest (Plant pose, scale and Pull-out Force; per-Crop Pull-out Curve knobs) and the Variant physics export, writes the scaled SDF for that one Plant with its Pull-out Curve as a custom element `<pixelfield:pull_out>`, and sends the request with the `gz` CLI: a standard `gz.msgs.EntityFactory` (SDF path, Plant id, pose) on `/world/<world>/pixelfield/pick`, so the SDF file alone describes the pick.
 2. A C++ gz-sim system in `src/pixelfield/exporters/gazebo/systems/` removes the grouped visual (`RequestRemoveEntity`), spawns the Plant model (`SdfEntityCreator`), creates the anchor and the weld, then runs the force law.
 
-All per-step logic is C++. The Python SDF build runs once per pick; it moves to C++ if pick latency matters in M5. The system only spawns, holds and detaches picked Plants: choosing which Plants near the robot become dynamic is not part of it.
+Any number of Plants can be picked at once, each Plant id once per running world; a part-pulled Plant stays anchored and blocks nothing. The state topic is `/world/<world>/pixelfield/pull_out` (`gz.msgs.Param`: plant, d, force, attached), published every step while attached. All per-step logic is C++. The Python SDF build runs once per pick; it moves to C++ if pick latency matters in M5. The system only spawns, holds and detaches picked Plants: choosing which Plants near the robot become dynamic is not part of it.
 
 ### Plant model
 
@@ -94,4 +96,4 @@ Root crops only: carrot, then beetroot and radish through the same generator. Le
 
 - Each Variant gets a second committed export, kept fresh by tests like the `.glb`.
 - The root crop generator must keep parts per leaf: today it merges them per part type.
-- Removing a grouped visual with `RequestRemoveEntity` reaches the GUI through the world state, according to the gz-sim source; not yet observed in a running GUI.
+- Removing a grouped visual with `RequestRemoveEntity` reaches a running GUI through the world state (checked in M4d), although the server's scene info keeps listing it.

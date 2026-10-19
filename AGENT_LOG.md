@@ -634,3 +634,66 @@ Branch m4c-articulated-sdf, commits 87e4c16 and 2839af8, not pushed. Validated: 
 ### Open items
 - Scale extremes (0.85, 1.15) not checked.
 - Next chunk m4d-pullout-system (C++), needs IMPLEMENT.
+
+## 2026-10-19 M4d pull-out system
+### Goal & outcome
+C++ gz-sim system `PixelfieldPullOut` (`exporters/gazebo/systems/`, plain CMake into `build/systems/`, loaded through `GZ_SIM_SYSTEM_PLUGIN_PATH`) and always listed in Field worlds. On a pick it removes the Plant's grouped visual, spawns the articulated Plant, anchors the root on a vertical prismatic joint with a DetachableJoint weld, applies the Pull-out Curve as the joint force each step, detaches at the root depth and publishes the state. Python `pixelfield pick` (running world, via `gz service`) and `pixelfield pull` (headless scripted pull, CSV log). Scripted pulls: force matches an independent curve evaluation to 1 mN, detach within 0.1 mm of the root depth, peak within 1% of the Plant's Pull-out Force, for carrot, beetroot and radish, scale extremes and 0.01 to 0.2 m/s.
+### Decisions & why
+- Agreed: CMake build plus GZ_SIM_SYSTEM_PLUGIN_PATH (portable worlds); pick request is a standard `gz.msgs.EntityFactory` with the curve in the Plant SDF as `<pixelfield:pull_out>` (one file describes a pick, no JSON library in C++).
+- Decided without asking (user delegated): state topic `gz.msgs.Param` (plant, d, force, attached) every step; Crop YAML curve knobs copied to a new Manifest `crops` section (with the library path) so pick reads only the Manifest; Manifest scale now 4 decimals so the spawned Plant matches its visual; one pick at a time, each Plant id once; scripted pull is a PD lift of the root (5000 N/m, 30 N s/m) on the real Field world without its Sensors system.
+- Root collision leaves out the soil's collide bit: the buried root starts inside the soil box and contacts would add to the force law. A dropped detached root falls through the soil.
+### Lessons / gotchas
+- Removing the weld and the anchor model in the same step freezes the root: dartsim keeps the root in the anchor's skeleton until the weld is gone. Anchor removed one step later.
+- Joint position at rest reads about -1e-14: with d_peak 0 the curve divides 0 by 0, so the system validates the curve on request.
+- gz-transport delivers the state topic to the in-process subscriber asynchronously: the log matches messages to steps by their sim-time stamp. d is read at the start of a step, lift at its end.
+- ElementTree resolves the `pixelfield:` prefix to its namespace URI on parse; look the element up by `{uri}pull_out`.
+### State
+Branch m4d-pullout-system. Validated: pytest (74 passed, 72 slow skipped; the pull test runs when the system is built), ruff, validator agent (scale extremes, speeds, error paths, pause, reset, re-pick after detach, spawn pose against the static visual), live `pixelfield pick` against `gz sim -s`. Grouped visual removal in the GUI UNVERIFIED (removed from the ECM, seen headless). Non-zero pull_out_damping UNVERIFIED.
+### Open items
+- GUI check: visual gone and the Plant in its place after `pixelfield pick`.
+- A picked Plant that is never fully pulled blocks later picks: release or timeout to decide in m4e.
+- The scripted pull lifts with a vertical force only; a detached Plant tips over after a while (test ends 0.6 s after detach).
+- Library paths in the Manifest are relative to the repo root, so pick and pull run from there.
+- Next: m4e test gripper.
+
+## 2026-10-19 M4d detached root lands on the soil
+### Goal & outcome
+User test in the GUI: a detached carrot dropped back through the soil to its old spot, because the root never collided with the soil. The system now sets `CollideBitmaskCmd` 0xFFFF on the root's collisions at detach (gz-sim 8.15 changes the bitmask at runtime), so a dropped Plant lands. The scripted pull now lets go past the root depth and logs one more second; carrot, beetroot and radish roots end with their lowest hull point at the soil (about 0 mm, was about minus the root depth).
+### Decisions & why
+- Fix on the open PR without a new plan: it is m4d's own "Plant moves freely after detach".
+### Lessons / gotchas
+- The GUI Apply Force Torque button applies the wrench for one step only: an impulse, so it takes hundreds of newtons to pull a carrot out with it. Use the scripted pull or a persistent wrench for a realistic pull.
+- A link's world axis-aligned box is the world box of its rotated local box: on a lying beetroot it overshoots the real hull by about 2 cm. Use hull vertices for contact checks.
+### State
+Branch m4d-pullout-system. Validated: pytest (74 passed, 72 skipped), ruff, scripted pull with drop for three Crops. GUI removal of the grouped visual still UNVERIFIED: the server's scene info still lists the static visual after a pick.
+### Open items
+- GUI check of the grouped visual (does a static copy stay behind after pulling the picked Plant away?).
+
+## 2026-10-19 M4d several picks and post-peak ratchet
+### Goal & outcome
+Agreed with the user after a GUI session: any number of Plants can be picked at once (each Plant id once per running world), and after the peak the anchor's lower limit follows the highest point reached (`JointPositionLimitsCmd`), so a part-pulled root that is let go stays where it is. `pixelfield pull --release <m>` lets go early. Validated: a carrot released at 49 mm stays at 49.06 mm for 1 s, still attached; three concurrent picks against `gz sim -s`, each publishing its state, re-pick refused.
+### Decisions & why
+- Ratchet instead of the residual force pushing a loosened root back down: a real loosened carrot is held by friction. Explicit regularized friction was ruled out: stable only with a slip speed of about 0.1 m/s, which would distort the curve at a 5 cm/s pull. The joint limit is implicit, so stable.
+- ADR 0006 and spec updated (no longer one picked Plant at a time).
+### Lessons / gotchas
+- The user's "broken simulator" was an orphaned `gz sim server` (GUI gone, reparented to systemd, 82% CPU) holding the world name, plus new shells without GZ_SIM_SYSTEM_PLUGIN_PATH: a new `gz sim` then has a twin and picks reach the orphan.
+- While the ratchet holds a root, the state topic's force is the commanded residual force, taken up by the joint limit.
+- A heredoc ends a `&&` chain: commands on the following lines run even when the lint before it failed.
+### State
+Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 skipped), ruff, partial pull, live concurrent picks. GUI removal of the grouped visual still UNVERIFIED.
+### Open items
+- GUI check of the grouped visual.
+
+## 2026-10-19 M4d done
+### Goal & outcome
+User checked in the GUI: after a pick and pulling the Plant away, no static copy stays behind, so the grouped visual removal reaches the GUI. All M4d checks of the spec are met: logged F(d) follows the Pull-out Curve, detach with a peak inside the Pull-out Force range, the visual is gone in the GUI. ADR 0006 and 0007 notes updated.
+### Decisions & why
+None
+### Lessons / gotchas
+- `/world/<w>/scene/info` keeps listing a visual removed with RequestRemoveEntity, while the GUI drops it: do not use scene info to check removals.
+### State
+Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 skipped), ruff, scripted pulls, live picks, GUI check by the user. m4d done.
+### Open items
+- Non-zero pull_out_damping never run.
+- Scale extremes (0.85, 1.15) not settle-checked (pulls at those scales passed).
+- Next: m4e test gripper, needs IMPLEMENT.

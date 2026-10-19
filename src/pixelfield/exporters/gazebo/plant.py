@@ -1,5 +1,6 @@
-"""Articulated SDF of one picked Plant from its Variant physics export (ADR 0006), and a
-headless settle check per Variant.
+"""Articulated SDF of one picked Plant from its Variant physics export (ADR 0006), a headless
+settle check per Variant, and picking a Plant of a built Field (the pull-out system in
+systems/PullOut.cc does the rest).
 
 The physics export is at scale 1; a Plant of scale s gets lengths times s, masses and joint
 stiffnesses times s^3, joint damping times s^4, inertias times s^5 and spring references
@@ -9,6 +10,7 @@ written as OBJ files next to the SDF; link visuals are submeshes of the articula
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -24,6 +26,13 @@ SETTLE_SPEED = 0.001  # meters per second
 # the project venv does not.
 SYSTEM_PYTHON = "/usr/bin/python3"
 SETTLE_SCRIPT = Path(__file__).with_name("settle_check.py")
+PULL_SCRIPT = Path(__file__).with_name("pull_check.py")
+PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pull speed
+PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
+DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
+SYSTEMS_BUILD = Path(__file__).resolve().parents[4] / "build" / "systems"
+NAMESPACE = "https://github.com/Avans-Robotics/AgriSim"  # of custom SDF elements
+ROOT_BITMASK = 0xFFFF & ~gazebo.SOIL_BITMASK  # the root collides with all but the soil
 
 
 def plant_model(variant: Path, scale: float, out_dir: Path, name: str | None = None) -> ET.Element:
@@ -58,6 +67,9 @@ def plant_model(variant: Path, scale: float, out_dir: Path, name: str | None = N
         _write_obj(obj, link["hull"])
         collision = ET.SubElement(element, "collision", name="collision")
         _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
+        if link["name"] == "root":
+            contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
+            _text(contact, "collide_bitmask", str(ROOT_BITMASK))
         visual = ET.SubElement(element, "visual", name="visual")
         _text(visual, "pose", gazebo._join(gazebo.GLTF_TO_Z_UP))
         mesh = _mesh(visual, f"meshes/{glb.name}", s)
@@ -128,6 +140,115 @@ def settle(world_sdf: Path, seconds: float = SETTLE_TIME, after: float = SETTLE_
     report = json.loads(result.stdout.strip().splitlines()[-1])
     report["settled"] = not report["nan"] and report["max_speed_after"] < SETTLE_SPEED
     return report
+
+
+def pick_sdf(world_dir: Path, plant_id: str) -> dict:
+    """Write the SDF of one Plant of a built Field to <world_dir>/picks/<plant id>/plant.sdf.
+
+    The model carries the Plant's Pull-out Curve as <pixelfield:pull_out>. Returns the pick
+    request (sdf_filename, name, pose as x, y, z, yaw) plus the Plant's Pull-out Force, root
+    depth and mass, all scaled.
+    """
+    world_dir = Path(world_dir)
+    manifest = json.loads((world_dir / "manifest.json").read_text())
+    if "crops" not in manifest:
+        raise ValueError(f"{world_dir / 'manifest.json'} has no crops section, rebuild the world")
+    p = next((p for p in manifest["plants"] if p["id"] == plant_id), None)
+    if p is None:
+        raise ValueError(f"no Plant {plant_id} in {world_dir / 'manifest.json'}")
+    crop = manifest["crops"][p["crop"]]
+    curve = crop["pull_out_curve"]
+    if curve is None:
+        raise ValueError(f"{p['crop']} has no Pull-out Curve, it is not pulled")
+    variant = Path(crop["library"]) / p["variant"]
+    physics = json.loads(variant.with_suffix(".physics.json").read_text())
+    s = p["scale"]
+    depth = physics["root_depth"] * s
+    root = next(link for link in physics["links"] if link["name"] == "root")
+    out = world_dir / "picks" / plant_id
+    model = plant_model(variant, s, out, name=plant_id)
+    ET.SubElement(model, "pixelfield:pull_out", f_peak=_num(p["pull_out_force"]),
+                  d_peak=_num(curve["d_peak"]), residual_fraction=_num(curve["residual_fraction"]),
+                  damping=_num(curve["pull_out_damping"]), depth=_num(depth))  # fmt: skip
+    sdf = ET.Element("sdf", {"version": gazebo.SDF_VERSION, "xmlns:pixelfield": NAMESPACE})
+    sdf.append(model)
+    ET.indent(sdf)
+    path = out / "plant.sdf"
+    ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
+    pose = p["pose"]
+    return {
+        "sdf_filename": str(path.resolve()),
+        "name": plant_id,
+        "pose": [pose["x"], pose["y"], pose["z"], pose["yaw"]],
+        "pull_out_force": p["pull_out_force"],
+        "depth": depth,
+        "mass": sum(link["mass"] for link in physics["links"]) * s**3,
+        "root_hull": [[c * s for c in v] for v in root["hull"]["vertices"]],
+    }
+
+
+def pick(world_dir: Path, plant_id: str) -> bool:
+    """Pick one Plant in a running Field world: write its SDF and send the pick request."""
+    r = pick_sdf(world_dir, plant_id)
+    x, y, z, yaw = r["pose"]
+    request = (f'sdf_filename: "{r["sdf_filename"]}" name: "{plant_id}" '
+               f"pose {{ position {{ x: {x} y: {y} z: {z} }} "
+               f"orientation {{ z: {math.sin(yaw / 2)} w: {math.cos(yaw / 2)} }} }}")  # fmt: skip
+    result = subprocess.run(
+        ["gz", "service", "-s", f"/world/{gazebo.WORLD_NAME}/pixelfield/pick",
+         "--reqtype", "gz.msgs.EntityFactory", "--reptype", "gz.msgs.Boolean",
+         "--timeout", "5000", "--req", request],
+        capture_output=True, text=True,
+    )  # fmt: skip
+    return "data: true" in result.stdout
+
+
+def pull(
+    world_dir: Path, plant_id: str, speed: float = PULL_SPEED, release: float | None = None
+) -> dict:
+    """Scripted pull, headless: pick a Plant of a built Field and lift its root at `speed`.
+
+    Lets go at a lift of `release` meters (default PULL_AFTER past the root depth) and logs
+    DROP_TIME more, so the Plant drops or, released before the detach, stays. Writes
+    the log to picks/<plant id>/pull.csv (time, lift, pull force, bottom: the root's lowest
+    point, then d, force, attached from the system's state topic; d is read at the start of
+    the step, lift at its end). The report adds the request,
+    whether the grouped visual was there before and after, the peak pull and soil forces, the
+    Plant's weight, d at detach (None if it never detached) and the root's lowest point at the
+    end (landed_bottom).
+    """
+    if speed <= 0:
+        raise ValueError("the pull speed must be above 0")
+    world_dir = Path(world_dir)
+    request = pick_sdf(world_dir, plant_id)
+    release = request["depth"] + PULL_AFTER if release is None else release
+    steps = round((release / speed + DROP_TIME) / STEP)
+    path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
+                                         os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
+    result = subprocess.run(
+        [SYSTEM_PYTHON, str(PULL_SCRIPT), "world.sdf", json.dumps(request), str(steps),
+         repr(speed), repr(release)],
+        cwd=world_dir, capture_output=True, text=True, check=True,
+        env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path},
+    )  # fmt: skip
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    rows = report.pop("rows")
+    log = world_dir / "picks" / plant_id / "pull.csv"
+    log.write_text("time,lift,pull_force,bottom,d,force,attached\n"
+                   + "".join(",".join("" if v is None else repr(v) for v in row) + "\n"
+                             for row in rows))  # fmt: skip
+    attached = [row for row in rows if row[6]]
+    detach = next((row for row in rows if row[6] is False), None)
+    return {
+        **request,
+        **report,
+        "peak_pull": max((row[2] for row in attached), default=0.0),
+        "peak_force": max((row[5] for row in attached), default=0.0),
+        "weight": request["mass"] * 9.8,
+        "detach_d": detach[4] if detach else None,
+        "landed_bottom": rows[-1][3] if rows else None,
+        "log": log,
+    }
 
 
 def _mesh(parent: ET.Element, uri: str, scale: float) -> ET.Element:
