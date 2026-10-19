@@ -84,3 +84,15 @@ def test_scripted_pull_follows_the_curve_and_detaches(field):
     assert low <= r["peak_pull"] - r["weight"] <= high * 1.05  # what the gripper feels
     assert max(float(row["lift"]) for row in rows) > r["depth"] + 0.02  # free after the detach
     assert r["landed_bottom"] > -0.003  # dropped, it lands on the soil instead of sinking in
+
+
+@pytest.mark.skipif(not SYSTEM.is_file(), reason="pull-out system not built (see CLAUDE.md)")
+def test_a_part_pulled_root_stays_where_it_is_released(field):
+    plant_id = json.loads((field / "manifest.json").read_text())["plants"][1]["id"]
+    r = plant.pull(field, plant_id, release=0.05)  # past the peak, well before the root depth
+    assert r["requested"] and r["detach_d"] is None
+    rows = [row for row in csv.DictReader(r["log"].open()) if row["d"]]
+    held = max(float(row["d"]) for row in rows)
+    assert held > 0.04
+    assert float(rows[-1]["d"]) == pytest.approx(held, abs=0.0005)  # 1 s after letting go
+    assert rows[-1]["attached"] == "True"

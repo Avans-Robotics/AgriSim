@@ -203,10 +203,12 @@ def pick(world_dir: Path, plant_id: str) -> bool:
     return "data: true" in result.stdout
 
 
-def pull(world_dir: Path, plant_id: str, speed: float = PULL_SPEED) -> dict:
+def pull(world_dir: Path, plant_id: str, speed: float = PULL_SPEED,
+         release: float | None = None) -> dict:
     """Scripted pull, headless: pick a Plant of a built Field and lift its root at `speed`.
 
-    Lets go PULL_AFTER past the root depth and logs DROP_TIME more, so the Plant drops. Writes
+    Lets go at a lift of `release` meters (default PULL_AFTER past the root depth) and logs
+    DROP_TIME more, so the Plant drops or, released before the detach, stays. Writes
     the log to picks/<plant id>/pull.csv (time, lift, pull force, bottom: the root's lowest
     point, then d, force, attached from the system's state topic; d is read at the start of
     the step, lift at its end). The report adds the request,
@@ -218,7 +220,7 @@ def pull(world_dir: Path, plant_id: str, speed: float = PULL_SPEED) -> dict:
         raise ValueError("the pull speed must be above 0")
     world_dir = Path(world_dir)
     request = pick_sdf(world_dir, plant_id)
-    release = request["depth"] + PULL_AFTER
+    release = request["depth"] + PULL_AFTER if release is None else release
     steps = round((release / speed + DROP_TIME) / STEP)
     path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip

@@ -44,6 +44,8 @@ def main(argv: list[str] | None = None) -> None:
         command.add_argument("world", type=Path, help="folder written by build")
         command.add_argument("plant", help="Plant id from the Manifest, e.g. r0c0-017")
     pull.add_argument("--speed", type=float, default=plant.PULL_SPEED, help="lift speed, m/s")
+    pull.add_argument("--release", type=float,
+                      help="let go at this lift, m (default: past the root depth)")  # fmt: skip
     args = parser.parse_args(argv)
     if args.command in ("pick", "pull"):
         _pick(parser, args)
@@ -109,13 +111,12 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     try:
         if args.command == "pick":
             if not plant.pick(args.world, args.plant):
-                parser.exit(1, "error: pick refused or no reply: the Plant was already picked, "
-                               "another is still attached (see the gz log), or the world is "
-                               "not running with the pull-out system on "
-                               "GZ_SIM_SYSTEM_PLUGIN_PATH\n")  # fmt: skip
+                parser.exit(1, "error: pick refused or no reply: the Plant was already picked "
+                               "(see the gz log), or the world is not running with the "
+                               "pull-out system on GZ_SIM_SYSTEM_PLUGIN_PATH\n")  # fmt: skip
             print(f"picked {args.plant}")
             return
-        r = plant.pull(args.world, args.plant, args.speed)
+        r = plant.pull(args.world, args.plant, args.speed, args.release)
     except subprocess.CalledProcessError as e:
         parser.exit(1, f"error: the pull check failed:\n{e.stderr[-2000:]}\n")
     except (OSError, ValueError) as e:
@@ -130,5 +131,5 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
           f"grouped visual removed: {r['visual_before'] and not r['visual_after']}, "
           f"root bottom after the drop {r['landed_bottom'] * 1000:.1f} mm, "
           f"log: {r['log']}")  # fmt: skip
-    if not r["detach_d"]:
+    if not r["detach_d"] and args.release is None:
         parser.exit(1, "error: the Plant did not detach\n")

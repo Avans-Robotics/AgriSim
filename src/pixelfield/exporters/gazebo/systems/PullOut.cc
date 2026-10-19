@@ -1,7 +1,9 @@
-// Pull-out of one picked Plant (ADR 0006): a world system that, on a pick request, removes the
+// Pull-out of picked Plants (ADR 0006): a world system that, on a pick request, removes the
 // Plant's grouped visual, spawns its articulated model, welds the root to an anchor on a
 // vertical prismatic joint and applies the Pull-out Curve as the joint force every step until
-// the root has travelled its root depth, then detaches it.
+// the root has travelled its root depth, then detaches it. Any number of Plants can be picked
+// at once, each Plant id once. After the peak the anchor's lower limit follows the highest
+// point reached, so a released, part-pulled root stays where it is.
 //
 // Pick service /world/<world>/pixelfield/pick: gz.msgs.EntityFactory (sdf_filename, name = Plant
 // id, pose) replied with gz.msgs.Boolean. The Plant SDF carries the curve as a custom element
@@ -9,8 +11,8 @@
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached.
 
 #include <algorithm>
+#include <map>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -29,6 +31,7 @@
 #include <gz/sim/components/CollisionBitmask.hh>
 #include <gz/sim/components/DetachableJoint.hh>
 #include <gz/sim/components/JointForceCmd.hh>
+#include <gz/sim/components/JointPositionLimitsCmd.hh>
 #include <gz/sim/components/JointPosition.hh>
 #include <gz/sim/components/JointVelocity.hh>
 #include <gz/sim/components/Pose.hh>
@@ -76,6 +79,7 @@ struct Pick
   Entity anchor, slide, weld, root;
   bool broken = false;
   bool detached = false;
+  double held = 0.0;  // lower limit of the slide: the highest d reached after the peak
 };
 
 class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
@@ -130,15 +134,9 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       gzerr << "Pick: [" << name << "] is not a Plant id or was already picked\n";
       return true;
     }
-    if (this->request || this->pick)
-    {
-      gzerr << "Pick: [" << (this->request ? this->request->name : this->pick->name)
-            << "] is still attached\n";
-      return true;
-    }
     sdf::Model model = *root->Model();
     model.SetName(name);
-    this->request = Request{name, gz::msgs::Convert(_req.pose()), model, curve};
+    this->requests.push_back(Request{name, gz::msgs::Convert(_req.pose()), model, curve});
     this->picked.insert(name);
     // ponytail: one sdf::Root kept per pick (a few kB, the entities may refer to its graphs);
     // free them on world reset if long training runs pick thousands of Plants.
@@ -150,29 +148,42 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   public: void PreUpdate(const UpdateInfo &_info, EntityComponentManager &_ecm) override
   {
     std::lock_guard<std::mutex> lock(this->mutex);
-    if (this->request)
-    {
-      this->Spawn(*this->request, _ecm);
-      this->request.reset();
-    }
-    if (!this->pick || _info.paused)
+    for (const Request &r : this->requests)
+      this->Spawn(r, _ecm);
+    this->requests.clear();
+    if (_info.paused)
       return;
+    for (auto it = this->picks.begin(); it != this->picks.end();)
+      it = this->Step(it->second, _info, _ecm) ? std::next(it) : this->picks.erase(it);
+  }
 
-    Pick &p = *this->pick;
+  /// One physics step of one picked Plant; false once it is done.
+  private: bool Step(Pick &p, const UpdateInfo &_info, EntityComponentManager &_ecm)
+  {
     if (p.detached)
     {
       // A step after the weld: removing both at once also removes the root, which dartsim
       // keeps in the anchor's skeleton until the weld is gone.
       _ecm.RequestRemoveEntity(p.anchor, true);
-      this->pick.reset();
-      return;
+      return false;
     }
     auto position = _ecm.Component<components::JointPosition>(p.slide);
     auto velocity = _ecm.Component<components::JointVelocity>(p.slide);
     if (!position || position->Data().empty() || !velocity || velocity->Data().empty())
-      return;  // filled by Physics from the step after the spawn
+      return true;  // filled by Physics from the step after the spawn
     double d = position->Data()[0], v = velocity->Data()[0];
     p.broken = p.broken || d >= p.curve.dPeak;  // the soil bond does not come back
+    if (p.broken && d > p.held)
+    {
+      // Ratchet: a loosened root is held by friction, the residual force must not push it back.
+      p.held = d;
+      std::vector<gz::math::Vector2d> limits{{p.held, p.curve.depth + kRangeMargin}};
+      auto cmd = _ecm.Component<components::JointPositionLimitsCmd>(p.slide);
+      if (cmd)
+        cmd->Data() = limits;
+      else
+        _ecm.CreateComponent(p.slide, components::JointPositionLimitsCmd(limits));
+    }
     bool attached = d < p.curve.depth;
     double force = attached ? Resistance(p.curve, p.broken, d, v) : 0.0;
     if (attached)
@@ -204,6 +215,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     params["attached"].set_type(gz::msgs::Any::BOOLEAN);
     params["attached"].set_bool_value(attached);
     this->state.Publish(msg);
+    return true;
   }
 
   private: void Spawn(const Request &_r, EntityComponentManager &_ecm)
@@ -258,7 +270,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     Entity weld = _ecm.CreateEntity();
     _ecm.CreateComponent(weld, components::DetachableJoint(
       {anchorModel.LinkByName(_ecm, "anchor"), root, "fixed"}));
-    this->pick = Pick{_r.name, _r.curve, anchor, slide, weld, root};
+    this->picks[_r.name] = Pick{_r.name, _r.curve, anchor, slide, weld, root};
     gzmsg << "Pick: [" << _r.name << "] spawned and anchored\n";
   }
 
@@ -267,8 +279,8 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: gz::transport::Node node;
   private: gz::transport::Node::Publisher state;
   private: std::mutex mutex;
-  private: std::optional<Request> request;
-  private: std::optional<Pick> pick;
+  private: std::vector<Request> requests;
+  private: std::map<std::string, Pick> picks;
   private: std::set<std::string> picked;
   private: std::vector<std::shared_ptr<sdf::Root>> roots;
 };
