@@ -75,6 +75,24 @@ def test_a_weak_grip_slips(field):
     assert statistics.median(sliding) == pytest.approx(expected, rel=0.25)
 
 
+@needs_system
+def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path):
+    out = tmp_path / "m3_crops"
+    main(["build", str(REPO / "examples" / "m3_crops.yaml"), "-o", str(out),
+          "--crops", str(REPO / "crops")])  # fmt: skip
+    plants = json.loads((out / "manifest.json").read_text())["plants"]
+    p = max((p for p in plants if p["crop"] == "beetroot"), key=lambda p: p["pull_out_force"])
+    weak = gripper.grip(out, p["id"])
+    # The default grip does not get it out. Friction alone holds 40 N, but the jaws wedge on the
+    # petiole hulls and break the soil bond anyway; the root then slips out of the grip.
+    assert weak["requested"] and weak["detach_d"] is None and weak["slip"] > 0.02
+    # A grip whose friction holds the Pull-out Force plus the weight, with a 1.5x margin.
+    force = 1.5 * (p["pull_out_force"] + weak["weight"]) / (2 * gripper.JAW_MU)
+    r = gripper.grip(out, p["id"], force)
+    assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
+    assert r["peak_wrist"] - r["weight"] == pytest.approx(p["pull_out_force"], rel=0.05)
+
+
 # About 3.5 s per Variant, 4 minutes for all: PIXELFIELD_SLOW=1 uv run pytest -k squeezed
 @pytest.mark.skipif(not os.environ.get("PIXELFIELD_SLOW"), reason="slow, set PIXELFIELD_SLOW=1")
 @pytest.mark.parametrize("variant", VARIANTS, ids=lambda v: v.name)
