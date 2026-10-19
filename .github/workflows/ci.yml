@@ -11,6 +11,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
+      - run: grep -m1 "model name" /proc/cpuinfo; grep -qw avx512f /proc/cpuinfo && echo "AVX512 yes" || echo "AVX512 no"
+      - name: "Temporary A/B: library check with numpy AVX512 on"
+        continue-on-error: true
+        run: NPY_DISABLE_CPU_FEATURES= uv run pytest -q -k committed_library
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
