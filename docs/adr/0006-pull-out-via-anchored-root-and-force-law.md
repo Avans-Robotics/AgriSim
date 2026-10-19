@@ -1,0 +1,97 @@
+---
+status: accepted
+---
+
+# Pull-out via an anchored root and a displacement force law
+
+Harvesting must take a realistic force and feel realistic to a controller: the long-term goal is a learned pull policy, trained in simulation and run on a real robot with a small sim-to-real gap. Soil is not simulated. The root of a picked Plant is held by a per-Plant force law that depends only on how far the root has moved up, its Pull-out Curve, and the foliage is a chain of spring-jointed links that the gripper can bend and hold.
+
+## Decision
+
+### Pull-out Curve
+
+With `d` the upward displacement of the root, `v` its upward speed and `F` the resisting force, `F = F_curve(d) + c * v`, where `F_curve` is:
+
+- `0 <= d < d_peak`: `F` rises linearly from 0 to `F_peak`.
+- At `d_peak`: `F` drops to `residual_fraction * F_peak`.
+- `d_peak <= d < L`: `F` decays linearly to 0, with `L` the root length (the Variant's root length times the Plant's scale).
+- `d >= L`: the Plant is free.
+
+`F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. `F_peak` is sampled independently of root size until measurements show a correlation. The damping term `c * v` (per-Crop knob `pull_out_damping` in N s/m, default 0) acts only while the root is attached; it is off until measurements at two pull speeds give a value, and turning it on needs no code change. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and its parameters, `c` included, are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
+
+### Mechanism in Gazebo
+
+- A picked Plant gets an anchor: a light link in a non-static model, on a vertical prismatic joint to the world at the Plant's position, with its range from 0 to `L`. It must not be a static model: dartsim freezes a body welded to a static model.
+- The Plant's root link is welded to the anchor by a `DetachableJoint` entity (`components::DetachableJoint`, type fixed) that our system creates.
+- Every physics step the system reads the prismatic joint position `d` and velocity `v` and commands the joint force `-F`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
+- Only vertical pull-out is modelled: sideways and rotational motion of the root is rigid until detach. An angled pull is a later knob.
+- The system computes the force itself, so the resisting force is known exactly each step. It publishes `d`, `F` and the attached state on a topic.
+
+### Picking a Plant
+
+Plants stay visuals grouped per Pixel ([ADR 0007](0007-gazebo-plants-grouped-per-pixel.md)). A pick of one Plant id:
+
+1. Python (a `pixelfield` command in the Gazebo Exporter) reads the Manifest and the Variant physics export, writes the scaled SDF for that one Plant, and sends the request (Plant id, SDF path, Pull-out Curve parameters) with the `gz` CLI.
+2. A C++ gz-sim system in `src/pixelfield/exporters/gazebo/systems/` removes the grouped visual (`RequestRemoveEntity`), spawns the Plant model (`SdfEntityCreator`), creates the anchor and the weld, then runs the force law.
+
+All per-step logic is C++. The Python SDF build runs once per pick; it moves to C++ if pick latency matters in M5. The system only spawns, holds and detaches picked Plants: choosing which Plants near the robot become dynamic is not part of it.
+
+### Plant model
+
+- **Root**: one rigid link. Its collision is the convex hull of a low-poly copy of the generator's root profile, so a shoulder grip works too.
+- **Foliage**: per leaf, a chain of 3 petiole links joined by universal joints (two bending axes, twist rigid) with `spring_stiffness`, `spring_reference` 0 and `damping`. Stiffness per joint is `k = E * I / l`, with `I = pi * D^4 / 64` from the petiole diameter `D`, `l` the segment length and `E` the per-Crop `petiole_modulus` (guess about 500 MPa, measured for taro petioles; no carrot data found). Damping is a per-Crop knob.
+- **Collision**: each petiole segment collides as its convex hull. Leaf blades are visual only; their mass goes to the last petiole link of their leaf.
+- About 25 links per carrot. The main grip is the leaf bunch at the crown.
+
+### Variant physics export
+
+Engine-agnostic. The root crop Asset Generator writes next to each Variant's `.glb`:
+
+- `<variant>.physics.json`: links (mass, inertia, pose, hull file), joints (type, axes, stiffness, damping) and the root length, all at scale 1;
+- convex OBJ hulls for the root and every petiole segment.
+
+Masses and stiffnesses come from the Variant geometry plus per-Crop material constants in the Crop YAML, each marked with its source or `guess`. Exporters only translate this file to their engine (Gazebo SDF now, MuJoCo later) and apply the Plant's scale `s` consistently: lengths by `s`, masses and joint stiffnesses by `s^3`, inertias by `s^5`. Per-Plant values (Pull-out Force, scale) stay in the Manifest.
+
+### Stability check
+
+Per Variant, in a headless world for about 5 s of sim time at a 1 ms step:
+
+- settling: every link slower than 1 mm/s after 2 s, no NaN;
+- squeeze: box jaws closing 3 cm above the crown hold every petiole link, none tunnels out.
+
+The step size is a knob if a Variant fails. It runs as a slow test, skipped by default.
+
+### Scope
+
+Root crops only: carrot, then beetroot and radish through the same generator. Lettuce stays static, since it is cut, not pulled. Loose soil only.
+
+## Why
+
+- **Realism where the policy feels it.** The policy observes low-dimensional state (gripper pose and width, wrist force, crown position and a leaf bunch estimate from separate perception), so what matters is the force on the gripper over the pull and how the leaf bunch bends and slips. Both are cheap lumped models whose parameters can be measured on real Plants and randomized per Plant.
+- **Established practice.** Sim-to-real plant manipulation uses simple plant models plus randomization (PCAP: spring-jointed branches; Find the Fruit: FEM plus randomization). No learned uprooting work was found.
+- **No particle soil.** DEM and MPM root pull-out studies are geotechnics, far too costly per step, and need soil parameters we cannot measure in the field.
+- **A force law instead of a break.** Gazebo has no joint that breaks at a force, and a `DetachableJoint` has no force readout. Computing the force from displacement avoids both and gives a curve, not just a threshold.
+- **Universal joints.** dartsim honours springs on both axes of a universal joint, but not on ball joints. A revolute joint bends in one plane only.
+- **Engine-agnostic export.** Training is expected to move to MuJoCo later (spec section 12), and Gazebo must reproduce the same Plant and force law for end-to-end tests of the trained policy.
+- **C++ per step.** A Python loop over gz-transport each step is too slow and its timing is not tied to the physics step.
+
+## Not in M4
+
+- **Crown tear-off.** The tops of a carrot detach at 212 to 243 N, against 20 to 22 N to pull it out of loosened soil (Nath et al. 2019), so in loose soil the tops never tear. In undisturbed soil (118 to 149 N) the margin is only about 1.6x; tear-off returns with compact soil, as a second force law on the crown.
+- **Soil state per Pixel** (loose or compact).
+- **Grip damage limit**: carrots are damaged at about 43 to 45 N of grip; only noted in the Crop YAML.
+- **Angled pulls.**
+- **Calibration**: every parameter is a literature value or a guess until the measurement protocol has run. M4 Plants are uncalibrated.
+
+## Considered Options
+
+- **Force-threshold detach** (the earlier proposal): a `DetachableJoint` that breaks once its wrench exceeds the Pull-out Force. No force-displacement shape, and the wrench is not available on a `DetachableJoint`.
+- **Soil simulation** (particles, deformable terrain) or **our own simulator or soil plugin**: costly, and the parameters are not measurable.
+- **Cosserat rods or FEM for foliage**: heavier, and not portable to MuJoCo Warp (flex is experimental there, plugins are unsupported).
+- **Static Plants with scripted removal**: no force feedback for the manipulator.
+
+## Consequences
+
+- Each Variant gets a second committed export, kept fresh by tests like the `.glb`.
+- The root crop generator must keep parts per leaf: today it merges them per part type.
+- Removing a grouped visual with `RequestRemoveEntity` reaches the GUI through the world state, according to the gz-sim source; not yet observed in a running GUI.
