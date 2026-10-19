@@ -27,12 +27,13 @@ JAW_MASS = 0.1  # kg per jaw
 PALM_MASS = 0.3  # kg, below the wrist sensor
 CARRIAGE_MASS = 0.5  # kg, above it
 JAW_MU = 1.0  # friction of the jaw pads on petioles, guess
-# N per jaw: holds 2 * JAW_MU * 20 = 40 N, above any carrot (26 N), below the about 43 N
-# that damages a carrot
+# N per jaw: friction holds 2 * JAW_MU * 20 = 40 N, above any carrot (26 N), below the about
+# 43 N that damages a carrot. The convex hulls of curved petioles widen in places and the hulls
+# step at the link joints, so jaws sliding up the bunch can wedge and hold more than friction.
 GRIP_FORCE = 20.0
-WEAK_GRIP = 5.0  # N per jaw: holds about 10 N, below the weakest carrot (15 N)
+WEAK_GRIP = 5.0  # N per jaw: friction holds about 10 N, below the weakest carrot (15 N)
 CLOSE_SPEED = 0.05  # meters per second per jaw
-LIFT_ACCEL = 0.5  # m/s^2, ramps the lift speed so the gripper's inertia stays below 0.5 N
+LIFT_ACCEL = 0.5  # m/s^2, ramps the lift speed up and down: gripper inertia below 0.5 N
 LIFT_EFFORT = 1000.0  # N, effort limit of the lift: a stiff arm
 WRIST_TOPIC = "/pixelfield/gripper/wrist"  # gz.msgs.Wrench of the wrist sensor
 SETTLE = 0.1  # seconds before the jaws start closing
@@ -116,11 +117,12 @@ def grip(
     peak wrist force while attached, d at detach (None if it never detached), the largest d,
     the slip (gripper lift minus d at the end) and the Plant's weight.
     """
-    if speed <= 0:
-        raise ValueError("the lift speed must be above 0")
     world_dir = Path(world_dir)
     request = plant.pick_sdf(world_dir, plant_id)
     lift = request["depth"] + plant.PULL_AFTER if lift is None else lift
+    for name, value in (("lift speed", speed), ("lift", lift), ("grip force", grip_force)):
+        if not value > 0:  # also refuses NaN
+            raise ValueError(f"the {name} must be above 0")
     x, y, z, _ = request["pose"]
     crown = max(v[2] for v in request["root_hull"])
     world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force)
@@ -155,6 +157,8 @@ def squeeze(
     cross the grip height between the jaw faces (a 1 mm allowance for contact
     penetration), and `held`: no NaN, every leaf between the jaws, gap above zero.
     """
+    if not grip_force > 0:
+        raise ValueError("the grip force must be above 0")
     variant = Path(variant)
     physics = json.loads(variant.with_suffix(".physics.json").read_text())
     root = next(link for link in physics["links"] if link["name"] == "root")
@@ -169,9 +173,13 @@ def squeeze(
     leaves = sorted({name.split("_")[0] for name in pose if name.startswith("leaf")})
     for leaf in leaves:
         (ax, ay, az), (bx, by, bz) = pose[f"{leaf}_link0"], pose[f"{leaf}_link1"]
-        t = (crown + GRIP_HEIGHT - az) / (bz - az)
+        z = crown + GRIP_HEIGHT
+        if not min(az, bz) <= z <= max(az, bz) or az == bz:
+            escaped.append(leaf)
+            continue
+        t = (z - az) / (bz - az)
         px, py = ax + t * (bx - ax), ay + t * (by - ay)
-        if not (0.0 <= t <= 1.0 and abs(px) <= gap / 2 + 0.001 and abs(py) <= JAW_SIZE[1] / 2):
+        if not (abs(px) <= gap / 2 + 0.001 and abs(py) <= JAW_SIZE[1] / 2):
             escaped.append(leaf)
     return {"gap": gap, "leaves": len(leaves), "escaped": escaped, "nan": report["nan"],
             "held": not report["nan"] and not escaped and gap > 0.0}  # fmt: skip
@@ -188,7 +196,9 @@ def _run(world: Path, config: dict) -> dict:
         result = subprocess.run(
             [plant.SYSTEM_PYTHON, str(GRIP_SCRIPT), world.name, json.dumps(config)],
             cwd=world.parent, capture_output=True, text=True, check=True,
-            env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path},
+            # Own partition: Field worlds share a name, so runs would see each other's topics.
+            env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
+                 "GZ_PARTITION": f"pixelfield-{os.getpid()}"},
         )  # fmt: skip
     finally:
         world.unlink()

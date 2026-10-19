@@ -76,7 +76,8 @@ def pre_update(info, ecm):
     position = (joints["lift"].position(ecm) or [0.0])[0]
     lift = 0.0
     if config["lift"] and t >= start_lift and position < config["lift"]:
-        lift = min(config["speed"], config["lift_accel"] * (t - start_lift + STEP))
+        lift = min(config["speed"], config["lift_accel"] * (t - start_lift + STEP),
+                   math.sqrt(2 * config["lift_accel"] * (config["lift"] - position)))  # fmt: skip
     joints["lift"].set_velocity(ecm, [lift])
 
 

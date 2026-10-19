@@ -229,7 +229,9 @@ def pull(
         [SYSTEM_PYTHON, str(PULL_SCRIPT), "world.sdf", json.dumps(request), str(steps),
          repr(speed), repr(release)],
         cwd=world_dir, capture_output=True, text=True, check=True,
-        env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path},
+        # Own partition: Field worlds share a name, so runs would see each other's topics.
+        env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
+             "GZ_PARTITION": f"pixelfield-{os.getpid()}"},
     )  # fmt: skip
     report = json.loads(result.stdout.strip().splitlines()[-1])
     rows = report.pop("rows")

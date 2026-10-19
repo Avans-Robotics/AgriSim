@@ -132,7 +132,12 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     failed = 0
     for variant in args.variants:
         out = Path("out") / f"squeeze_{variant.name}"
-        r = gripper.squeeze(variant, out, args.scale, args.force)
+        try:
+            r = gripper.squeeze(variant, out, args.scale, args.force)
+        except subprocess.CalledProcessError as e:
+            parser.exit(1, f"error: the squeeze check failed:\n{e.stderr[-2000:]}\n")
+        except (OSError, ValueError, StopIteration) as e:
+            parser.exit(1, f"error: {variant} is not an articulated Variant: {e!r}\n")
         failed += not r["held"]
         print(f"{variant.name}: {'held' if r['held'] else 'NOT held'}, "
               f"gap {r['gap'] * 1000:.1f} mm, {len(r['escaped'])} of {r['leaves']} leaves "
