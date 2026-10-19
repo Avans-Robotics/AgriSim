@@ -96,4 +96,4 @@ Root crops only: carrot, then beetroot and radish through the same generator. Le
 
 - Each Variant gets a second committed export, kept fresh by tests like the `.glb`.
 - The root crop generator must keep parts per leaf: today it merges them per part type.
-- Removing a grouped visual with `RequestRemoveEntity` reaches the GUI through the world state, according to the gz-sim source; not yet observed in a running GUI.
+- Removing a grouped visual with `RequestRemoveEntity` reaches a running GUI through the world state (checked in M4d), although the server's scene info keeps listing it.
