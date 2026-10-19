@@ -683,3 +683,17 @@ Agreed with the user after a GUI session: any number of Plants can be picked at 
 Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 skipped), ruff, partial pull, live concurrent picks. GUI removal of the grouped visual still UNVERIFIED.
 ### Open items
 - GUI check of the grouped visual.
+
+## 2026-10-19 M4d done
+### Goal & outcome
+User checked in the GUI: after a pick and pulling the Plant away, no static copy stays behind, so the grouped visual removal reaches the GUI. All M4d checks of the spec are met: logged F(d) follows the Pull-out Curve, detach with a peak inside the Pull-out Force range, the visual is gone in the GUI. ADR 0006 and 0007 notes updated.
+### Decisions & why
+None
+### Lessons / gotchas
+- `/world/<w>/scene/info` keeps listing a visual removed with RequestRemoveEntity, while the GUI drops it: do not use scene info to check removals.
+### State
+Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 skipped), ruff, scripted pulls, live picks, GUI check by the user. m4d done.
+### Open items
+- Non-zero pull_out_damping never run.
+- Scale extremes (0.85, 1.15) not settle-checked (pulls at those scales passed).
+- Next: m4e test gripper, needs IMPLEMENT.
