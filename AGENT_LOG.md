@@ -607,3 +607,18 @@ Branch m4c-articulated-sdf (stacked on m4b-physics-export), commit 87e4c16, not 
 ### Open items
 - Decide: gravity-preloaded spring references (generated pose is the equilibrium) versus spring_reference 0 as in ADR 0006.
 - Run the 72-Variant slow test, then the GUI hand check.
+
+## 2026-10-19 M4c spring preload
+### Goal & outcome
+Petiole joints now carry a spring reference that holds the generated shape against gravity, computed by the generator at scale 1 and scaled by s in the SDF. Library physics exports regenerated (glb files unchanged). Settle check: carrot, beetroot and radish v00 all settle (at most 0.03 mm/s after 2 s, 0.1 mm travel).
+### Decisions & why
+- The generated shape is the shape under gravity (agreed): a spawned Plant must look like its static Variant, and a reference of 0 made carrot leaves lean up to 10 cm. ADR 0006 and spec updated.
+- Gravity 9.81 in the generator against Gazebo's default 9.8: the 0.1% mismatch leaves sub-millimetre sag, not worth an engine-specific value.
+### Lessons / gotchas
+- A spring reference scales with s (gravity torque s^4 over stiffness s^3).
+- `gz sim world.sdf` opens paused; a preloaded Plant does not visibly move on play, by design.
+### State
+Branch m4c-articulated-sdf, commits 87e4c16 and the preload commit, not pushed. Validated: pytest (71 passed, 72 slow skipped), ruff, settle runs of three Variants. 72-Variant slow test not run (needs a slot). Link visuals in the GUI UNVERIFIED.
+### Open items
+- Run `PIXELFIELD_SLOW=1 uv run pytest -k settles` (about 5 minutes).
+- GUI hand check of link visuals; scale extremes (0.85, 1.15) not checked.
