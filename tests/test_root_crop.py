@@ -75,13 +75,37 @@ def test_preview_has_one_mesh_model_per_variant(library, tmp_path):
     assert rolls == pytest.approx([1.5708] * len(paths), abs=1e-4)  # y-up glTF stood up
 
 
+def _numbers(value):
+    """The JSON value with every number replaced by 0, and its numbers in order."""
+    if isinstance(value, dict):
+        pairs = [(k, _numbers(v)) for k, v in value.items()]
+        return {k: shape for k, (shape, _) in pairs}, [n for _, (_, ns) in pairs for n in ns]
+    if isinstance(value, list):
+        pairs = [_numbers(v) for v in value]
+        return [shape for shape, _ in pairs], [n for _, ns in pairs for n in ns]
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return 0, [value]
+    return value, []
+
+
 @pytest.mark.parametrize("name", list(root_crop.CROPS))
 def test_committed_library_matches_generator(name, tmp_path):
-    """Catches a generator change committed without regenerating the Asset Library."""
+    """Catches a generator change committed without regenerating the Asset Library.
+
+    Physics exports are compared as numbers: numpy's sums differ in the last bit between CPUs
+    (SIMD kernels), which can flip a printed digit on another machine.
+    """
     library = REPO / "assets" / "library" / name
     root_crop.generate(name, len(list(library.glob("*_v??.glb"))), tmp_path)
     for path in tmp_path.iterdir():
-        assert path.read_bytes() == (library / path.name).read_bytes(), path.name
+        committed = (library / path.name).read_bytes()
+        if path.name.endswith(".physics.json"):
+            shape, numbers = _numbers(json.loads(path.read_bytes()))
+            committed_shape, committed_numbers = _numbers(json.loads(committed))
+            assert shape == committed_shape, path.name
+            assert numbers == pytest.approx(committed_numbers, rel=1e-5, abs=1e-12), path.name
+        else:
+            assert path.read_bytes() == committed, path.name
 
 
 def test_radish_root_fades_to_a_white_tip(tmp_path):
