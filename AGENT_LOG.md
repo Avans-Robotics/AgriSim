@@ -620,5 +620,17 @@ Petiole joints now carry a spring reference that holds the generated shape again
 ### State
 Branch m4c-articulated-sdf, commits 87e4c16 and the preload commit, not pushed. Validated: pytest (71 passed, 72 slow skipped), ruff, settle runs of three Variants. 72-Variant slow test not run (needs a slot). Link visuals in the GUI UNVERIFIED.
 ### Open items
-- Run `PIXELFIELD_SLOW=1 uv run pytest -k settles` (about 5 minutes).
 - GUI hand check of link visuals; scale extremes (0.85, 1.15) not checked.
+
+## 2026-10-19 M4c slow settle test
+### Goal & outcome
+`PIXELFIELD_SLOW=1 uv run pytest -k settles`: all 72 root crop Variants settle at scale 1 (72 passed, 5 min 14 s). User checked the carrot settle world in the GUI: link visuals look right.
+### Decisions & why
+None
+### Lessons / gotchas
+- Leaf blades have no visual thickness by design; their mass comes from `blade_mass_per_area`, so thickness would add triangles, not mass.
+### State
+Branch m4c-articulated-sdf, commits 87e4c16 and 2839af8, not pushed. Validated: slow test over 72 Variants, GUI visual check by the user. m4c done.
+### Open items
+- Scale extremes (0.85, 1.15) not checked.
+- Next chunk m4d-pullout-system (C++), needs IMPLEMENT.
