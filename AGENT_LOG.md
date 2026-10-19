@@ -668,3 +668,18 @@ User test in the GUI: a detached carrot dropped back through the soil to its old
 Branch m4d-pullout-system. Validated: pytest (74 passed, 72 skipped), ruff, scripted pull with drop for three Crops. GUI removal of the grouped visual still UNVERIFIED: the server's scene info still lists the static visual after a pick.
 ### Open items
 - GUI check of the grouped visual (does a static copy stay behind after pulling the picked Plant away?).
+
+## 2026-10-19 M4d several picks and post-peak ratchet
+### Goal & outcome
+Agreed with the user after a GUI session: any number of Plants can be picked at once (each Plant id once per running world), and after the peak the anchor's lower limit follows the highest point reached (`JointPositionLimitsCmd`), so a part-pulled root that is let go stays where it is. `pixelfield pull --release <m>` lets go early. Validated: a carrot released at 49 mm stays at 49.06 mm for 1 s, still attached; three concurrent picks against `gz sim -s`, each publishing its state, re-pick refused.
+### Decisions & why
+- Ratchet instead of the residual force pushing a loosened root back down: a real loosened carrot is held by friction. Explicit regularized friction was ruled out: stable only with a slip speed of about 0.1 m/s, which would distort the curve at a 5 cm/s pull. The joint limit is implicit, so stable.
+- ADR 0006 and spec updated (no longer one picked Plant at a time).
+### Lessons / gotchas
+- The user's "broken simulator" was an orphaned `gz sim server` (GUI gone, reparented to systemd, 82% CPU) holding the world name, plus new shells without GZ_SIM_SYSTEM_PLUGIN_PATH: a new `gz sim` then has a twin and picks reach the orphan.
+- While the ratchet holds a root, the state topic's force is the commanded residual force, taken up by the joint limit.
+- A heredoc ends a `&&` chain: commands on the following lines run even when the lint before it failed.
+### State
+Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 skipped), ruff, partial pull, live concurrent picks. GUI removal of the grouped visual still UNVERIFIED.
+### Open items
+- GUI check of the grouped visual.
