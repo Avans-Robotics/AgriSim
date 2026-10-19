@@ -719,3 +719,17 @@ Branch m4e-test-gripper, commits 10f3aa2 and f08dc97, not pushed. Validated: pyt
 - 20 N per jaw does not detach the strongest beetroot (60 N, slips 50 mm): grip force per Crop, or lift until detach.
 - Real petiole tunnelling out of the jaws never provoked, so the escape check is only verified on synthetic and geometric negatives.
 - Still open from earlier: non-zero pull_out_damping never run; settle check at scales 0.85 and 1.15.
+
+## 2026-10-19 M4e decisions after review
+### Goal & outcome
+User decided the open items: hull wedging accepted as a known limit (noted in ADR 0006 Consequences); a test added that the strongest beetroot in m3_crops (59.91 N) does not come out at 20 N per jaw and does at 1.5 x (Pull-out Force + weight) / (2 mu) = 47.8 N per jaw, detaching at the root depth with wrist force minus weight within 1% of its Pull-out Force. Separately, CODEOWNERS (`* @aandrien`) on its own branch `codeowners` from main, PR #15.
+### Decisions & why
+- No per-Crop grip force: slipping when friction cannot hold is correct physics; grip strength and pad friction are robot design choices for M5, and the friction value waits for the measurement protocol.
+### Lessons / gotchas
+- At 20 N per jaw the strongest beetroot still peaks at 63.6 N wrist force (friction allows 40 N): the jaws wedge on the hulls, break the bond, then slip 50 mm. The test checks "no detach", not "friction-limited".
+- CODEOWNERS done in a git worktree so the uncommitted AGENT_LOG.md stayed on m4e.
+### State
+Branch m4e-test-gripper, commit with the beetroot test on top of f08dc97, not pushed. Validated: tests/test_gripper.py 5 passed (beetroot test 17 s), ruff. PR #15 open, diff is the one CODEOWNERS line. Slow squeeze over 72 Variants still NOT run (needs a slot).
+### Open items
+- Slow squeeze run, then push m4e and open its PR.
+- Finer petiole hulls as a later chunk.
