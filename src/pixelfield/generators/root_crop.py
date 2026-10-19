@@ -12,6 +12,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import scipy.spatial  # noqa: F401  trimesh needs it for convex hulls; fail early on import
 import trimesh
 from PIL import Image
 from trimesh.visual.material import PBRMaterial

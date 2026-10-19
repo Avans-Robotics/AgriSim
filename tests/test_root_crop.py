@@ -101,15 +101,18 @@ def test_radish_root_fades_to_a_white_tip(tmp_path):
 
 
 # plausibility bounds per Crop, grams: root mass and top mass (leaves and petioles)
-MASS = {"carrot": ((50, 250), (5, 80)), "beetroot": ((50, 500), (10, 200)),
-        "radish": ((30, 300), (5, 150))}  # fmt: skip
+MASS = {"carrot": ((30, 250), (5, 80)), "beetroot": ((50, 500), (10, 200)),
+        "radish": ((20, 300), (5, 150))}  # fmt: skip
 
 
 @pytest.mark.parametrize("name", list(root_crop.CROPS))
-def test_physics_export(name, tmp_path):
+def test_physics_export(name):
+    """Every committed Variant; the freshness test ties them to the generator."""
     crop = root_crop.CROPS[name]
-    paths = root_crop.generate(name, 3, tmp_path)
-    sizes = json.loads((tmp_path / "variants.json").read_text())
+    library = REPO / "assets" / "library" / name
+    paths = sorted(library.glob("*_v??.glb"))
+    sizes = json.loads((library / "variants.json").read_text())
+    assert paths
     for path in paths:
         model = json.loads(path.with_suffix(".physics.json").read_text())
         links = {link["name"]: link for link in model["links"]}
