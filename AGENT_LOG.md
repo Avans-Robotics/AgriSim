@@ -570,3 +570,24 @@ Branch m4a-design, commit 601b2a5, not pushed. Docs only. Validated: relative li
 ### Open items
 - Maintainer reads the docs (m4a check), then m4b-physics-export.
 - Measurement protocol pull speed (about 5 cm/s) is a suggestion, not a decision.
+
+## 2026-10-19 M4b physics export
+### Goal & outcome
+The root crop generator writes, per Variant, `<variant>.physics.json` (links with pose, mass, center of mass, inertia and a convex hull in link frame; universal petiole joints with stiffness and damping; root length and depth) and `<variant>.articulated.glb` (one visual mesh per link). Library regenerated for carrot, beetroot and radish; static `.glb` files and `variants.json` stayed byte-identical. ADR 0006, spec and library README updated to match.
+### Decisions & why
+- Agreed in discussion: hulls inside the JSON (about 30 per Variant, 2,000 files otherwise); an articulated glb per Variant for link visuals (`<submesh>` in Gazebo); generation-time material constants in the generator's CROPS table, runtime Pull-out Curve knobs in the Crop YAML; petiole damping as a damping ratio, so damping scales by s^4.
+- Physics constants drawn from their own stream (`Random(f"physics-{index}")`) so visuals never shift.
+- Pull-out Curve ends at `root_depth` (length below the soil), not the full root length: the root is out once its buried part has travelled. ADR wording fixed.
+- Petiole mass from a round rod, not the 3- or 5-sided tube; inertia from point samples plus a short-cylinder term so the axial inertia never vanishes.
+- JSON written compact (half the size of indented); scipy added to the generate extra and dev group for trimesh's convex hull.
+### Lessons / gotchas
+- trimesh `convex_hull` silently needs scipy (lazy import); now imported up front.
+- Library globs counting Variants must use `*_v??.glb`, since `*.glb` now also matches the articulated files.
+- Validator caught that mass bounds tested only v00 to v02 and failed on 5 committed Variants; physics tests now read every committed Variant.
+### State
+Branch m4b-physics-export (stacked on m4a-design), commits 1312b95 and a fix, not pushed. Validated: pytest (69), ruff, validator agent (frames to 1 µm, masses, inertias, joint continuity, determinism), PIL hull sketch. Behaviour in Gazebo UNVERIFIED (m4c).
+### Open items
+- Smallest link inertia about 8.5e-10 kg m2 and carrot crown stiffness about 0.009 N m/rad: watch solver stability and leaf droop in m4c.
+- Carrot tops 14 g for v00 look light (thin visual petioles); calibration later.
+- Beetroot root hull is a cone (1.3 to 2.4x root volume); drooping carrot tips give small sail-shaped hulls; whole blade rides on the last link.
+- Root crop library 6.8 MB to 14.9 MB.
