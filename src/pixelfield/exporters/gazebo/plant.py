@@ -203,8 +203,9 @@ def pick(world_dir: Path, plant_id: str) -> bool:
     return "data: true" in result.stdout
 
 
-def pull(world_dir: Path, plant_id: str, speed: float = PULL_SPEED,
-         release: float | None = None) -> dict:
+def pull(
+    world_dir: Path, plant_id: str, speed: float = PULL_SPEED, release: float | None = None
+) -> dict:
     """Scripted pull, headless: pick a Plant of a built Field and lift its root at `speed`.
 
     Lets go at a lift of `release` meters (default PULL_AFTER past the root depth) and logs
