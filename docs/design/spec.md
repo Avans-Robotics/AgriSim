@@ -136,9 +136,7 @@ assets:
   library: assets/library/carrot
   generator: carrot      # key in GENERATORS, optional
   variants: 24
-collision:               # simple shapes, the visual mesh is only for rendering
-  root: capsule
-  foliage: cylinder
+  stage: harvest         # growth stage slot in Variant names, optional (ADR 0008)
 ```
 
 ## 7. Field Layout and Manifest
@@ -158,7 +156,7 @@ The Field Layout is the only thing Exporters read. It is written next to every e
       "id": "r0c0-017",
       "crop": "carrot",
       "pixel": [0, 0],
-      "variant": "carrot_v07",
+      "variant": "carrot_harvest_v07",
       "pose": {"x": 0.12, "y": 1.31, "z": 0.0, "yaw": 2.4},
       "scale": 1.04,
       "pull_out_force": 21.3
@@ -174,11 +172,15 @@ Plant ids are stable for a given spec and seed, so results from different runs c
 See [ADR 0003](../adr/0003-committed-asset-library.md) and [ADR 0004](../adr/0004-cropcraft-as-asset-source.md).
 
 - Each Crop has 24 Variants (default) as `.glb` with PBR materials, committed to `assets/library/<crop>/`.
-- Every Variant has a detailed visual mesh and simple collision shapes (capsule and cylinder). Convex hulls per Variant are a later option if grasping needs them.
+- Variants are named `<crop>_<stage>_v<NN>` (for example `carrot_harvest_v07`), see [ADR 0008](../adr/0008-variant-naming-with-growth-stage.md). The `.glb` is one mesh with one material, for the static Field only.
+- Plants have no collision yet. Direction for M4 (to be settled in its grill): a low-poly convex copy of the real root profile from the generator, and per-leaf petiole chains with springs for the foliage, so a gripper closing on the leaf bunch bends and holds it. Not capsules and cylinders.
 - Carrot Variants: a tapered orange root, mostly below ground with the shoulder visible, plus a crown of divided leaves. Root length, root diameter, foliage height and leaf count vary per Variant.
+- Beetroot Variants: a top-shaped crimson globe with a thin taproot, a third to half above ground, plus red-magenta stalks fanning out in a V with simple ovate blades (wavy margin, red midrib). Globe size, foliage height and leaf count vary per Variant.
+- Radish Variants (long red): a slender crimson-pink spindle fading to white at the tip, its shoulder a few cm above ground, plus pale green stalks with lyrate leaves (a large end lobe and small side lobes). Root size, fade point, foliage height and leaf count vary per Variant.
+- Lettuce Variants (romaine): an upright head of leaves in a golden-angle spiral, outer leaves darker and leaning out, a pale cupped heart, whitish midribs, crinkled surfaces and frilly margins. Head height, leaf count and lean vary per Variant. Own generator (`lettuce`), sharing the root crop generator's palette and file writing.
 - Default Asset Generator: pure Python with `trimesh`. A Blender generator may replace it for a Crop if the results look too crude, writing into the same library format.
-- Non-carrot Crops and weeds: exported once from CropCraft's Blender library to `.glb`.
-- Soil: a flat plane with a CC0 PBR soil texture (ambientCG or Poly Haven, 1 to 2K), committed to `assets/library/textures/`.
+- Root crops (carrot, beetroot, long red radish) share one generator, `root_crop`, with per-Crop ranges. Head lettuce (romaine) has its own generator, `lettuce`. Weeds: exported once from CropCraft's Blender library to `.glb`.
+- Soil: a flat plane of 1 m tiles with CC0 PBR soil textures (ambientCG), committed to `assets/library/textures/`. A moist base soil (Ground048) is blended with milder dry patches of a second soil (Ground066) and a faint moisture tint into a baked 4 x 4 atlas of tiles (`generators/soil.py`); its masks are periodic over the atlas, so tiles join without seams and the pattern repeats every 4 m. Normals stay the base soil's.
 - Library size estimate: about 5 MB per Crop. Move to Git LFS if the library passes about 100 MB.
 
 ## 9. Rendering
@@ -216,7 +218,7 @@ Deferred: a Docker image (ADR 0002), built when the first colleague or student n
 | M0 | Design spec, ADRs, glossary, repo structure | Spec agreed, open questions resolved or deferred |
 | M1 | One carrot Pixel end to end: repo tooling (uv, ruff, pytest, CI), core (Field Spec, Pixel grid, Planting Pattern, Field Layout, Manifest), carrot Asset Generator and library, Gazebo Exporter (soil, sun, VCT GI, cameras), headless render check, fixing the local `gz` PATH conflict | `pixelfield build examples/carrot_pixel.yaml` creates a world, Gazebo opens it, camera images show a believable carrot Pixel, core tests pass |
 | M2 | Multi-Pixel Fields, random mode, Path Gaps, performance measurement | A 10 x 10 random Field loads in Gazebo, frame rate and VRAM recorded |
-| M3 | More Crops (CropCraft import, candidate lettuce and onion), iterate on looks | At least three Crops render believably side by side |
+| M3 | More Crops (carrot, beetroot, long red radish, head lettuce), iterate on looks | All four Crops render believably side by side |
 | M4 | Pull-out physics (custom gz-sim system plus `DetachableJoint`) | A test pull detaches a Plant within its Pull-out Force range |
 | M5 | Amiga and manipulator integration | Separate plan |
 | M6 | Blender Exporter and sim-to-real experiments | Detectors trained on each image source evaluated on real images |
@@ -232,8 +234,8 @@ Resolved:
 3. **Random mode rules**: weights, an exact `empty_fraction`, and an optional `no_same_neighbour: true` over edge neighbours (section 5).
 4. **Path Gaps**: "every N columns, width W", off by default, columns only; they widen the Field instead of cutting into Pixels (section 5).
 5. **Detection labels**: Gazebo semantic segmentation only (one label per Pixel model, ADR 0007); per-Plant boxes are projected from the Manifest when a consumer needs them, YOLO export first.
-6. **Soil appearance**: one texture in M1, mild variation (blending 2 to 3 textures) in M3.
-7. **Crops for M3**: lettuce, onion and one CropCraft import (bean) as placeholders, to be replaced by the crops of the real field when known.
+6. **Soil appearance**: one texture in M1; in M3 mild variation by blending two soils plus a moisture tint into a seamless 4 x 4 m atlas (section 8).
+7. **Crops for M3**: carrot, beetroot, long red radish and head lettuce (Crop names `carrot`, `beetroot`, `radish`, `lettuce`; the variety goes in the Crop definition). Real plants are the target; shop props serve as visual reference for proportions and color only.
 8. **Performance budget**: at least 0.5x real time on the development laptop with a 10 x 10 Pixel Field and an active camera; target 1.0x or better.
 9. **License**: AGPL-3.0 is intended, so that commercial users contribute back. Relicensing later needs agreement of all copyright holders, which gets harder as outside contributions accumulate.
 10. **Name**: package `pixelfield`, repository AgriSim. The simulation may later also cover row crops and conventional single-crop fields; the name can be revisited then.
@@ -241,11 +243,11 @@ Resolved:
 
 Open (deferred):
 
-1. **Real camera** on the Amiga (model, resolution, field of view, mounting height and angle). Not needed until render cameras are matched to real data; M1 uses a generic placeholder camera.
+1. **Real camera** on the Amiga: an OAK-D Pro (RGB IMX378, HFOV 66 or 69 degrees depending on the focus version; stereo OV9282 pair, 1280 x 800, HFOV 80 degrees). Currently mounted at the Amiga front looking straight down; a mount pitched about 45 degrees down, looking along the rows, is planned. Still open: exact height, angle and focus version. The M3a perf check used an OAK-D-like rig and found triangle LOD unnecessary (see [perf.md](perf.md)).
 2. **Real field values** for Planting Patterns and harvest sizes, per Crop.
 3. **Row crops and single-crop fields**: out of scope now. The core should not assume Pixels are small, so a large "Pixel" with one Crop or a row layout stays possible later.
 4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it (M5 oracle perception, or M6 detectors trained on Gazebo renders). Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
-5. **Growth stages**: all Plants are harvest-ready for now. Farming games and CropCraft treat growth stage as a per-cell state with its own mesh; here it would be a Variant axis (Crop, stage, variation) chosen per Pixel or per Field. Keep Variant naming open for a stage so adding it later does not rename the library. See [prior-art.md](../research/prior-art.md).
+5. **Growth stages**: all Plants are harvest-ready for now. Farming games and CropCraft treat growth stage as a per-cell state with its own mesh; here it would be a Variant axis (Crop, stage, variation) chosen per Pixel or per Field. Variant names already carry a stage slot (ADR 0008), so adding a stage does not rename the library. See [prior-art.md](../research/prior-art.md).
 6. **Soil mechanics**: a rigid soil plane with a friction coefficient (value to be sourced in M5). Wheel slip via the gz-sim `WheelSlip` system when the Amiga drives (M5). Pull-out depends on soil state through ADR 0006. Deformable terrain (Project Chrono SCM, as a separate Exporter) only if wheel sinkage or ruts become a research question; particle soil (DEM) is out of scope.
 
 ## 13. Publication angle

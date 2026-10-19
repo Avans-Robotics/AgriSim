@@ -424,3 +424,129 @@ Branch docs-prior-art-physics (from origin/main), doc-only, committed, not pushe
 ### Open items
 - User: review, push and merge.
 - Missing sources: soil friction coefficient, root slip distance before detach.
+
+## 2026-10-16 M3a: OAK-D camera perf check, LOD ruled out
+### Goal & outcome
+M3 started (Crops: carrot, beetroot, long red radish, head lettuce; decofoodshop.nl props as visual reference only). First chunk measured an OAK-D-like rig (RGB 1920 x 1080 HFOV 66, depth 640 x 400 HFOV 80, both 30 Hz, 1.0 m) on `random_10x10`. Result: 0.50x in every pose (45 degrees along rows at Field edge or centre, nadir), 0.83x on a single Pixel. Triangle LOD is not part of M3. perf.md, spec open item 1 and CLAUDE.md (driver gotcha) updated, commit 4c527c9.
+### Decisions & why
+- No LOD: GPU at about 16% while one gz server thread is pegged at 100%, so rendering is CPU-bound on render items (3 meshes per carrot Variant, about 8,300 items), not triangles.
+- Pose A (45 degrees down, along rows) is the planned mount; nadir is the current real mount. Both measured; they give the same RTF.
+- Rig measured as hand-edited worlds (M2e method), no Exporter change until the real mount height and angle are known.
+### Lessons / gotchas
+- The 0.60x row from 2026-10-02 re-measures at 0.37x today, after the NVIDIA 595.84 to 595.99 and kernel -34 to -38 upgrades. Cause not isolated; compare only rows from the same system.
+- The cost scales with all Plants in the Field, not those in view: sun shadows draw every Plant (shadows off 0.62x).
+- `pkill -f "gz sim"` also matches any tool command line that merely contains that text, including a heredoc that writes a script. Write the script in one call, run it in another. Piping a measure script into `head` kills it before cleanup and leaves a server running that skews the next run.
+- Driver/library mismatch confirmed in the journal at the 11:18 upgrade (`Failed to initialize NVML`).
+### State
+Branch m3a-camera-perf, doc-only, committed, not pushed. Validated: averaged headless runs (numbers in perf.md). Rig worlds and scripts only in gitignored `out/` and the session scratchpad.
+### Open items
+- Cheap CPU levers for later: one mesh and material per Variant (fold into the shared root generator design), shorter shadow distance, merged render mesh per Pixel.
+- Optional: isolate the driver vs kernel regression.
+- `renders/` untracked on main: delete or gitignore (user's call).
+- Spec §12 item 7 still lists lettuce, onion, bean; update during the naming grill.
+- Next: grill on Variant naming with a growth stage slot and a shared root crop generator.
+
+## 2026-10-16 M3 grill and m3b: root_crop generator, stage slot, one mesh per Variant
+### Goal & outcome
+Grill settled Variant naming and the root crop generator design; m3b built it (stacked on m3a). `carrot.py` became `root_crop.py` with per-Crop ranges in `CROPS`; Variants are `<crop>_harvest_v<NN>`; each `.glb` is one mesh with one material sampling an sRGB palette texture. 10x10 OAK-D rig: 0.50x to 0.61x (nadir), 0.51x to 0.59x (edge). ADR 0008; spec M3 row, items 1, 5, 7 and §8 updated. Commits fd8c8ea (refactor, byte-identical Variants), 00d851f (merge plus docs).
+### Decisions & why
+- Name `<crop>_<stage>_v<NN>`, flat folder, stage as a plain word, optional `assets.stage` (default `harvest`); Manifest keeps only `variant`. Rename done now so later stages never rename the library.
+- Crop names `carrot`, `beetroot`, `radish`, `lettuce`; variety in the Crop definition. Lettuce gets its own generator (m3e).
+- One generator module for root crops; leaf shapes as named builders come with beetroot (m3c), not before.
+- Palette texture over vertex colors: gz-common `SubMesh` has no color channel. Parts keep separate inside `variant()`, merge only on write, so M4 can export articulated foliage for the spawned Plant.
+- User rejected capsule plus cylinder collision as unrealistic for grasping. Unused `collision:` keys removed from Crop YAMLs and spec; M4 direction recorded: convex low-poly root from the real profile, per-leaf spring petiole chains. Where the gripper grasps (leaf bunch or shoulder) is the first M4 question.
+- Chunk order: m3c beetroot, m3d radish, m3e head lettuce, m3f soil blend plus a four-Crop example Field. User supplies real photo links per Crop for the look check; nothing committed.
+- Pillow added to the `generate` extra and dev group only (trimesh needs it for textures).
+### Lessons / gotchas
+- glTF `baseColorFactor` is linear, texture texels are sRGB: writing the factor values straight into the palette made Plants clearly darker. Encoded, renders match main within 0.1/255 mean.
+- One UV per part gives a zero UV gradient, so sampling stays at mip 0 and part colors do not bleed at distance.
+- `pkill -f "gz sim"` also matches a tool command whose heredoc only writes a script containing that text. Write scripts and run them in separate calls.
+- 3x fewer render items gave about 20% more RTF, not 3x: shadows and per-frame overhead remain.
+### State
+Branch m3b-root-crop (on m3a-camera-perf), committed, not pushed. Validated: pytest (53), ruff, `gz sdf -k`, render comparison against main, averaged headless perf runs. Look of the merged Variants in the GUI UNVERIFIED (renders identical, GUI not opened).
+### Open items
+- User: review m3a and m3b, push and PR (stacked).
+- `renders/` untracked in the repo root (from running `render` there): delete or gitignore.
+- Next: m3c beetroot; needs real beetroot photo links from the user.
+
+## 2026-10-16 Perf: gz upgrade fixes the 10x10 camera cost; active region parked
+### Goal & outcome
+User wanted a real fix instead of tweaks ("render only what the camera sees"). Research (gz source) found per-visual CPU fixes in gz-rendering 8.3.0 and gz-sim 8.15.0, already in apt. After the user upgraded: 10x10 with the OAK-D rig 0.96x nadir, 0.92x edge (was 0.61/0.59), old two-camera baseline 0.95x (was 0.37), single Pixel 1.01x. perf.md and CLAUDE.md (minimum versions) updated, commit on m3b-root-crop. The OAK-D rig worlds in `out/` now show a body box and yellow field-of-view lines in the GUI, hidden from the rig's own sensors.
+### Decisions & why
+- Active region (Field Manager gz-sim system: merged far Pixels, detailed near the robot, dynamic only for the grasped Plant) agreed as the right design if needed, as its own milestone merged with M4. Not needed for a 10x10 Field now; grill Q1-Q5 (performers plus radius, Pixel as swap unit, free-running camera, plugin in exporters/gazebo/systems/, opt-in fallback) left unanswered.
+- No event-driven Gazebo fork: lockstep sensor sync and repeatability are worth keeping.
+### Lessons / gotchas
+- Check upstream changelogs and apt candidates before designing around a performance problem: the "real solution" was a package upgrade.
+- From gz source: in-memory meshes (`name://`) are invisible to the separate GUI process; triggered cameras (`<triggered>`) stop blocking the sim between triggers; sensors without subscribers are skipped; gz-sim never marks visuals static and sets every pose every frame; gz-rendering 8 hardcodes 500 m shadow range and 3 PSSM splits.
+- SDF `<visibility_flags>` on visuals plus `<visibility_mask>` on sensors hides GUI-only markers from robot cameras (verified: 0 marker pixels). A plain OBJ with an SDF material rendered flat white and opaque; primitives work.
+- Heavy gz runs slow the user's laptop: ask for a slot before running them (memory saved).
+### State
+Branch m3b-root-crop, committed, not pushed. Validated: averaged headless runs after the upgrade. perf_event_paranoid still 4, no CPU profile taken (no longer needed).
+### Open items
+- User: review and push m3a and m3b.
+- Next: m3c beetroot (photo links from the user).
+- Active region grill when Fields grow beyond 10x10 or at M4.
+
+## 2026-10-16 m3c: beetroot Variants
+### Goal & outcome
+Beetroot added through the root crop generator: `globe` root profile (top-shaped, thin taproot, a third to half above soil), `simple` leaf builder (ovate blade, blunt tip, wavy margin, slight cup; the red stalk tube runs on as the midrib), per-Crop leaf curve so stalks fan out in a V. 24 Variants (2.1k to 3.2k triangles, 1.6 MB), `crops/beetroot.yaml`, `examples/beetroot_pixel.yaml` (12 Plants), spec §8 bullet. Commit a9f8fc1 on m3c-beetroot (from m3b).
+### Decisions & why
+- Grill: midrib only (no vein texture, side veins are a few pixels at 1 m), round red table beet at harvest, 2 rows 0.25 m apart at 0.08 m in-row, pull-out 30 to 60 N guessed, user photos stay out of the repo.
+- Margin 0.05 instead of the discussed 0.125: with 0.125 the layout fits only 4 Plants per row (8 per Pixel), not the intended 12.
+- Of the 7 user photos, 1 to 4 are the reference; 5 and 6 look AI-generated (layout only); 7 is Swiss chard.
+- Beet colors are written as linear factors with their sRGB targets in comments, since the palette encodes linear to sRGB.
+### Lessons / gotchas
+- A quick flat-shaded PIL sketch of `variant()` parts (scratchpad `sketch.py`) catches shape errors in seconds without Gazebo: it showed the first beet as an umbrella (blades flat on top) because the carrot curve droops; per-Crop `leaf_arch`, `leaf_reach`, `leaf_tip` fixed it.
+- Keeping carrot rng call order unchanged keeps its Variants byte-identical; checked after each generator change.
+### State
+Branch m3c-beetroot, committed, not pushed. Validated: pytest (54), ruff, `gz sdf -k` on beetroot_pixel and beetroot_variants, carrot bytes unchanged, PIL sketches. Gazebo render and look vs photos UNVERIFIED (render needs a slot from the user).
+### Open items
+- Headless render of `out/beetroot_pixel/world.sdf` (about 15 s) when the user allows, then compare with photos 1 to 4.
+- Known look gaps: no side veins, no rough crown, one roughness for the whole Plant (beet leaves are glossier).
+- Next: m3d radish.
+
+## 2026-10-16 M3 build-out: radish, lettuce, soil atlas, four-Crop example
+### Goal & outcome
+User asked to implement the rest of M3 in one go. Built as stacked branches: m3d-radish (48c1f0b: `spindle` root, `lobed` lyrate leaves, root color fade to a white tip), m3e-lettuce (0afc641: romaine generator `lettuce.py`, reusing root_crop helpers), m3f-soil (da58678: two CC0 soils blended into a seamless 4 x 4 atlas of 1 m tiles, Exporter picks tile (i % 4, j % 4); `examples/m3_crops.yaml` with all four Crops, seed 8 for 7 to 9 Pixels each). Also on m3c: 0d4186e regenerates the beetroot library, which had been committed from the first draft.
+### Decisions & why
+- Reference photos: radish 9 and 10 (8 color only, 11 is AI-looking round radish); lettuce 13 and 14 are romaine, so "head lettuce" became romaine (12 is loose-leaf, frill only).
+- Root fade: a palette column holds a vertical gradient and v follows height, keeping one mesh and one material per Variant.
+- Soil: bake offline into the library (ADR 0003 style) instead of per-Field at build time, so the Exporter needs no Pillow at runtime. Masks are sums of sines with whole periods over 4 m, so tiles are seamless; the pattern repeats every 4 m, beyond the camera's view. Dry patches capped at 45% mix ("mild" per spec). Normals stay the base soil's (gap: dry patches have the base relief). Ground104 and Ground036 rejected (yellow sand, grey debris).
+- Lettuce `variants.json` holds foliage only; no root mesh.
+### Lessons / gotchas
+- Generating a library, then changing the generator and committing without regenerating, shipped stale beet Variants. New tests regenerate v00 per Crop and compare bytes with the committed file.
+- trimesh flips v on glTF export (bottom-left vs top-left origin): constant v = 0.5 hides it, a gradient exposes it.
+- gz-common `CreateBox` top face: u runs north to south along y, v east to west along x; the soil atlas is baked in that orientation (from source, render check pending).
+- Writing a file twice from one original string in a Python edit script silently drops the first edit.
+### State
+Branches m3d-radish, m3e-lettuce, m3f-soil (stacked on m3c, m3b, m3a), committed, not pushed. Validated: pytest (63), ruff, `gz sdf -k` for all examples, PIL sketches, atlas seam test. Gazebo renders of the new Crops, the soil and the four-Crop Field UNVERIFIED (need a slot from the user; script ready in the session scratchpad). Validator agent running.
+### Open items
+- User: render slot for the M3 look check (about 70 s), then compare with photos.
+- Look gaps: no side veins on beet, no rough crown, one roughness per Plant, shared soil normals, lettuce crinkle only geometric.
+- Review and merge the six stacked branches (m3a to m3f).
+
+## 2026-10-16 M3 validation fixes
+### Goal & outcome
+Validator agent found no blocking bugs (all 96 Variants fresh and deterministic, no NaN, UVs inside their palette columns, radish fade correct, CreateBox mapping confirmed by a compiled probe against libgz-common5). Fixed its confirmed findings in 26eda5e on m3f-soil: freshness tests over every Variant, ValueError for leaves running straight up (was NaN), stronger soil seam test, atlas size tied to the Exporter, stale tiles removed on rebake, only the shared normal map copied into builds, README parts list.
+### Decisions & why
+- All fixes on the top branch m3f-soil; the stack merges in order, so m3d and m3e do not carry them on their own.
+### Lessons / gotchas
+- Seam tests on full-resolution textures drown in texture grain; low-pass to the scale of the mask first (32 px per m), then wrong mappings score 3.9+ against 1.36.
+### State
+Branch m3f-soil, committed, not pushed. Validated: pytest (65), ruff, `gz sdf -k` for all 9 examples. Gazebo look of radish, lettuce, soil and the four-Crop Field UNVERIFIED (render slot).
+### Open items
+- Suspicions not confirmed: mip bleed on the fading radish root at distance, irregular radish lobe notches at 4 pairs, lettuce lighting from below (no `_face_up`), rotated rows can leave lettuce Pixels empty (core, older).
+- Render slot, then the look check; review and merge m3a to m3f.
+
+## 2026-10-16 M3 render check against photos
+### Goal & outcome
+Headless renders (top, oblique) of beetroot_pixel, radish_pixel, lettuce_pixel and m3_crops compared with the user's photos. Beetroot matches best (crimson globes a third above soil, red stalks fanning out, red midribs). Radish reads as radish (red shoulders, pale stalks) but its leaves look like smooth round paddles, lobes barely show. Romaine reads as an upright head with a pale heart and white midribs, but faceted and too dark, no visible crinkle or frill. Soil: mild lighter and darker patches, no tile seams visible in any render.
+### Decisions & why
+None; gaps recorded for a look-iteration chunk.
+### Lessons / gotchas
+- At 1 m camera distance, flat single-color blades look plastic; venation and color variation across a leaf matter more than more geometry for beet and radish.
+- Geometric crinkle of 2.5 mm on 12 stations is invisible; lettuce needs finer mesh or a normal/detail texture.
+### State
+Branch m3f-soil, PR #10. Renders in gitignored out/<world>/renders/. Look judged by the agent only; user verdict pending.
+### Open items
+- Look iteration (proposed m3g): lettuce lighter yellow-green, more stations and stronger frill; radish deeper lobes with more stations; leaf textures with veins and color variation per Crop (palette design change, needs discussion).

@@ -29,6 +29,7 @@ class Crop:
     pull_out_force: tuple[float, float]
     variants: int
     library: str  # Asset Library folder of this Crop's Variants
+    stage: str  # growth stage slot in Variant names, e.g. carrot_harvest_v07
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def load_crop(path: Path) -> Crop:
         pull_out_force=tuple(data["physics"]["pull_out_force"]),
         variants=data["assets"].get("variants", 24),
         library=data["assets"].get("library", f"assets/library/{data['name']}"),
+        stage=data["assets"].get("stage", "harvest"),
     )
 
 

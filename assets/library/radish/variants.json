@@ -1,0 +1,266 @@
+{
+  "radish_harvest_v00": {
+    "root": {
+      "length": 0.2344,
+      "radius": 0.0201,
+      "top": 0.0326
+    },
+    "foliage": {
+      "height": 0.3451,
+      "radius": 0.1825
+    }
+  },
+  "radish_harvest_v01": {
+    "root": {
+      "length": 0.1634,
+      "radius": 0.021,
+      "top": 0.0429
+    },
+    "foliage": {
+      "height": 0.3538,
+      "radius": 0.1807
+    }
+  },
+  "radish_harvest_v02": {
+    "root": {
+      "length": 0.2456,
+      "radius": 0.022,
+      "top": 0.0217
+    },
+    "foliage": {
+      "height": 0.3319,
+      "radius": 0.1865
+    }
+  },
+  "radish_harvest_v03": {
+    "root": {
+      "length": 0.1738,
+      "radius": 0.0179,
+      "top": 0.0311
+    },
+    "foliage": {
+      "height": 0.2688,
+      "radius": 0.1375
+    }
+  },
+  "radish_harvest_v04": {
+    "root": {
+      "length": 0.1736,
+      "radius": 0.0135,
+      "top": 0.0319
+    },
+    "foliage": {
+      "height": 0.3474,
+      "radius": 0.1727
+    }
+  },
+  "radish_harvest_v05": {
+    "root": {
+      "length": 0.2123,
+      "radius": 0.0199,
+      "top": 0.0439
+    },
+    "foliage": {
+      "height": 0.2675,
+      "radius": 0.1311
+    }
+  },
+  "radish_harvest_v06": {
+    "root": {
+      "length": 0.2293,
+      "radius": 0.0207,
+      "top": 0.0346
+    },
+    "foliage": {
+      "height": 0.3106,
+      "radius": 0.1582
+    }
+  },
+  "radish_harvest_v07": {
+    "root": {
+      "length": 0.1824,
+      "radius": 0.014,
+      "top": 0.0395
+    },
+    "foliage": {
+      "height": 0.2651,
+      "radius": 0.1353
+    }
+  },
+  "radish_harvest_v08": {
+    "root": {
+      "length": 0.1727,
+      "radius": 0.0221,
+      "top": 0.0238
+    },
+    "foliage": {
+      "height": 0.3776,
+      "radius": 0.2069
+    }
+  },
+  "radish_harvest_v09": {
+    "root": {
+      "length": 0.1963,
+      "radius": 0.0162,
+      "top": 0.0242
+    },
+    "foliage": {
+      "height": 0.3725,
+      "radius": 0.2119
+    }
+  },
+  "radish_harvest_v10": {
+    "root": {
+      "length": 0.2071,
+      "radius": 0.0168,
+      "top": 0.0373
+    },
+    "foliage": {
+      "height": 0.3424,
+      "radius": 0.1836
+    }
+  },
+  "radish_harvest_v11": {
+    "root": {
+      "length": 0.1952,
+      "radius": 0.0181,
+      "top": 0.0477
+    },
+    "foliage": {
+      "height": 0.3072,
+      "radius": 0.1683
+    }
+  },
+  "radish_harvest_v12": {
+    "root": {
+      "length": 0.1975,
+      "radius": 0.0191,
+      "top": 0.04
+    },
+    "foliage": {
+      "height": 0.3099,
+      "radius": 0.1759
+    }
+  },
+  "radish_harvest_v13": {
+    "root": {
+      "length": 0.1759,
+      "radius": 0.0194,
+      "top": 0.0405
+    },
+    "foliage": {
+      "height": 0.2803,
+      "radius": 0.151
+    }
+  },
+  "radish_harvest_v14": {
+    "root": {
+      "length": 0.1607,
+      "radius": 0.0195,
+      "top": 0.0396
+    },
+    "foliage": {
+      "height": 0.3479,
+      "radius": 0.1831
+    }
+  },
+  "radish_harvest_v15": {
+    "root": {
+      "length": 0.2465,
+      "radius": 0.0126,
+      "top": 0.0421
+    },
+    "foliage": {
+      "height": 0.3865,
+      "radius": 0.192
+    }
+  },
+  "radish_harvest_v16": {
+    "root": {
+      "length": 0.1862,
+      "radius": 0.0173,
+      "top": 0.0325
+    },
+    "foliage": {
+      "height": 0.3113,
+      "radius": 0.157
+    }
+  },
+  "radish_harvest_v17": {
+    "root": {
+      "length": 0.2022,
+      "radius": 0.0206,
+      "top": 0.0488
+    },
+    "foliage": {
+      "height": 0.3804,
+      "radius": 0.1797
+    }
+  },
+  "radish_harvest_v18": {
+    "root": {
+      "length": 0.1681,
+      "radius": 0.0191,
+      "top": 0.03
+    },
+    "foliage": {
+      "height": 0.3077,
+      "radius": 0.1679
+    }
+  },
+  "radish_harvest_v19": {
+    "root": {
+      "length": 0.2177,
+      "radius": 0.0203,
+      "top": 0.0356
+    },
+    "foliage": {
+      "height": 0.278,
+      "radius": 0.1682
+    }
+  },
+  "radish_harvest_v20": {
+    "root": {
+      "length": 0.2406,
+      "radius": 0.0194,
+      "top": 0.043
+    },
+    "foliage": {
+      "height": 0.3557,
+      "radius": 0.1774
+    }
+  },
+  "radish_harvest_v21": {
+    "root": {
+      "length": 0.1665,
+      "radius": 0.0194,
+      "top": 0.039
+    },
+    "foliage": {
+      "height": 0.3675,
+      "radius": 0.1759
+    }
+  },
+  "radish_harvest_v22": {
+    "root": {
+      "length": 0.2458,
+      "radius": 0.0139,
+      "top": 0.0207
+    },
+    "foliage": {
+      "height": 0.3491,
+      "radius": 0.1814
+    }
+  },
+  "radish_harvest_v23": {
+    "root": {
+      "length": 0.2425,
+      "radius": 0.022,
+      "top": 0.0468
+    },
+    "foliage": {
+      "height": 0.3294,
+      "radius": 0.1548
+    }
+  }
+}

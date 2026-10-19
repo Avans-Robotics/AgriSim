@@ -1,0 +1,7 @@
+# One romaine lettuce Pixel, for the M3 look check against photos.
+pixel_size: 0.5
+seed: 42
+legend:
+  L: lettuce
+grid: |
+  L

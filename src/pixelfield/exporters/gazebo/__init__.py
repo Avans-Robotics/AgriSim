@@ -17,9 +17,12 @@ from pixelfield.exporters.colors import crop_colors
 SDF_VERSION = "1.9"
 SOIL_BORDER = 0.5  # meters of soil around the Field
 SOIL_THICKNESS = 0.02
-# CC0 PBR soil (ambientCG Ground048), copied into textures/ next to world.sdf.
+# CC0 PBR soil (ambientCG Ground048) and its tiles with dry patches baked in (see
+# generators/soil.py), copied into textures/ next to world.sdf.
 SOIL_TEXTURES = Path("assets/library/textures/soil")
-SOIL_TILE = 1.0  # meters covered by one copy of the texture
+SOIL_TILES = Path("assets/library/textures/soil_tiles")
+SOIL_ATLAS = 4  # soil tiles per side of the baked atlas; tile (i, j) uses (i % 4, j % 4)
+SOIL_TILE = 1.0  # meters covered by one soil tile
 # Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
@@ -64,7 +67,9 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
     # centred on the soil; the outer tiles may overhang the collision box a little.
     textures = Path(out_dir) / "textures"
-    shutil.copytree(SOIL_TEXTURES, textures, dirs_exist_ok=True)
+    textures.mkdir(parents=True, exist_ok=True)
+    shutil.copy(SOIL_TEXTURES / "normal.jpg", textures)  # shared; color and roughness are baked
+    shutil.copytree(SOIL_TILES, textures / "tiles", dirs_exist_ok=True)
     nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size[:2])
     for i in range(nx):
         for j in range(ny):
@@ -73,7 +78,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             _text(visual, "pose", _join(offset + (0.0, 0.0, 0.0, 0.0)))
             box = ET.SubElement(ET.SubElement(visual, "geometry"), "box")
             _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
-            visual.append(_soil_material())
+            visual.append(_soil_material(i % SOIL_ATLAS, j % SOIL_ATLAS))
 
     for name, (pitch, distance) in CAMERAS.items():
         world.append(_camera(name, (width / 2, depth / 2), pitch, distance))
@@ -245,14 +250,15 @@ def _material(rgba: tuple[float, ...]) -> ET.Element:
     return material
 
 
-def _soil_material() -> ET.Element:
+def _soil_material(i: int, j: int) -> ET.Element:
+    """Atlas tile (i, j); neighbouring atlas tiles join without seams, the normals are shared."""
     material = ET.Element("material")
     for tag in ("ambient", "diffuse"):
         _text(material, tag, "1 1 1 1")  # let the albedo map set the color
     metal = ET.SubElement(ET.SubElement(material, "pbr"), "metal")
-    for tag, name in [("albedo_map", "color"), ("normal_map", "normal"),
-                      ("roughness_map", "roughness")]:  # fmt: skip
-        _text(metal, tag, f"textures/{name}.jpg")  # resolved against world.sdf
+    for tag, path in [("albedo_map", f"tiles/tile_{i}_{j}_color"), ("normal_map", "normal"),
+                      ("roughness_map", f"tiles/tile_{i}_{j}_roughness")]:  # fmt: skip
+        _text(metal, tag, f"textures/{path}.jpg")  # resolved against world.sdf
     _text(metal, "metalness", "0")
     return material
 
