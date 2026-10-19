@@ -51,7 +51,7 @@ WORLD_NAME = "pixelfield"
 # GZ_SIM_SYSTEM_PLUGIN_PATH; a world without it still runs, gz only logs that it is missing.
 PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
 # A picked root starts inside the soil box, so it must not collide with the soil: the soil
-# keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK).
+# keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
 SOIL_BITMASK = 0x1
 
 

@@ -28,7 +28,8 @@ SYSTEM_PYTHON = "/usr/bin/python3"
 SETTLE_SCRIPT = Path(__file__).with_name("settle_check.py")
 PULL_SCRIPT = Path(__file__).with_name("pull_check.py")
 PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pull speed
-PULL_AFTER = 0.03  # meters lifted past the root depth, so the detach is in the log
+PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
+DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
 SYSTEMS_BUILD = Path(__file__).resolve().parents[4] / "build" / "systems"
 NAMESPACE = "https://github.com/Avans-Robotics/AgriSim"  # of custom SDF elements
 ROOT_BITMASK = 0xFFFF & ~gazebo.SOIL_BITMASK  # the root collides with all but the soil
@@ -163,6 +164,7 @@ def pick_sdf(world_dir: Path, plant_id: str) -> dict:
     physics = json.loads(variant.with_suffix(".physics.json").read_text())
     s = p["scale"]
     depth = physics["root_depth"] * s
+    root = next(link for link in physics["links"] if link["name"] == "root")
     out = world_dir / "picks" / plant_id
     model = plant_model(variant, s, out, name=plant_id)
     ET.SubElement(model, "pixelfield:pull_out", f_peak=_num(p["pull_out_force"]),
@@ -181,6 +183,7 @@ def pick_sdf(world_dir: Path, plant_id: str) -> dict:
         "pull_out_force": p["pull_out_force"],
         "depth": depth,
         "mass": sum(link["mass"] for link in physics["links"]) * s**3,
+        "root_hull": [[c * s for c in v] for v in root["hull"]["vertices"]],
     }
 
 
@@ -203,40 +206,44 @@ def pick(world_dir: Path, plant_id: str) -> bool:
 def pull(world_dir: Path, plant_id: str, speed: float = PULL_SPEED) -> dict:
     """Scripted pull, headless: pick a Plant of a built Field and lift its root at `speed`.
 
-    Writes the log to picks/<plant id>/pull.csv (time, lift, pull force, d, force, attached;
-    d, force and attached come from the system's state topic; d is read at the start of the
-    step, lift at its end). The report adds the request,
+    Lets go PULL_AFTER past the root depth and logs DROP_TIME more, so the Plant drops. Writes
+    the log to picks/<plant id>/pull.csv (time, lift, pull force, bottom: the root's lowest
+    point, then d, force, attached from the system's state topic; d is read at the start of
+    the step, lift at its end). The report adds the request,
     whether the grouped visual was there before and after, the peak pull and soil forces, the
-    Plant's weight, and d at detach (None if it never detached).
+    Plant's weight, d at detach (None if it never detached) and the root's lowest point at the
+    end (landed_bottom).
     """
     if speed <= 0:
         raise ValueError("the pull speed must be above 0")
     world_dir = Path(world_dir)
     request = pick_sdf(world_dir, plant_id)
-    steps = round((request["depth"] + PULL_AFTER) / speed / STEP)
+    release = request["depth"] + PULL_AFTER
+    steps = round((release / speed + DROP_TIME) / STEP)
     path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
     result = subprocess.run(
         [SYSTEM_PYTHON, str(PULL_SCRIPT), "world.sdf", json.dumps(request), str(steps),
-         repr(speed)],
+         repr(speed), repr(release)],
         cwd=world_dir, capture_output=True, text=True, check=True,
         env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path},
     )  # fmt: skip
     report = json.loads(result.stdout.strip().splitlines()[-1])
     rows = report.pop("rows")
     log = world_dir / "picks" / plant_id / "pull.csv"
-    log.write_text("time,lift,pull_force,d,force,attached\n"
+    log.write_text("time,lift,pull_force,bottom,d,force,attached\n"
                    + "".join(",".join("" if v is None else repr(v) for v in row) + "\n"
                              for row in rows))  # fmt: skip
-    attached = [row for row in rows if row[5]]
-    detach = next((row for row in rows if row[5] is False), None)
+    attached = [row for row in rows if row[6]]
+    detach = next((row for row in rows if row[6] is False), None)
     return {
         **request,
         **report,
         "peak_pull": max((row[2] for row in attached), default=0.0),
-        "peak_force": max((row[4] for row in attached), default=0.0),
+        "peak_force": max((row[5] for row in attached), default=0.0),
         "weight": request["mass"] * 9.8,
-        "detach_d": detach[3] if detach else None,
+        "detach_d": detach[4] if detach else None,
+        "landed_bottom": rows[-1][3] if rows else None,
         "log": log,
     }
 

@@ -128,6 +128,7 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
           f"peak soil force {r['peak_force']:.2f} N (Pull-out Force {r['pull_out_force']:.2f} N), "
           f"peak pull {r['peak_pull']:.2f} N with weight {r['weight']:.2f} N, "
           f"grouped visual removed: {r['visual_before'] and not r['visual_after']}, "
+          f"root bottom after the drop {r['landed_bottom'] * 1000:.1f} mm, "
           f"log: {r['log']}")  # fmt: skip
     if not r["detach_d"]:
         parser.exit(1, "error: the Plant did not detach\n")

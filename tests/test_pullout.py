@@ -82,4 +82,5 @@ def test_scripted_pull_follows_the_curve_and_detaches(field):
     assert r["peak_force"] == pytest.approx(p["pull_out_force"], rel=0.02)
     low, high = load_crop(REPO / "crops" / "carrot.yaml").pull_out_force
     assert low <= r["peak_pull"] - r["weight"] <= high * 1.05  # what the gripper feels
-    assert float(rows[-1]["lift"]) > r["depth"] + 0.02  # free after detach, moves with the pull
+    assert max(float(row["lift"]) for row in rows) > r["depth"] + 0.02  # free after the detach
+    assert r["landed_bottom"] > -0.003  # dropped, it lands on the soil instead of sinking in

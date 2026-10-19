@@ -1,14 +1,15 @@
 """Scripted pull of one picked Plant, run in the system Python with the Gazebo bindings.
 
-Usage: pull_check.py <world.sdf> <request json> <steps> <speed>
+Usage: pull_check.py <world.sdf> <request json> <steps> <speed> <release>
 
 Loads a Field world (without its Sensors system), sends the pick request to the pull-out
 system, then lifts the Plant's root at <speed> m/s with a stiff spring-damper force, as a
-gripper holding the root would. The lift is a vertical force only, so a detached Plant can
-tip over a while after the detach. Prints one JSON line: whether the request was accepted,
-whether the Plant's grouped visual exists before and after, and one row per step after the
-spawn: time, lift, pull force, then d, force and attached from the system's state topic,
-matched to the step by its time stamp (None when no state was published that step).
+gripper holding the root would, and lets go once the lift target passes <release> meters, so
+the Plant drops. The lift is a vertical force only, so a detached Plant can tip over. Prints
+one JSON line: whether the request was accepted, whether the Plant's grouped visual exists
+before and after, and one row per step after the spawn: time, lift, pull force, the lowest
+point of the root's collision hull (world z), then d, force and attached from the system's state
+topic, matched to the step by its time stamp (None when no state was published that step).
 """
 
 import json
@@ -30,8 +31,9 @@ PULL_STIFFNESS = 5000.0  # N/m, gripper on the root: about 5 mm lag at 25 N
 PULL_DAMPING = 30.0  # N s/m, on the speed relative to the lift target
 
 world_sdf, request = sys.argv[1], json.loads(sys.argv[2])
-steps, speed = int(sys.argv[3]), float(sys.argv[4])
+steps, speed, release = int(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
 name = request["name"]
+hull = request["root_hull"]  # root collision hull vertices in the root link frame
 fast = Path(world_sdf).with_name(".pull_fast.sdf")
 text = Path(world_sdf).read_text()
 text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", text)
@@ -76,6 +78,8 @@ def pre_update(info, ecm):
     t = (info.iterations - pull["t0"]) * STEP
     lift = root.world_pose(ecm).pos().z() - pull["z0"]
     force = PULL_STIFFNESS * (speed * t - lift) - PULL_DAMPING * (velocity.z() - speed)
+    if speed * t > release:
+        force = 0.0
     root.add_world_force(ecm, gz.math7.Vector3d(0.0, 0.0, force))
     pull["force"] = force
 
@@ -86,7 +90,9 @@ def post_update(info, ecm):
         return
     t = (info.iterations - pull["t0"]) * STEP
     lift = pull["root"].world_pose(ecm).pos().z() - pull["z0"]
-    rows.append([round(info.sim_time.total_seconds() * 1000), t, lift, pull["force"]])
+    pose = pull["root"].world_pose(ecm)
+    bottom = min(pose.rot().rotate_vector(gz.math7.Vector3d(*v)).z() for v in hull) + pose.pos().z()
+    rows.append([round(info.sim_time.total_seconds() * 1000), t, lift, pull["force"], bottom])
 
 
 fixture.on_pre_update(pre_update)

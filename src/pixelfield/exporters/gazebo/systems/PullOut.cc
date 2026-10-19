@@ -26,6 +26,7 @@
 #include <gz/sim/SdfEntityCreator.hh>
 #include <gz/sim/System.hh>
 #include <gz/sim/World.hh>
+#include <gz/sim/components/CollisionBitmask.hh>
 #include <gz/sim/components/DetachableJoint.hh>
 #include <gz/sim/components/JointForceCmd.hh>
 #include <gz/sim/components/JointPosition.hh>
@@ -40,6 +41,7 @@ namespace pixelfield
 {
 using namespace gz::sim;
 
+constexpr uint16_t kAllBits = 0xFFFF;  // collide bitmask of a detached root
 constexpr double kAnchorMass = 0.001;  // kg, light next to any root
 // The prismatic range ends a little past the root depth so the joint limit never stops the
 // root before it reaches the detach point.
@@ -71,7 +73,7 @@ struct Pick
 {
   std::string name;
   Curve curve;
-  Entity anchor, slide, weld;
+  Entity anchor, slide, weld, root;
   bool broken = false;
   bool detached = false;
 };
@@ -184,6 +186,9 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     else
     {
       _ecm.RequestRemoveEntity(p.weld);
+      // The root left out the soil's collide bit while buried; out of the soil it may land on it.
+      for (Entity collision : Link(p.root).Collisions(_ecm))
+        _ecm.CreateComponent(collision, components::CollideBitmaskCmd(kAllBits));
       p.detached = true;
     }
 
@@ -253,7 +258,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     Entity weld = _ecm.CreateEntity();
     _ecm.CreateComponent(weld, components::DetachableJoint(
       {anchorModel.LinkByName(_ecm, "anchor"), root, "fixed"}));
-    this->pick = Pick{_r.name, _r.curve, anchor, slide, weld};
+    this->pick = Pick{_r.name, _r.curve, anchor, slide, weld, root};
     gzmsg << "Pick: [" << _r.name << "] spawned and anchored\n";
   }
 
