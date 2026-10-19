@@ -136,6 +136,7 @@ physics:
   pull_out_curve:                # M4, ADR 0006
     d_peak: 0.005                # meters of root travel to the peak, guess
     residual_fraction: 0.3       # force right after the peak, fraction of the peak, guess
+    pull_out_damping: 0.0        # N s/m, speed effect, off until measured
   petiole_modulus: 5.0e8         # pascals, guess (taro petiole), M4
 assets:
   library: assets/library/carrot

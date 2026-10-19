@@ -9,6 +9,7 @@ Written 2026-10-19 for M4 ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and
 | Pull-out Force range | `physics.pull_out_force` | 15 to 26 N, loosened soil, literature |
 | Travel to the peak `d_peak` | Pull-out Curve | 5 mm, guess |
 | `residual_fraction` | Pull-out Curve | 0.3, guess |
+| Pull-out damping `c` (speed effect) | `pull_out_curve.pull_out_damping` | 0 (off), unmeasured |
 | Whether the peak correlates with root size | Sampling of the Pull-out Force | assumed independent |
 | Petiole bending stiffness | `petiole_modulus` | about 500 MPa, taro petiole, guess for carrot |
 | Root and top mass | Physics export densities | guess |
@@ -30,6 +31,7 @@ The goal is distributions per Crop and soil condition, not values for individual
 2. Measure soil moisture at 5 and 15 cm depth at three spots in the bed.
 3. Measure the penetrometer cone index down to root depth at the same three spots.
 4. Pull about 30 Plants per soil condition, spread over the bed, skipping edge rows.
+5. Pull about 10 more Plants at a second, faster speed (for example about 20 cm/s), spread over the same bed, for the speed effect.
 
 ## Per pull
 
@@ -51,5 +53,6 @@ The goal is distributions per Crop and soil condition, not values for individual
 
 - Per pull: the peak force `F_peak`, the travel to the peak `d_peak`, the force just after the drop as a fraction of the peak, and the shape of the decay to zero.
 - Per soil condition: the distribution of each value, and whether `F_peak` correlates with root length, shoulder diameter or root mass. If it does, the Pull-out Force can be sampled from the Variant's root size instead of independently.
+- Speed effect: compare the force over the decay phase between the two pull speeds; the difference divided by the speed difference gives the damping `c`. If the peak force also differs between speeds, note it: a linear damping term cannot model that and the Pull-out Curve needs a speed-dependent peak.
 - Per Crop: the petiole modulus range and the root and top densities, written to the Crop YAML with this protocol as the source.
 - Compare the measured curves with the simulated Pull-out Curve of a matching Variant and Plant scale.

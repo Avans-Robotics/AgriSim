@@ -10,20 +10,20 @@ Harvesting must take a realistic force and feel realistic to a controller: the l
 
 ### Pull-out Curve
 
-With `d` the upward displacement of the root and `F` the resisting force:
+With `d` the upward displacement of the root, `v` its upward speed and `F` the resisting force, `F = F_curve(d) + c * v`, where `F_curve` is:
 
 - `0 <= d < d_peak`: `F` rises linearly from 0 to `F_peak`.
 - At `d_peak`: `F` drops to `residual_fraction * F_peak`.
 - `d_peak <= d < L`: `F` decays linearly to 0, with `L` the root length (the Variant's root length times the Plant's scale).
 - `d >= L`: the Plant is free.
 
-`F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. `F_peak` is sampled independently of root size until measurements show a correlation. Pull speed has no effect. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and all three parameters are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
+`F_peak` is the Plant's Pull-out Force from the Manifest. `d_peak` (guess 5 mm) and `residual_fraction` (guess 0.3) are per-Crop knobs in the Crop YAML. Once the root has passed `d_peak` the soil bond is broken, so pushing the root back down does not bring the peak back. `F_peak` is sampled independently of root size until measurements show a correlation. The damping term `c * v` (per-Crop knob `pull_out_damping` in N s/m, default 0) acts only while the root is attached; it is off until measurements at two pull speeds give a value, and turning it on needs no code change. The shape follows measured uprooting curves (a rise to a peak, a sharp drop, then a residual), and its parameters, `c` included, are to be fitted to real pulls ([measurement protocol](../research/measurement-protocol.md)).
 
 ### Mechanism in Gazebo
 
 - A picked Plant gets an anchor: a light link in a non-static model, on a vertical prismatic joint to the world at the Plant's position, with its range from 0 to `L`. It must not be a static model: dartsim freezes a body welded to a static model.
 - The Plant's root link is welded to the anchor by a `DetachableJoint` entity (`components::DetachableJoint`, type fixed) that our system creates.
-- Every physics step the system reads the prismatic joint position `d` and commands the joint force `-F(d)`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
+- Every physics step the system reads the prismatic joint position `d` and velocity `v` and commands the joint force `-F`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
 - Only vertical pull-out is modelled: sideways and rotational motion of the root is rigid until detach. An angled pull is a later knob.
 - The system computes the force itself, so the resisting force is known exactly each step. It publishes `d`, `F` and the attached state on a topic.
 
@@ -80,7 +80,7 @@ Root crops only: carrot, then beetroot and radish through the same generator. Le
 - **Crown tear-off.** The tops of a carrot detach at 212 to 243 N, against 20 to 22 N to pull it out of loosened soil (Nath et al. 2019), so in loose soil the tops never tear. In undisturbed soil (118 to 149 N) the margin is only about 1.6x; tear-off returns with compact soil, as a second force law on the crown.
 - **Soil state per Pixel** (loose or compact).
 - **Grip damage limit**: carrots are damaged at about 43 to 45 N of grip; only noted in the Crop YAML.
-- **Pull speed effects and angled pulls.**
+- **Angled pulls.**
 - **Calibration**: every parameter is a literature value or a guess until the measurement protocol has run. M4 Plants are uncalibrated.
 
 ## Considered Options
