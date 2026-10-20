@@ -774,3 +774,19 @@ Branch m5b-ground, commit 4024520, not pushed. Validated: pytest 86 passed, 144 
 - Hand check: open `out/amiga_10x10/field.svg` and hover the gaps.
 - Large borders cost tiles quadratically (border 50 on 3 x 5 Pixels: about 10k tile visuals, 7 MB world.sdf); cap only if someone needs it.
 - Next: m5c pick by id, needs IMPLEMENT.
+
+## 2026-10-20 M5b Amiga drive test and row direction
+### Goal & outcome
+The user drove the Amiga (`amiga_description`, gz DiffDrive, gz GUI Teleop plugin on `/cmd_vel`) in `out/amiga_10x10`; the ground works. Plant rows in the Amiga example now run north-south (`row_direction: 1.5707963`), along the Path Gaps, since the carrot default (0, east-west) had the robot driving across the rows.
+### Decisions & why
+- Field-wide override in the example only; the carrot default stays, so the other examples and the perf rows do not shift.
+### Lessons / gotchas
+- `amiga_description` is not in a colcon workspace, so `xacro` fails on `$(find amiga_description)`. Workaround: substitute the absolute path in a copy of `amiga.urdf.xacro` and pass `gazebo:=true` (without it there is no drive plugin). Meshes need `GZ_SIM_RESOURCE_PATH=~/git_repos/SustainableAgriculture` for `package://`.
+- Spawn heading north at x = 2.024 puts the wheels in the centres of the first two Path Gaps.
+- No ROS teleop or ros_gz_bridge installed; gz-gui's Teleop plugin needs neither.
+- The Amiga passes through Plants: static Plants have no collision until M5d (Active Region).
+### State
+Branch m5b-ground, commit 17c5f15 on top of 4024520, not pushed. Validated: test_core 43 passed (the new row check fails without the example change), ruff, `gz sdf -k`. Drive test done by the user in the GUI.
+### Open items
+- Push and PR when the user says so. Proper Amiga launch belongs in amiga_ros2 (colcon build of amiga_description).
+- Next: m5c pick by id, needs IMPLEMENT.
