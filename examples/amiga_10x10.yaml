@@ -1,0 +1,15 @@
+# 10 x 10 random carrot Pixels for the Farm-ng Amiga: its wheels run in the Path Gaps and on
+# the Border. Same Pixels as random_10x10.yaml, only the gaps and the Border differ.
+pixel_size: 0.5
+seed: 2
+random:
+  rows: 10
+  cols: 10
+  crops:
+    carrot: 1
+  empty_fraction: 0.1
+path_gap:                # width = wheel_track - every_n_cols * pixel_size = 1.524 - 2 * 0.5
+  every_n_cols: 2
+  width: 0.524
+border: 2.0              # meters of soil around the Field, room to drive in and turn
+row_direction: 1.5707963 # rows run north-south, along the Path Gaps the wheels drive in

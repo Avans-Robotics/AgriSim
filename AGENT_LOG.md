@@ -755,3 +755,38 @@ Branch m5a-design, commit 88cb7f6, not pushed. Docs only. Validated: relative li
 ### Open items
 - Maintainer reads the docs (m5a check), then m5b-ground, needs IMPLEMENT.
 - For amiga_ros2's own plan: real Gripper Lite force, gripper control in sim, wheel friction.
+
+## 2026-10-20 M5b ground for robots
+### Goal & outcome
+Soil collision is a plane at z = 0 on SOIL_BITMASK; textured tiles cover the Field plus the Border. Field Spec `border` (default 0.5, finite and at least 0) replaces SOIL_BORDER. Manifest: `field.path_gaps` ([] when off), `field.border`, top-level `robot_interface: 1`, format_version still 1. SVG draws Path Gaps (class `path-gap`, title with the x range). `examples/amiga_10x10.yaml`: random_10x10's Pixels with every_n_cols 2, width 0.524, border 2.0; gap centres 1.524 m apart. Spec item 12.6 checked: friction is the lower of the two mu.
+### Decisions & why
+- User skipped the grill and took all recommendations: Amiga example is carrot-only (same Pixels as the perf Field), friction check is a permanent test, SVG draws the gaps, `path_gaps` is [] when off, no border cap, old examples keep their 0.3 m gaps (perf rows) with only the comment changed.
+- Ground tests reuse settle_check.py on a tiny world (the Field's soil model plus a box, physics only), so no new headless script.
+- Friction rule found by tilting gravity instead of pushing the box: pure SDF, no force injection.
+### Lessons / gotchas
+- dartsim's `<plane>` is not infinite: a box lands at x = 1040 m and falls at 1060 m (validator). Spec says about 2 km wide; harmless for a Field.
+- A box resting on the plane reads just under 1 mm/s in DART every step, so a 1e-3 speed threshold is flaky; tests use 0.01.
+- Measured friction thresholds: mu 0.3 holds at slope 0.25 and slides at 0.5; mu 1 vs default soil holds at 0.95 and slides at 1.05 (soil mu is 1); mu 2 holds at 0.8 and slides at 1.3.
+- PyYAML reads `1e3` as a string, so `border: 1e3` is rejected; `1.0e+3` works.
+### State
+Branch m5b-ground, commit 4024520, not pushed. Validated: pytest 86 passed, 144 skipped (slow) before the validator fixes, test_gazebo.py 16 passed after them; ruff; `gz sdf -k` on the Amiga example; validator agent (path_gaps over 8 col/gap cases, pull detaches at the root depth and the root lands at about 0 mm, strong and weak grip, old soil box makes the drop test fail).
+### Open items
+- Hand check: open `out/amiga_10x10/field.svg` and hover the gaps.
+- Large borders cost tiles quadratically (border 50 on 3 x 5 Pixels: about 10k tile visuals, 7 MB world.sdf); cap only if someone needs it.
+- Next: m5c pick by id, needs IMPLEMENT.
+
+## 2026-10-20 M5b Amiga drive test and row direction
+### Goal & outcome
+The user drove the Amiga (`amiga_description`, gz DiffDrive, gz GUI Teleop plugin on `/cmd_vel`) in `out/amiga_10x10`; the ground works. Plant rows in the Amiga example now run north-south (`row_direction: 1.5707963`), along the Path Gaps, since the carrot default (0, east-west) had the robot driving across the rows.
+### Decisions & why
+- Field-wide override in the example only; the carrot default stays, so the other examples and the perf rows do not shift.
+### Lessons / gotchas
+- `amiga_description` is not in a colcon workspace, so `xacro` fails on `$(find amiga_description)`. Workaround: substitute the absolute path in a copy of `amiga.urdf.xacro` and pass `gazebo:=true` (without it there is no drive plugin). Meshes need `GZ_SIM_RESOURCE_PATH=~/git_repos/SustainableAgriculture` for `package://`.
+- Spawn heading north at x = 2.024 puts the wheels in the centres of the first two Path Gaps.
+- No ROS teleop or ros_gz_bridge installed; gz-gui's Teleop plugin needs neither.
+- The Amiga passes through Plants: static Plants have no collision until M5d (Active Region).
+### State
+Branch m5b-ground, commit 17c5f15 on top of 4024520, not pushed. Validated: test_core 43 passed (the new row check fails without the example change), ruff, `gz sdf -k`. Drive test done by the user in the GUI.
+### Open items
+- Push and PR when the user says so. Proper Amiga launch belongs in amiga_ros2 (colcon build of amiga_description).
+- Next: m5c pick by id, needs IMPLEMENT.
