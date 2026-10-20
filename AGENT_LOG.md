@@ -697,3 +697,39 @@ Branch m4d-pullout-system, pushed (PR #14). Validated: pytest (75 passed, 72 ski
 - Non-zero pull_out_damping never run.
 - Scale extremes (0.85, 1.15) not settle-checked (pulls at those scales passed).
 - Next: m4e test gripper, needs IMPLEMENT.
+
+## 2026-10-19 M4e test gripper
+### Goal & outcome
+Test gripper (`exporters/gazebo/gripper.py`, run by `grip_check.py` in the system Python): a carriage on a vertical prismatic lift, a palm behind a wrist force-torque sensor, two box jaws on prismatic joints closing 3 cm above the crown. `pixelfield grip <world> <plant>` picks a Plant and pulls it by the leaf bunch, logging gripper lift, jaw gap, wrist force and the pull-out state per step to `picks/<id>/grip.csv`. `pixelfield squeeze <variant>` runs the ADR 0006 squeeze check (root welded, jaws hold 1 s). Spec checks met on carrot: a 20 N per jaw grip detaches at the root depth with peak wrist force minus weight within 1% of the Plant's Pull-out Force; a 5 N grip slips (wrist force about 2 mu F = 10 N while sliding, d below d_peak).
+### Decisions & why
+- User skipped the grill and accepted the recommendations: separate non-static gripper model only in a headless test copy of the world; tests: carrot strong pull, weak slip and carrot v00 squeeze in the default suite, squeeze over all 72 Variants as a slow test.
+- Jaws and lift are joint velocity commands, which dartsim runs as servos capped by the SDF effort limit: jaws close at 5 cm/s and squeeze with exactly the effort limit, so a weak grip is a defined force. Not JointPositionController (spec deviation, spec row updated): its target comes over gz-transport, out of step with the physics.
+- Wrist force from a gz ForceTorque sensor on a fixed carriage-palm joint, tared before the jaws close; jaw friction mu 1 (guess).
+- Each pull or grip run gets its own GZ_PARTITION: Field worlds share the name `pixelfield`, and concurrent runs read each other's state topic (validator found a 120% wrong peak).
+### Lessons / gotchas
+- gz.sim8 Python `Joint.transmitted_wrench` aborts (no converter for gz::msgs::Wrench); use a ForceTorque sensor topic.
+- The ForceTorque system refuses a sensor on a joint whose parent is `world`: hence the carriage link.
+- Model `self_collide` is off, so squeezed petioles pass through each other and the jaws stall on the fattest hulls (gap 6 to 9 mm carrot, up to 33 mm beetroot).
+- The convex hull of a curved petiole segment is a wedge, and hulls step at link joints: jaws sliding up the bunch can catch and hold more than friction. A 5 N grip pulled two carrots out of the bond (one within 6 cm of lift, one after 11 cm at the link1 joint).
+- A one-step lift stop gave -21 to -36 N wrist spikes; the lift now ramps down.
+### State
+Branch m4e-test-gripper, commits 10f3aa2 and f08dc97, not pushed. Validated: pytest (79 passed, 144 skipped), ruff, validator agent (strong pulls on 4 carrots, 3 radish, 3 beetroot, speeds 0.01 and 0.2 m/s, tare and weight to 0.01 N, squeeze on 10 Variants at scales 0.85 and 1.15, synthetic and physical escape negatives, error paths, no orphans), concurrent grips now match a solo run. Slow squeeze over 72 Variants NOT run (needs a slot, about 4 minutes).
+### Open items
+- Weak grip slips only where the hulls do not wedge (tested on plant 0); decide: thinner or split petiole hulls in the generator, or accept as a model limit.
+- 20 N per jaw does not detach the strongest beetroot (60 N, slips 50 mm): grip force per Crop, or lift until detach.
+- Real petiole tunnelling out of the jaws never provoked, so the escape check is only verified on synthetic and geometric negatives.
+- Still open from earlier: non-zero pull_out_damping never run; settle check at scales 0.85 and 1.15.
+
+## 2026-10-19 M4e decisions after review
+### Goal & outcome
+User decided the open items: hull wedging accepted as a known limit (noted in ADR 0006 Consequences); a test added that the strongest beetroot in m3_crops (59.91 N) does not come out at 20 N per jaw and does at 1.5 x (Pull-out Force + weight) / (2 mu) = 47.8 N per jaw, detaching at the root depth with wrist force minus weight within 1% of its Pull-out Force. Separately, CODEOWNERS (`* @aandrien`) on its own branch `codeowners` from main, PR #15.
+### Decisions & why
+- No per-Crop grip force: slipping when friction cannot hold is correct physics; grip strength and pad friction are robot design choices for M5, and the friction value waits for the measurement protocol.
+### Lessons / gotchas
+- At 20 N per jaw the strongest beetroot still peaks at 63.6 N wrist force (friction allows 40 N): the jaws wedge on the hulls, break the bond, then slip 50 mm. The test checks "no detach", not "friction-limited".
+- CODEOWNERS done in a git worktree so the uncommitted AGENT_LOG.md stayed on m4e.
+### State
+Branch m4e-test-gripper, commit with the beetroot test on top of f08dc97, not pushed. Validated: tests/test_gripper.py 5 passed (beetroot test 17 s), ruff. PR #15 open, diff is the one CODEOWNERS line. Slow squeeze over 72 Variants still NOT run (needs a slot).
+### Open items
+- Slow squeeze run, then push m4e and open its PR.
+- Finer petiole hulls as a later chunk.

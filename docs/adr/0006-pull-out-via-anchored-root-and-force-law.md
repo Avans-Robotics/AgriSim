@@ -61,7 +61,7 @@ Per Variant, in a headless world for about 5 s of sim time at a 1 ms step:
 - settling: every link slower than 1 mm/s after 2 s, no NaN;
 - squeeze: box jaws closing 3 cm above the crown hold every petiole link, none tunnels out.
 
-The step size is a knob if a Variant fails. It runs as a slow test, skipped by default.
+The step size is a knob if a Variant fails. It runs as a slow test, skipped by default. The squeeze uses the test gripper (`exporters/gazebo/gripper.py`): jaw servos limited to the grip force, 20 N per jaw by default, with friction 1 on the jaws (a guess).
 
 ### Scope
 
@@ -97,3 +97,4 @@ Root crops only: carrot, then beetroot and radish through the same generator. Le
 - Each Variant gets a second committed export, kept fresh by tests like the `.glb`.
 - The root crop generator must keep parts per leaf: today it merges them per part type.
 - Removing a grouped visual with `RequestRemoveEntity` reaches a running GUI through the world state (checked in M4d), although the server's scene info keeps listing it.
+- Known limit, accepted in M4e: a petiole segment collides as the convex hull of its curved shape, wider than the petiole where it bends, and the hulls step at the joints. Jaws sliding up the leaf bunch can wedge there and hold more than friction allows, so a weak grip sometimes still breaks the soil bond. Finer hulls (more, straighter segments per petiole) would fix it.
