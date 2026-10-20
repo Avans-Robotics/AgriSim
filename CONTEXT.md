@@ -22,6 +22,10 @@ _Avoid_: blank, gap
 An optional strip of bare soil between groups of Pixel columns, left free for robot wheels.
 _Avoid_: track, lane, aisle
 
+**Border**:
+The strip of textured soil around the Field, room for a robot to drive in and turn.
+_Avoid_: headland, margin (reserved for the Planting Pattern)
+
 ### Crops and plants
 
 **Crop**:
@@ -39,6 +43,14 @@ _Avoid_: layout (reserved for Field Layout), grid
 **Pull-out Force**:
 The force in newtons needed to pull one Plant out of the soil.
 _Avoid_: extraction force, uprooting force
+
+**Picked Plant**:
+A Plant spawned as its own articulated model in a running world, held by its Pull-out Curve until it is pulled out.
+_Avoid_: dynamic plant, spawned plant
+
+**Active Region**:
+The space around any robot link in which root crop Plants become Picked Plants, so the robot touches them.
+_Avoid_: active zone, interaction area
 
 **Pull-out Curve**:
 The resisting force on a Plant's root as a function of how far the root has moved up, ending in detach; its peak is the Pull-out Force.

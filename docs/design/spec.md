@@ -26,8 +26,8 @@ Out of scope for now:
 
 - Growth stages: all Plants are harvest-ready (with size variation).
 - Weeds: to be added later as just another Crop.
-- Runtime spawning of Plants (for example via a ROS 2 service): only static world generation, except the single picked Plant in M4.
-- The Amiga robot model and manipulator: a separate plan (M5).
+- Runtime spawning of new Plants: only static world generation. Existing root crop Plants become Picked Plants at runtime (M4, and the Active Region in M5).
+- Robot models, controllers and ROS 2: they live in robot repositories that load pixelfield worlds ([ADR 0009](../adr/0009-robot-free-world-provider.md), section 14).
 - Terrain relief (ridges, furrows): flat soil first.
 
 ## 3. Architecture
@@ -87,9 +87,14 @@ grid: |
 path_gap:                # optional, off when absent
   every_n_cols: 2
   width: 0.3
+border: 0.5              # optional, meters of textured soil around the Field
 ```
 
 A Path Gap of `width` meters follows every `every_n_cols` Pixel columns, only between column groups (never at the west or east edge). Pixels stay whole and the columns east of a gap shift east, so the Field gets wider; the soil covers the gaps. Path Gaps also work with a random Field.
+
+For a robot whose wheels run in the Path Gaps, the gap centres are `every_n_cols * pixel_size + width` apart, so `width = wheel_track - every_n_cols * pixel_size`. With 0.5 m Pixels the Amiga's 1.524 m wheel track needs `every_n_cols: 2, width: 0.524` (`examples/amiga_10x10.yaml`); the outer wheels run on the Border. The Manifest lists each gap's x range, so a robot repo does not redo this arithmetic.
+
+The Border (default 0.5 m) is textured soil around the Field, room for a robot to drive in and turn; a Field meant for driving uses for example `border: 2.0`. Beyond it the ground continues as an invisible plane, so a robot never falls off the world.
 
 Random Field:
 
@@ -151,8 +156,10 @@ The Field Layout is the only thing Exporters read. It is written next to every e
 ```json
 {
   "format_version": 1,
+  "robot_interface": 1,
   "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
-            "path_gap": {"every_n_cols": 2, "width": 0.3}, "seed": 42, "spec_sha256": "..."},
+            "path_gap": {"every_n_cols": 2, "width": 0.3}, "path_gaps": [[1.0, 1.3]],
+            "border": 0.5, "seed": 42, "spec_sha256": "..."},
   "crops": {
     "carrot": {"library": "assets/library/carrot",
                "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0}}
@@ -206,7 +213,9 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 - Plants are static by default. In Gazebo they are visuals grouped in one static model per Pixel ([ADR 0007](../adr/0007-gazebo-plants-grouped-per-pixel.md)): one model per Plant stalls the Physics system at 10 x 10 Pixels.
 - M4 makes picked root crop Plants dynamic, one model each ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and-force-law.md)): a C++ gz-sim system removes its grouped visual, spawns it as an articulated model (rigid root, spring-jointed petiole chains), welds the root to an anchor on a vertical prismatic joint, and applies the Plant's Pull-out Curve as a joint force until the root has travelled its own length, then detaches it. Lettuce stays static (cut, not pulled).
 - Soil is not simulated: loose soil only, no soil state per Pixel, no crown tear-off in M4. All Plant physics parameters are uncalibrated until the [measurement protocol](../research/measurement-protocol.md) has run.
-- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md). Choosing which Plants near the robot become dynamic (an active region) is left to M5.
+- M5 adds the Active Region ([ADR 0010](../adr/0010-active-region.md)): every root crop Plant whose footprint (a cylinder from the soil to the top of its foliage) meets the bounding box of any robot link (any link of a model that is not part of the Field, plus 0.05 m of padding) becomes a Picked Plant, so any robot touches the Plants it reaches. Plant SDFs are written at build time; Picked Plants collide with robots and with each other.
+- Soil collision is an infinite plane on the soil collide bit (M5); its textured part covers the Field plus the Border.
+- Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md).
 
 ## 11. Milestones
 
@@ -231,7 +240,19 @@ M4 chunks (decisions in [ADR 0006](../adr/0006-pull-out-via-anchored-root-and-fo
 | M4d | C++ gz-sim system in `exporters/gazebo/systems/`: pick request, remove the grouped visual, spawn, anchor with prismatic joint and `DetachableJoint`, force law, state topic; a scripted pull via ApplyLinkWrench | Logged `F(d)` follows the Pull-out Curve; detach happens with a peak inside the Pull-out Force range; the visual is gone in the GUI |
 | M4e | Test gripper: box jaws on prismatic joints plus a lift, driven as joint velocity servos whose effort limit is the grip force (a JointPositionController takes its target over gz-transport, out of step with the physics), and a wrist force-torque sensor; squeeze test; a full pull by the leaf bunch | A test pull by the tops detaches the Plant within its Pull-out Force range; a weak grip slips |
 
-Deferred: a Docker image (ADR 0002), built when the first colleague or student needs to run the world; its check is that they run it from the image. Installing `ros-jazzy-ros-gz` is deferred until a chunk needs ROS topics.
+M5 chunks (decisions in [ADR 0009](../adr/0009-robot-free-world-provider.md) and [ADR 0010](../adr/0010-active-region.md)). Only the world provider's side: driving, the arm and harvesting with the real robot model are planned in the robot repository (`amiga_ros2`).
+
+| Chunk | Content | Check |
+|---|---|---|
+| M5a | Design: ADR 0009 and 0010, the robot interface (section 14), M5 and M7 in the milestones, glossary (Picked Plant, Active Region, Border) | The maintainer reads the docs |
+| M5b | Ground for robots: soil collision as an infinite plane, Field Spec `border`, Manifest `field.path_gaps` and `robot_interface` version, `examples/amiga_10x10.yaml` | The example builds; its SVG shows the gaps where the Manifest says; a box dropped beyond the Border lands; a pick and pull still pass (root bitmask unchanged); tests |
+| M5c | Pick by id: `build` writes `plants/<id>.sdf` for root crop Plants plus the table the system reads, the system loads the file, Python `pick` sends only the id; the state topic publishes on change plus events; a scripted pull with non-zero `pull_out_damping` | `pixelfield pick` in a running world; `gz topic -e` is silent for a resting Picked Plant; `pull.csv` unchanged; build time and `out/` size recorded |
+| M5d | Active Region in the pull-out system: any non-Field link's box plus padding picks the root crop Plants whose footprint it meets. Starts with a spike: a full carrot Pixel picked at once (leaf drift, RTF); if it fails, the per-Pixel model fallback of ADR 0010 | The M4e test gripper pulling one carrot pushes its neighbours instead of passing through (GUI, by the maintainer). In a slot: settle check at scale 0.85 and 1.15, the slow squeeze over all 72 Variants, perf rows with 0, 10, 30 and 100 Picked Plants (pass: at least 0.5x with 30) |
+| M5e | Packaging: Manifest library paths independent of the working directory, install instructions for robot repositories, tag `v0.5.0` | In the `amiga-ros:jazzy` container, with no `amiga_ros2` change: clone tag `v0.5.0`, install it, build the Amiga example Field and the systems, launch `gazebo.launch.py gz_args:='-r <world.sdf>'`: the Amiga stands in the Field with the pull-out system loaded |
+
+If the M5d perf check fails, the next chunk returns untouched, resting Picked Plants outside the Active Region to their static visual ("unpick").
+
+Deferred: a pixelfield Docker image (ADR 0002), built when the first colleague or student needs to run a world without a robot; its check is that they run it from the image. With a robot, the robot repository's image installs pixelfield (ADR 0009). pixelfield itself needs no ROS: `ros-jazzy-ros-gz` belongs to the robot repositories.
 
 | # | Content | Done when |
 |---|---|---|
@@ -240,8 +261,9 @@ Deferred: a Docker image (ADR 0002), built when the first colleague or student n
 | M2 | Multi-Pixel Fields, random mode, Path Gaps, performance measurement | A 10 x 10 random Field loads in Gazebo, frame rate and VRAM recorded |
 | M3 | More Crops (carrot, beetroot, long red radish, head lettuce), iterate on looks | All four Crops render believably side by side |
 | M4 | Pull-out physics for root crops: Variant physics export, articulated Plants, C++ gz-sim pull-out system with the Pull-out Curve, test gripper | A test pull by the tops detaches a Plant within its Pull-out Force range; a weak grip slips |
-| M5 | Amiga and manipulator integration | Separate plan |
+| M5 | Robot-ready Fields: robot interface, ground and Border, pick by id, Active Region, packaging for robot repositories | The Amiga from `amiga_ros2` stands in a pixelfield Field with the pull-out system loaded (M5e) |
 | M6 | Blender Exporter and sim-to-real experiments | Detectors trained on each image source evaluated on real images |
+| M7 | MuJoCo pull scene and policy training (item 8 of section 12), finer petiole hulls | Separate plan; M6 and M7 are independent, either can start first |
 
 Real-field image collection (our own field, possibly WUR) is planned around M2 to M3, so camera parameters can be matched early.
 
@@ -266,11 +288,11 @@ Open (deferred):
 1. **Real camera** on the Amiga: an OAK-D Pro (RGB IMX378, HFOV 66 or 69 degrees depending on the focus version; stereo OV9282 pair, 1280 x 800, HFOV 80 degrees). Currently mounted at the Amiga front looking straight down; a mount pitched about 45 degrees down, looking along the rows, is planned. Still open: exact height, angle and focus version. The M3a perf check used an OAK-D-like rig and found triangle LOD unnecessary (see [perf.md](perf.md)).
 2. **Real field values** for Planting Patterns and harvest sizes, per Crop.
 3. **Row crops and single-crop fields**: out of scope now. The core should not assume Pixels are small, so a large "Pixel" with one Crop or a row layout stays possible later.
-4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it (M5 oracle perception, or M6 detectors trained on Gazebo renders). Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
+4. **Gazebo labels (M2b)**: a Label plugin per Pixel model plus a semantic segmentation camera. Deferred until a consumer needs it: camera-based harvesting in a robot repository, or M6 detectors trained on Gazebo renders. Oracle perception needs no labels: it reads the Manifest and the poses of Picked Plants, robot-side. Decided already: a stable label id per Crop, stored in the Crop definition so it is the same in every Field; soil and background are 0. Building it also checks the gz label behaviour noted in ADR 0007 by running it.
 5. **Growth stages**: all Plants are harvest-ready for now. Farming games and CropCraft treat growth stage as a per-cell state with its own mesh; here it would be a Variant axis (Crop, stage, variation) chosen per Pixel or per Field. Variant names already carry a stage slot (ADR 0008), so adding a stage does not rename the library. See [prior-art.md](../research/prior-art.md).
-6. **Soil mechanics**: a rigid soil plane with a friction coefficient (value to be sourced in M5). Wheel slip via the gz-sim `WheelSlip` system when the Amiga drives (M5). Pull-out uses loose soil only in M4 (item 7). Deformable terrain (Project Chrono SCM, as a separate Exporter) only if wheel sinkage or ruts become a research question; particle soil (DEM) is out of scope.
+6. **Soil mechanics**: a rigid soil plane with the default friction (mu 1). Contact friction takes the lower of the two surfaces (to be verified in M5b), so a robot sets its traction on its own wheels, and wheel slip (the gz-sim `WheelSlip` system) belongs to the robot repository (ADR 0009). Pull-out uses loose soil only in M4 (item 7). Deformable terrain (Project Chrono SCM, as a separate Exporter) only if wheel sinkage or ruts become a research question; particle soil (DEM) is out of scope.
 7. **Soil state and crown tear-off**: M4 models loose soil only. Soil state per Pixel (loosened or compact) would select the Pull-out Force range (carrot about 20 N loosened, 118 to 149 N undisturbed). With compact soil, tear-off of the tops (212 to 243 N for carrot) comes within reach and returns as a second force law on the crown ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and-force-law.md)).
-8. **Training engine (MuJoCo)**: a learned pull policy is the target. Training is expected to run in MuJoCo (GPU-parallel through MuJoCo Warp) on a small local pull scene, built by a new Exporter from the same Variant physics export and Pull-out Curve. Gazebo keeps the whole Field, the robot, cameras, ROS 2, and end-to-end tests of the trained policy. MuJoCo does not load glTF (only STL, OBJ, MSH) and collides every mesh as its convex hull, which the convex hulls of the physics export already fit (written out as OBJ by that Exporter). In MuJoCo Warp, flex is experimental and plugins are unsupported, so the foliage stays plain hinge joints with springs (two hinges per body in place of a universal joint). No ADR until that milestone starts.
+8. **Training engine (MuJoCo)**: a learned pull policy is the target. Training is expected to run in MuJoCo (GPU-parallel through MuJoCo Warp) on a small local pull scene, built by a new Exporter from the same Variant physics export and Pull-out Curve. Gazebo keeps the whole Field, the robot, cameras, ROS 2, and end-to-end tests of the trained policy. MuJoCo does not load glTF (only STL, OBJ, MSH) and collides every mesh as its convex hull, which the convex hulls of the physics export already fit (written out as OBJ by that Exporter). In MuJoCo Warp, flex is experimental and plugins are unsupported, so the foliage stays plain hinge joints with springs (two hinges per body in place of a universal joint). This is milestone M7, with its own ADR when it starts. Finer petiole hulls come with it: hulls that wedge in the jaws let a weak grip hold more than friction allows, which a trained policy could exploit.
 
 ## 13. Publication angle
 
@@ -282,3 +304,18 @@ Existing work (CropCraft) generates row-based fields for Gazebo Classic and rend
 4. A sim-to-real evaluation: detectors trained on Gazebo renders, Blender renders and real images, tested on real pixel field images.
 
 Point 4 decides the strength of the paper: without real-world validation it is a tool paper (workshop, SoftwareX, JOSS), with it a stronger conference or journal paper. The design already supports it through seeded, reproducible runs, a versioned Asset Library and the Manifest.
+
+## 14. Robot interface
+
+pixelfield is a robot-free world provider ([ADR 0009](../adr/0009-robot-free-world-provider.md)): a robot repository launches a pixelfield world and spawns its robot into it, and everything pixelfield offers is gz-native. Interface version 1, recorded in the Manifest as `robot_interface` (from M5b); a breaking change raises it and is noted here.
+
+- **World**: `out/<field>/world.sdf`, world name always `pixelfield`. Two worlds on one machine run in separate `GZ_PARTITION`s.
+- **Frames**: SI units, z up, x east, y north, origin at the south-west corner of the Field at ground level (section 4). The ground is an infinite plane at z = 0; textured soil covers the Field and its Border.
+- **Manifest**: `out/<field>/manifest.json` (section 7), the ground truth: Plant ids, Crops, positions, scales, Pull-out Forces, Path Gap x ranges.
+- **Systems**: built from `src/pixelfield/exporters/gazebo/systems/` and found through `GZ_SIM_SYSTEM_PLUGIN_PATH`; without them the world runs, but no Plant can be picked.
+- **Pick service**: `/world/pixelfield/pixelfield/pick`, a pick by Plant id (from M5c; until then a `gz.msgs.EntityFactory` with the Plant SDF, ADR 0006).
+- **Active Region**: automatic from M5d, nothing to configure ([ADR 0010](../adr/0010-active-region.md)). A robot that sets its own collide bitmask must share a bit with the Plants and the soil (bit 0) to touch them.
+- **Pull-out state**: `/world/pixelfield/pixelfield/pull_out` (`gz.msgs.Param`: plant, d, force, attached), while a Plant is being pulled plus one message per event. Poses of Picked Plants are on the standard `/world/pixelfield/dynamic_pose/info`.
+- **Installing in a robot image**: clone a tagged release, install the Python package, build the systems against the image's gz-sim (instructions from M5e).
+
+Robot-side, not part of pixelfield: the robot description and its Gazebo plugins, the ROS 2 control stack, the `ros_gz_bridge` configuration for the topics above, wheel and gripper friction, oracle or camera perception, and end-to-end harvest tests.
