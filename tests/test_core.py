@@ -210,6 +210,10 @@ def test_amiga_example_gaps_fit_the_wheel_track(tmp_path):
     centres = [(x0 + x1) / 2 for x0, x1 in field["path_gaps"]]
     assert len(centres) == 4 and field["border"] == 2.0
     assert [b - a for a, b in pairwise(centres)] == pytest.approx([1.524] * 3)
+    plants = json.loads((out / "manifest.json").read_text())["plants"]
+    pixel = [p["pose"] for p in plants if p["pixel"] == plants[0]["pixel"]]
+    xs, ys = [p["x"] for p in pixel], [p["y"] for p in pixel]
+    assert max(xs) - min(xs) < max(ys) - min(ys)  # rows run north-south, along the gaps
     svg = (out / "field.svg").read_text()
     drawn = [(float(x), float(x) + float(w)) for x, w in
              re.findall(r'class="path-gap" x="([\d.]+)" y="0" width="([\d.]+)"', svg)]  # fmt: skip

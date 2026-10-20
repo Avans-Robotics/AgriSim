@@ -12,3 +12,4 @@ path_gap:                # width = wheel_track - every_n_cols * pixel_size = 1.5
   every_n_cols: 2
   width: 0.524
 border: 2.0              # meters of soil around the Field, room to drive in and turn
+row_direction: 1.5707963 # rows run north-south, along the Path Gaps the wheels drive in
