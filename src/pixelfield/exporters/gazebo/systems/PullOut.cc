@@ -5,12 +5,20 @@
 // at once, each Plant id once. After the peak the anchor's lower limit follows the highest
 // point reached, so a released, part-pulled root stays where it is.
 //
-// Pick service /world/<world>/pixelfield/pick: gz.msgs.EntityFactory (sdf_filename, name = Plant
-// id, pose) replied with gz.msgs.Boolean. The Plant SDF carries the curve as a custom element
-// <pixelfield:pull_out f_peak d_peak residual_fraction damping depth/> in its model.
-// State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached.
+// `pixelfield build` writes next to the world plants/<id>.sdf for every root crop Plant (its
+// model at its pose, with the curve as a custom element <pixelfield:pull_out f_peak d_peak
+// residual_fraction damping depth/>) and the table plants/plants.tsv (id, x, y, z, footprint
+// radius and height), read on the first update (ADR 0010).
+// Pick service /world/<world>/pixelfield/pick: gz.msgs.StringMsg with the Plant id, replied
+// with gz.msgs.Boolean.
+// State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
+// published only on a step where d or the force changed, plus one message per event, which
+// also carries `event`: picked, peak_passed or detached. A resting Picked Plant is silent.
 
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <set>
@@ -18,9 +26,8 @@
 #include <vector>
 
 #include <gz/msgs/boolean.pb.h>
-#include <gz/msgs/entity_factory.pb.h>
 #include <gz/msgs/param.pb.h>
-#include <gz/msgs/Utility.hh>
+#include <gz/msgs/stringmsg.pb.h>
 #include <gz/plugin/Register.hh>
 #include <gz/sim/Conversions.hh>
 #include <gz/sim/Link.hh>
@@ -49,6 +56,11 @@ constexpr double kAnchorMass = 0.001;  // kg, light next to any root
 // The prismatic range ends a little past the root depth so the joint limit never stops the
 // root before it reaches the detach point.
 constexpr double kRangeMargin = 0.01;  // meters
+// A state message goes out once d or the force has moved this far from the last one sent. At
+// rest both repeat to the last bit (measured on a ratchet-held root); a 5 cm/s pull moves d
+// about 10 um per step.
+constexpr double kQuietD = 1e-9;  // meters
+constexpr double kQuietForce = 1e-6;  // newtons
 
 struct Curve
 {
@@ -67,9 +79,15 @@ double Resistance(const Curve &_c, bool _broken, double _d, double _v)
 struct Request
 {
   std::string name;
-  gz::math::Pose3d pose;
   sdf::Model model;
   Curve curve;
+};
+
+/// A row of plants/plants.tsv. M5c only reads it; the Active Region (M5d) uses the footprint.
+struct Footprint
+{
+  gz::math::Vector3d position;
+  double radius, height;
 };
 
 struct Pick
@@ -79,7 +97,9 @@ struct Pick
   Entity anchor, slide, weld, root;
   bool broken = false;
   bool detached = false;
+  bool announced = false;  // the picked event went out
   double held = 0.0;  // lower limit of the slide: the highest d reached after the peak
+  double sentD = 0.0, sentForce = 0.0;  // last published state
 };
 
 class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
@@ -94,18 +114,50 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     this->state = this->node.Advertise<gz::msgs::Param>(prefix + "/pull_out");
   }
 
+  /// Reads plants/plants.tsv next to the world file. Plugin elements lose their file path in
+  /// gz-sim, so the path comes from the soil model, which is defined in the world file and
+  /// exists from the first update on (not yet in Configure).
+  private: void LoadTable(EntityComponentManager &_ecm)
+  {
+    Model soil(World(this->world).ModelByName(_ecm, "soil"));
+    this->dir = std::filesystem::path(soil.SourceFilePath(_ecm)).parent_path() / "plants";
+    std::ifstream table(this->dir / "plants.tsv");
+    std::string id, header;
+    std::getline(table, header);
+    Footprint f;
+    while (table >> id >> f.position.X() >> f.position.Y() >> f.position.Z() >> f.radius >>
+           f.height)
+      this->plants[id] = f;
+    if (this->plants.empty())
+      gzwarn << "PullOut: no Plants in [" << (this->dir / "plants.tsv").string()
+             << "], nothing can be picked (a Field without root crops, or built before M5c)\n";
+  }
+
   /// Runs in a transport thread: parse and check only, the ECM is touched in PreUpdate. The
   /// reply is true only for a request that PreUpdate will spawn.
-  private: bool OnPick(const gz::msgs::EntityFactory &_req, gz::msgs::Boolean &_rep)
+  private: bool OnPick(const gz::msgs::StringMsg &_req, gz::msgs::Boolean &_rep)
   {
     _rep.set_data(false);
-    const std::string &name = _req.name();
+    const std::string &name = _req.data();
+    std::unique_lock<std::mutex> lock(this->mutex);
+    if (!this->loaded)
+    {
+      gzerr << "Pick: [" << name << "] refused, the world is still loading; try again\n";
+      return true;
+    }
+    if (!this->plants.count(name))
+    {
+      gzerr << "Pick: [" << name << "] is not a root crop Plant of this Field\n";
+      return true;
+    }
+    const std::string file = (this->dir / (name + ".sdf")).string();
+    lock.unlock();  // parse the file without blocking the simulation
     auto root = std::make_shared<sdf::Root>();
-    auto errors = root->Load(_req.sdf_filename());
+    auto errors = root->Load(file);
     if (!errors.empty() || root->Model() == nullptr ||
         root->Model()->LinkByName("root") == nullptr)
     {
-      gzerr << "Pick: [" << _req.sdf_filename() << "] is not a Plant model with a root link\n";
+      gzerr << "Pick: [" << file << "] is not a Plant model with a root link\n";
       return true;
     }
     auto element = root->Model()->Element()->FindElement("pixelfield:pull_out");
@@ -115,8 +167,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     {
       if (!element || !element->HasAttribute(keys[i]))
       {
-        gzerr << "Pick: no <pixelfield:pull_out " << keys[i] << "> in ["
-              << _req.sdf_filename() << "]\n";
+        gzerr << "Pick: no <pixelfield:pull_out " << keys[i] << "> in [" << file << "]\n";
         return true;
       }
       value[i] = element->Get<double>(keys[i]);
@@ -125,18 +176,16 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     if (!(curve.fPeak > 0 && curve.dPeak > 0 && curve.dPeak < curve.depth &&
           curve.residual >= 0 && curve.residual <= 1 && curve.damping >= 0))
     {
-      gzerr << "Pick: invalid Pull-out Curve in [" << _req.sdf_filename() << "]\n";
+      gzerr << "Pick: invalid Pull-out Curve in [" << file << "]\n";
       return true;
     }
-    std::lock_guard<std::mutex> lock(this->mutex);
-    if (name.find('-') == std::string::npos || this->picked.count(name))
+    lock.lock();
+    if (this->picked.count(name))
     {
-      gzerr << "Pick: [" << name << "] is not a Plant id or was already picked\n";
+      gzerr << "Pick: [" << name << "] was already picked\n";
       return true;
     }
-    sdf::Model model = *root->Model();
-    model.SetName(name);
-    this->requests.push_back(Request{name, gz::msgs::Convert(_req.pose()), model, curve});
+    this->requests.push_back(Request{name, *root->Model(), curve});
     this->picked.insert(name);
     // ponytail: one sdf::Root kept per pick (a few kB, the entities may refer to its graphs);
     // free them on world reset if long training runs pick thousands of Plants.
@@ -148,6 +197,11 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   public: void PreUpdate(const UpdateInfo &_info, EntityComponentManager &_ecm) override
   {
     std::lock_guard<std::mutex> lock(this->mutex);
+    if (!this->loaded)
+    {
+      this->LoadTable(_ecm);
+      this->loaded = true;
+    }
     for (const Request &r : this->requests)
       this->Spawn(r, _ecm);
     this->requests.clear();
@@ -172,8 +226,16 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     if (!position || position->Data().empty() || !velocity || velocity->Data().empty())
       return true;  // filled by Physics from the step after the spawn
     double d = position->Data()[0], v = velocity->Data()[0];
-    p.broken = p.broken || d >= p.curve.dPeak;  // the soil bond does not come back
-    if (p.broken && d > p.held)
+    const char *event = p.announced ? nullptr : "picked";
+    p.announced = true;
+    if (!p.broken && d >= p.curve.dPeak)
+    {
+      p.broken = true;  // the soil bond does not come back
+      event = "peak_passed";
+    }
+    // Not on the detach step: a fast pull can jump past the slide's upper limit, and a lower
+    // limit above the upper one aborts dartsim.
+    if (p.broken && d > p.held && d < p.curve.depth)
     {
       // Ratchet: a loosened root is held by friction, the residual force must not push it back.
       p.held = d;
@@ -201,7 +263,12 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       for (Entity collision : Link(p.root).Collisions(_ecm))
         _ecm.CreateComponent(collision, components::CollideBitmaskCmd(kAllBits));
       p.detached = true;
+      event = "detached";
     }
+    if (!event && std::abs(d - p.sentD) <= kQuietD && std::abs(force - p.sentForce) <= kQuietForce)
+      return true;  // resting: silent
+    p.sentD = d;
+    p.sentForce = force;
 
     gz::msgs::Param msg;
     msg.mutable_header()->mutable_stamp()->CopyFrom(convert<gz::msgs::Time>(_info.simTime));
@@ -214,6 +281,11 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     params["force"].set_double_value(force);
     params["attached"].set_type(gz::msgs::Any::BOOLEAN);
     params["attached"].set_bool_value(attached);
+    if (event)
+    {
+      params["event"].set_type(gz::msgs::Any::STRING);
+      params["event"].set_string_value(event);
+    }
     this->state.Publish(msg);
     return true;
   }
@@ -241,14 +313,15 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     if (!removed)
       gzwarn << "Pick: no grouped visual [" << _r.name << "] to remove\n";
 
+    // The model's pose in its file is the Plant's pose in the Field.
     SdfEntityCreator creator(_ecm, *this->eventMgr);
     Entity plant = creator.CreateEntities(&_r.model);
     creator.SetParent(plant, this->world);
-    _ecm.SetComponentData<components::Pose>(plant, _r.pose);
+    _ecm.SetComponentData<components::Pose>(plant, _r.model.RawPose());
     Entity root = Model(plant).LinkByName(_ecm, "root");
 
     // Anchor at the root's world position, unrotated, so the joint axis is world z.
-    auto at = (_r.pose * _r.model.LinkByName("root")->RawPose()).Pos();
+    auto at = (_r.model.RawPose() * _r.model.LinkByName("root")->RawPose()).Pos();
     const std::string anchorSdf =
       "<sdf version='1.9'><model name='" + _r.name + "_anchor'><pose>" +
       std::to_string(at.X()) + " " + std::to_string(at.Y()) + " " + std::to_string(at.Z()) +
@@ -278,6 +351,9 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: EventManager *eventMgr{nullptr};
   private: gz::transport::Node node;
   private: gz::transport::Node::Publisher state;
+  private: bool loaded = false;  // the table, on the first update
+  private: std::filesystem::path dir;  // plants/ next to the world file
+  private: std::map<std::string, Footprint> plants;
   private: std::mutex mutex;
   private: std::vector<Request> requests;
   private: std::map<std::string, Pick> picks;

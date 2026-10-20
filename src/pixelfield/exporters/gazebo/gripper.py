@@ -118,7 +118,7 @@ def grip(
     the slip (gripper lift minus d at the end) and the Plant's weight.
     """
     world_dir = Path(world_dir)
-    request = plant.pick_sdf(world_dir, plant_id)
+    request = plant.plant_info(world_dir, plant_id)
     lift = request["depth"] + plant.PULL_AFTER if lift is None else lift
     for name, value in (("lift speed", speed), ("lift", lift), ("grip force", grip_force)):
         if not value > 0:  # also refuses NaN
@@ -129,19 +129,21 @@ def grip(
     report = _run(world, {"plant": plant_id, "request": request, "speed": speed, "lift": lift})
     rows = report.pop("rows")
     log = world_dir / "picks" / plant_id / "grip.csv"
+    log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text("time,lift,gap,wrist_force,d,force,attached\n"
                    + "".join(",".join("" if v is None else repr(v) for v in row) + "\n"
                              for row in rows))  # fmt: skip
     attached = [row for row in rows if row[6]]
     detach = next((row for row in rows if row[6] is False), None)
-    end = attached[-1] if attached else rows[-1]
+    # The state topic is silent while the root rests, so the last d is the last one sent.
+    d_end = attached[-1][4] if attached else 0.0
     return {
         **request,
         **report,
         "peak_wrist": max((row[3] for row in attached if row[3] is not None), default=0.0),
         "detach_d": detach[4] if detach else None,
         "max_d": max((row[4] for row in attached), default=0.0),
-        "slip": end[1] - (end[4] or 0.0) if not detach else None,
+        "slip": rows[-1][1] - d_end if not detach else None,
         "weight": request["mass"] * 9.8,
         "log": log,
     }

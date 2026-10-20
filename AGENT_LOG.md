@@ -790,3 +790,27 @@ Branch m5b-ground, commit 17c5f15 on top of 4024520, not pushed. Validated: test
 ### Open items
 - Push and PR when the user says so. Proper Amiga launch belongs in amiga_ros2 (colcon build of amiga_description).
 - Next: m5c pick by id, needs IMPLEMENT.
+
+## 2026-10-20 M5c pick by id
+### Goal & outcome
+`pixelfield build` writes `plants/<id>.sdf` for every root crop Plant (model named by id at its Field pose, Pull-out Curve element, hulls and articulated glb shared per Variant in `plants/meshes/`) and `plants/plants.tsv` (id, x, y, z, footprint radius and height, scaled). The C++ system reads the table and loads the file on a pick; the pick service takes a `gz.msgs.StringMsg` id; Python `pick`, `pull` and `grip` send only the id. The state topic publishes only when d or the force changed, plus events. Damped pull (c = 50 N s/m) checked: force minus curve equals c * v per step within 0.01 N, median 2.5 N at 5 cm/s. Build of the 10 x 10 carrot Field: 4.7 s, 165 MB `out/` (142 MB of Plant SDFs, 46 KB per Plant); Amiga example 4.3 s, 152 MB (perf.md).
+### Decisions & why
+- User skipped discussion and delegated all choices.
+- Pick message `gz.msgs.StringMsg` with reply `gz.msgs.Boolean`: standard, works from `gz service` and ros_gz without a custom message.
+- Events are ordinary state messages with an extra `event` param (picked, peak_passed, detached): one message type for consumers. "Being pulled" means d or force changed by more than 1e-9 m or 1e-6 N since the last message, so a root held still by a robot or by the ratchet is silent too (both repeat to the last bit at rest). The picked event goes out on the first step with joint data, which keeps a full `pull.csv` byte-identical to main.
+- The model pose lives in the Plant SDF, so the file alone describes the Plant; Plant SDFs come from `to_manifest(layout)` so scale and pose match the Manifest's rounding.
+- `build` deletes `plants/` first: no stale SDFs from an earlier spec.
+- Fixed a pre-existing crash found by the validator: at 20 m/s the ratchet set the slide's lower limit above its upper one on the detach step and dartsim aborted (confirmed on main). The ratchet now skips the detach step; test added.
+### Lessons / gotchas
+- gz-sim 8 hands a system its plugin element without a file path (`FilePath()` empty, no parent, no WorldSdf component). The world file's absolute path is on the `soil` model (`Model::SourceFilePath`), but models do not exist yet in Configure, so the table is read on the first PreUpdate; a pick before that is refused with "still loading". The first live check passed only because the server's cwd was the world folder.
+- `gz service` prints nothing for a `data: false` reply (protobuf text omits defaults).
+- The validator saw 23 silent steps mid-pull on a beetroot: after the peak the root rests on the ratchet while the scripted pull's target catches up. That is a resting root, so silence is by design.
+- Global rule: no Co-Authored-By trailer in commits, it overrides the harness reminder.
+### State
+Branch m5c-pick-by-id from main, commit 87376e9, not pushed. Validated: pytest 94 passed, 144 skipped (slow); ruff; `pull.csv` of r0c0-000 byte-identical to main, part-pulled r0c0-001 identical except the silenced resting rows after release; headless `gz sim -s` with `pixelfield pick`: one `picked` message per Plant then silence for 10 s, re-pick and unknown ids refused, worlds loaded from another cwd, relative and absolute; validator agent (footprint against trimesh over 398 Plants at scales 0.85 to 1.15, 8 concurrent picks of one id give one spawn, lettuce Field refuses cleanly, moved world works, grip slip). GUI pick UNVERIFIED (user's slot).
+### Open items
+- User: `pixelfield pick` in a running GUI world, and `gz topic -e -t /world/pixelfield/pixelfield/pull_out` silent for the resting Plant.
+- Spec M5c check says "pull.csv unchanged": true for a full pull; a part-pulled log now has blank state rows while the root rests.
+- `plants/` is 142 MB for 10 x 10, 1.4x the ADR 0010 estimate; the ADR's ceiling (one scale-1 SDF per Variant) applies if Fields grow.
+- `pull` and `grip` still need the repo root as cwd (library paths in the Manifest): m5e.
+- If one step crosses both d_peak and the root depth, only `detached` is sent (not seen even at 50 m/s).
