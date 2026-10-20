@@ -32,7 +32,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Known issue: after an NVIDIA driver upgrade (apt or unattended-upgrades), the new userspace libraries no longer match the loaded kernel module until a reboot: `nvidia-smi` fails with `Failed to initialize NVML: Driver/library version mismatch` and GPU rendering breaks. Fix: reboot. Perf numbers can also shift after a driver or kernel upgrade, so re-measure a known row before comparing with older rows in `docs/design/perf.md`.
 - Keep gz-rendering 8.3.0 or newer and gz-sim 8.15.0 or newer: with 8.2.3 and 8.14.0 the 10 x 10 Field with a 30 Hz camera ran at 0.6x instead of about 0.95x (`docs/design/perf.md`).
 - Known issue: OpenBLAS picks its matrix kernels per CPU (AVX512 kernels on newer CPUs, for example some GitHub runners), which changes the last bits of numpy matrix products and so the generated Variants. `pixelfield/__init__.py` pins `OPENBLAS_CORETYPE=Haswell` before numpy loads; a script that imports numpy before `pixelfield` must set it itself, or the committed library check fails on such CPUs.
-- `ros-jazzy-ros-gz` is not installed yet; deferred until a chunk needs ROS topics.
+- pixelfield needs no ROS (ADR 0009): robot repositories (for example `amiga_ros2`) bring ROS 2, `ros_gz` and the robot, and load pixelfield worlds.
 
 ## Commands
 
