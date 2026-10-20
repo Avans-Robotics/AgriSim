@@ -1,5 +1,7 @@
 import json
 import math
+import re
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -84,6 +86,9 @@ def test_bad_specs_are_rejected(tmp_path):
         layout_of(tmp_path, "  C\n", extra="path_gap: {every_n_cols: 0, width: 0.3}\n")
     with pytest.raises(ValueError, match="not both"):
         layout_of(tmp_path, "  C\n", extra="random: {rows: 1, cols: 1, crops: {carrot: 1}}\n")
+    for border in ("-0.1", ".nan", ".inf", "wide", "true"):
+        with pytest.raises(ValueError, match="border"):
+            layout_of(tmp_path, "  C\n", extra=f"border: {border}\n")
 
 
 def random_spec(tmp_path, request, seed=7):
@@ -181,8 +186,31 @@ def test_path_gaps_push_columns_east(tmp_path):
         assert x0 < p.x < x0 + 0.5
     field = to_manifest(layout)["field"]
     assert (field["width"], field["path_gap"]) == (3.1, {"every_n_cols": 2, "width": 0.3})
+    assert field["path_gaps"] == [[1.0, 1.3], [2.3, 2.6]]  # between column groups only
 
 
 def test_path_gap_wider_than_the_field_is_no_gap(tmp_path):
     layout = layout_of(tmp_path, "  C C\n", extra="path_gap: {every_n_cols: 2, width: 0.3}\n")
     assert layout.spec.width == pytest.approx(1.0)
+    assert to_manifest(layout)["field"]["path_gaps"] == []
+
+
+def test_manifest_has_border_and_robot_interface(tmp_path):
+    manifest = to_manifest(layout_of(tmp_path, "  C\n"))
+    assert (manifest["robot_interface"], manifest["format_version"]) == (1, 1)
+    assert (manifest["field"]["border"], manifest["field"]["path_gaps"]) == (0.5, [])
+    assert to_manifest(layout_of(tmp_path, "  C\n", extra="border: 0\n"))["field"]["border"] == 0
+
+
+def test_amiga_example_gaps_fit_the_wheel_track(tmp_path):
+    out = tmp_path / "out"
+    main(["build", str(REPO / "examples" / "amiga_10x10.yaml"), "-o", str(out),
+          "--crops", str(REPO / "crops")])  # fmt: skip
+    field = json.loads((out / "manifest.json").read_text())["field"]
+    centres = [(x0 + x1) / 2 for x0, x1 in field["path_gaps"]]
+    assert len(centres) == 4 and field["border"] == 2.0
+    assert [b - a for a, b in pairwise(centres)] == pytest.approx([1.524] * 3)
+    svg = (out / "field.svg").read_text()
+    drawn = [(float(x), float(x) + float(w)) for x, w in
+             re.findall(r'class="path-gap" x="([\d.]+)" y="0" width="([\d.]+)"', svg)]  # fmt: skip
+    assert drawn == pytest.approx([(x0 * 1000, x1 * 1000) for x0, x1 in field["path_gaps"]])

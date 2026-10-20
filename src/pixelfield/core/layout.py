@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pixelfield.core.spec import Crop, FieldSpec, PlantingPattern
 
 MANIFEST_FORMAT_VERSION = 1
+ROBOT_INTERFACE_VERSION = 1  # spec section 14; a breaking change raises it
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ def to_manifest(layout: FieldLayout) -> dict:
     spec = layout.spec
     return {
         "format_version": MANIFEST_FORMAT_VERSION,
+        "robot_interface": ROBOT_INTERFACE_VERSION,
         "field": {
             "pixel_size": spec.pixel_size,
             "rows": spec.rows,
@@ -135,6 +137,8 @@ def to_manifest(layout: FieldLayout) -> dict:
                 if spec.path_gap
                 else None
             ),
+            "path_gaps": [[round(x0, 6), round(x1, 6)] for x0, x1 in spec.path_gaps],
+            "border": spec.border,
             "seed": spec.seed,
             "spec_sha256": spec.sha256,
         },

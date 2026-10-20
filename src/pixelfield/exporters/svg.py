@@ -6,7 +6,7 @@ from pixelfield.core.layout import FieldLayout
 from pixelfield.exporters.colors import crop_colors
 
 PX_PER_M = 1000
-CROP_FILL, EMPTY_FILL = "#8b6b4a", "#c8b89a"
+CROP_FILL, EMPTY_FILL, GAP_FILL = "#8b6b4a", "#c8b89a", "#e6dccb"
 GRID_M = 0.1  # grid spacing, also the scale bar length
 LINE_HEIGHT = 26
 PAD = 20  # white border, so the frame at the origin corner is not clipped
@@ -36,6 +36,12 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             f'<rect x="{p.origin[0] * PX_PER_M:.1f}" y="{svg_y(p.origin[1]) - size:.1f}" '
             f'width="{size:.1f}" height="{size:.1f}" fill="{fill}" stroke="#5a4632">'
             f"<title>r{p.row}c{p.col} {p.crop or 'empty'}</title></rect>"
+        )
+    for x0, x1 in spec.path_gaps:
+        parts.append(
+            f'<rect class="path-gap" x="{x0 * PX_PER_M:.1f}" y="0" '
+            f'width="{(x1 - x0) * PX_PER_M:.1f}" height="{height:.1f}" fill="{GAP_FILL}">'
+            f"<title>Path Gap x {x0:.3f} to {x1:.3f} m</title></rect>"
         )
     parts.append(_grid(width, height, size))
     for p in layout.plants:

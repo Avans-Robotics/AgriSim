@@ -15,8 +15,7 @@ from pixelfield.core.layout import FieldLayout
 from pixelfield.exporters.colors import crop_colors
 
 SDF_VERSION = "1.9"
-SOIL_BORDER = 0.5  # meters of soil around the Field
-SOIL_THICKNESS = 0.02
+SOIL_THICKNESS = 0.02  # of the tile visuals
 # CC0 PBR soil (ambientCG Ground048) and its tiles with dry patches baked in (see
 # generators/soil.py), copied into textures/ next to world.sdf.
 SOIL_TEXTURES = Path("assets/library/textures/soil")
@@ -50,7 +49,7 @@ WORLD_NAME = "pixelfield"
 # Our pull-out system (ADR 0006), built into build/systems/ and found through
 # GZ_SIM_SYSTEM_PLUGIN_PATH; a world without it still runs, gz only logs that it is missing.
 PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
-# A picked root starts inside the soil box, so it must not collide with the soil: the soil
+# A picked root starts below the soil plane, so it must not collide with the soil: the soil
 # keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
 SOIL_BITMASK = 0x1
 
@@ -65,26 +64,29 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     world.append(_scene())
     world.append(_sun())
 
+    # Collision is a plane at z = 0 (about 2 km wide in dartsim), so a robot does not drive off
+    # the world; the textured tiles cover the Field plus the Border (spec section 5).
     width, depth = spec.width, spec.depth
-    soil_size = (width + 2 * SOIL_BORDER, depth + 2 * SOIL_BORDER, SOIL_THICKNESS)
-    soil_pose = (width / 2, depth / 2, -SOIL_THICKNESS / 2, 0.0)
-    soil = _model(world, "soil", soil_pose)
+    soil_size = (width + 2 * spec.border, depth + 2 * spec.border)
+    soil = _model(world, "soil", (width / 2, depth / 2, 0.0, 0.0))
     collision = ET.SubElement(soil, "collision", name="collision")
-    _text(ET.SubElement(ET.SubElement(collision, "geometry"), "box"), "size", _join(soil_size))
+    plane = ET.SubElement(ET.SubElement(collision, "geometry"), "plane")
+    _text(plane, "normal", "0 0 1")
+    _text(plane, "size", _join(soil_size))  # not the collision extent
     contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
     _text(contact, "collide_bitmask", str(SOIL_BITMASK))
     # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
-    # centred on the soil; the outer tiles may overhang the collision box a little.
+    # centred on the soil, top face at z = 0; the outer tiles may overhang the Border a little.
     textures = Path(out_dir) / "textures"
     textures.mkdir(parents=True, exist_ok=True)
     shutil.copy(SOIL_TEXTURES / "normal.jpg", textures)  # shared; color and roughness are baked
     shutil.copytree(SOIL_TILES, textures / "tiles", dirs_exist_ok=True)
-    nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size[:2])
+    nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size)
     for i in range(nx):
         for j in range(ny):
             visual = ET.SubElement(soil, "visual", name=f"tile_{i}_{j}")
             offset = ((i - (nx - 1) / 2) * SOIL_TILE, (j - (ny - 1) / 2) * SOIL_TILE)
-            _text(visual, "pose", _join(offset + (0.0, 0.0, 0.0, 0.0)))
+            _text(visual, "pose", _join(offset + (-SOIL_THICKNESS / 2, 0.0, 0.0, 0.0)))
             box = ET.SubElement(ET.SubElement(visual, "geometry"), "box")
             _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
             visual.append(_soil_material(i % SOIL_ATLAS, j % SOIL_ATLAS))

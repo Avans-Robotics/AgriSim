@@ -7,6 +7,6 @@ random:
   crops:
     carrot: 1
   empty_fraction: 0.1
-path_gap:                # guess until the Amiga wheel track is measured (spec section 12)
+path_gap:                # not a real wheel track; amiga_10x10.yaml fits the Amiga
   every_n_cols: 2
   width: 0.3

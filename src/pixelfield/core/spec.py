@@ -1,6 +1,7 @@
 """Loading Field Specs and Crop definitions from YAML."""
 
 import hashlib
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,7 @@ class FieldSpec:
     row_direction: float | None  # Field-wide override of each Crop's default
     path_gap: tuple[int, float] | None  # (every_n_cols, width): bare soil between column groups
     sha256: str
+    border: float = 0.5  # meters of textured soil around the Field
 
     @property
     def rows(self) -> int:
@@ -63,6 +65,15 @@ class FieldSpec:
         """West edge of a Pixel column; Path Gaps push the columns east of them."""
         gaps = col // self.path_gap[0] if self.path_gap else 0
         return col * self.pixel_size + gaps * (self.path_gap[1] if self.path_gap else 0.0)
+
+    @property
+    def path_gaps(self) -> list[tuple[float, float]]:
+        """x range (west, east) of each Path Gap, west to east."""
+        if not self.path_gap:
+            return []
+        n = self.path_gap[0]
+        return [(self.column_x(c - 1) + self.pixel_size, self.column_x(c))
+                for c in range(n, self.cols, n)]  # fmt: skip
 
     @property
     def width(self) -> float:
@@ -102,6 +113,9 @@ def load_field_spec(path: Path) -> FieldSpec:
         path_gap = int(data["path_gap"]["every_n_cols"]), float(data["path_gap"]["width"])
         if path_gap[0] < 1 or path_gap[1] <= 0:
             raise ValueError("path_gap needs every_n_cols of at least 1 and a width above 0")
+    border = data.get("border", 0.5)
+    if type(border) not in (int, float) or not 0 <= border < math.inf:  # bool is no number
+        raise ValueError("border needs a number of meters, at least 0")
     seed = int(data.get("seed", 0))
     if "random" in data and "grid" in data:
         raise ValueError("a Field Spec has either grid or random, not both")
@@ -114,6 +128,7 @@ def load_field_spec(path: Path) -> FieldSpec:
         row_direction=data.get("row_direction"),
         path_gap=path_gap,
         sha256=hashlib.sha256(raw).hexdigest(),
+        border=float(border),
     )
 
 
