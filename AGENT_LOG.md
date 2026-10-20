@@ -733,3 +733,25 @@ Branch m4e-test-gripper, commit with the beetroot test on top of f08dc97, not pu
 ### Open items
 - Slow squeeze run, then push m4e and open its PR.
 - Finer petiole hulls as a later chunk.
+
+## 2026-10-20 M5 design settled (m5a)
+### Goal & outcome
+Grilled the M5 plan (18 questions plus one redo) and wrote it down: ADR 0009 (pixelfield is a robot-free world provider), ADR 0010 (Active Region), spec sections 2, 5, 7, 10, 11 (M5 chunk table m5a to m5e, M5 row rewritten, new M7 row) and 12 (items 4, 6, 8), a new section 14 "Robot interface", ADR 0002 and 0006 amendments, glossary terms Picked Plant, Active Region and Border.
+### Decisions & why
+- Robots stay out of this repo: `amiga_ros2` (Amiga from `amiga_description`, Lite 6 + Gripper Lite from xarm_ros2, gz DiffDrive, gz_ros2_control, Docker) loads pixelfield worlds via `gz_args`. Common practice (ur_simulation_gz, Clearpath sim take a world argument); one robot description for real and sim. pixelfield has no ROS; the contract is gz-native with a fixed world name `pixelfield` and a `robot_interface` version in the Manifest.
+- Robot-side questions (gripper force, control stack, MoveIt, bridge, WheelSlip, oracle perception) dropped from this repo's plan at the user's request; this repo plans only the world provider.
+- Active Region: every link of every non-Field model triggers it (AABB plus 0.05 m padding against a 3D Plant footprint cylinder), zero config, no unpick unless the perf check fails. Plant SDFs pre-written at build (measured 3.3 ms, 34 KB per carrot Plant: about 10 s, 100 MB for 10 x 10), so the C++ system needs no Python and the scaling rules exist once.
+- State topic publishes only while a Plant is pulled plus events: 100 Picked Plants at 1 kHz would be 100k messages per second.
+- Plant-Plant contact on, measured first in an M5d spike; per-Pixel model with self_collide off is the fallback.
+- Ground: soil collision becomes an infinite plane, Field Spec `border`, Manifest `field.path_gaps`, example Field for the Amiga's 1.524 m wheel track (every_n_cols 2, width 0.524). Soil friction stays default; traction is robot-side.
+- Packaging: robot image clones a tagged release; library paths must stop depending on the cwd. MuJoCo pull scene becomes M7 with finer petiole hulls. M4 loose ends: damping test in m5c, settle at 0.85/1.15 and slow squeeze in the m5d slot.
+### Lessons / gotchas
+- Collide bitmasks cannot switch Plant-Plant contact off with zero-config robots: two shapes collide when masks share a bit and robots default to 0xFFFF, so each overlapping neighbour needs its own bit. The validator measured foliage reach (carrot 0.12 to 0.20 m, beetroot up to 0.27 m): 30 to 56 overlapping neighbours, far beyond 15 bits. Q7 was redone.
+- A 2D footprint would let a chassis passing over a bed pick every Plant; wheels in Path Gaps still pick edge Plants.
+- The Gripper Lite in xarm_ros2 has 8.9 mm stroke per finger and a 5 N effort limit: at mu 1 friction holds 10 N, below a carrot's 15 to 26 N. Note for amiga_ros2: measure the real grip force.
+- No official farm-ng Amiga description exists; `Avans-Robotics/amiga_description` is the model.
+### State
+Branch m5a-design, commit 88cb7f6, not pushed. Docs only. Validated: relative links resolve, no em-dashes, ruff; validator agent checked decisions, arithmetic and stale text (its 13 findings fixed or turned into the Q7 redo). Design UNVERIFIED until m5b to m5e run: bitmask and friction semantics, DART penetration recovery, perf with many Picked Plants.
+### Open items
+- Maintainer reads the docs (m5a check), then m5b-ground, needs IMPLEMENT.
+- For amiga_ros2's own plan: real Gripper Lite force, gripper control in sim, wheel friction.
