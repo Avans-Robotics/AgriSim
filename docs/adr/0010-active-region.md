@@ -20,7 +20,7 @@ Static Plants are visuals without collision (ADR 0007), so a robot passes throug
 
 The system runs in C++ and cannot call the Python Plant SDF builder. `pixelfield build` writes the scaled SDF of every root crop Plant to `out/<field>/plants/<id>.sdf` (hull meshes shared per Variant), plus a plain table the system reads at load (id, position, footprint radius and height). A pick by the system or by the service loads that file; the Python `pick` command only sends the Plant id.
 
-Measured cost: 3.3 ms and 34 KB per carrot Plant, so about 10 s of build and 100 MB in `out/` for the 10 x 10 carrot Field (3,058 Plants). Ceiling: past about 10 x 10 Pixels, or when build time hurts, write one scale-1 SDF per Variant instead and let the system apply the Plant's scale at spawn.
+Measured cost: 3.3 ms and 34 KB per carrot Plant, so about 10 s of build and 100 MB in `out/` for the 10 x 10 carrot Field (3,058 Plants). Measured in M5c: 4.7 s and 142 MB of Plant SDFs (46 KB per Plant on average over the 24 Variants), see [perf.md](../design/perf.md). Ceiling: past about 10 x 10 Pixels, or when build time hurts, write one scale-1 SDF per Variant instead and let the system apply the Plant's scale at spawn.
 
 ### Contact between Plants
 
@@ -30,7 +30,7 @@ M5d starts with a spike: pick a full carrot Pixel (about 31 Plants) and record t
 
 ### State topic
 
-With many Picked Plants a per-step message per Plant (1 kHz each) floods gz-transport and the ROS bridge. The state topic `/world/pixelfield/pixelfield/pull_out` carries a Plant's state only while it is being pulled (its root moves or the force is non-zero), plus one message per event: picked, peak passed, detached. A resting Picked Plant is silent. Poses of Picked Plants need nothing new: they are ordinary models on the standard `dynamic_pose/info` topic.
+With many Picked Plants a per-step message per Plant (1 kHz each) floods gz-transport and the ROS bridge. The state topic `/world/pixelfield/pixelfield/pull_out` carries a Plant's state only while it is being pulled (its root moves or the force is non-zero), plus one message per event: picked, peak passed, detached. A resting Picked Plant is silent. In M5c "being pulled" became "d or the force changed since the last message", so a root held still by a robot or by the post-peak ratchet is silent too, and events are ordinary state messages with an extra `event` parameter, so a consumer reads one message type. Poses of Picked Plants need nothing new: they are ordinary models on the standard `dynamic_pose/info` topic.
 
 ## Why
 

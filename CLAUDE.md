@@ -37,7 +37,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 ## Commands
 
 - Install: `uv sync`
-- Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf, meshes/, textures/)
+- Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf, meshes/, textures/, and plants/ with the SDF of every root crop Plant plus plants.tsv for the pull-out system; a 10 x 10 Field takes about 5 s and 150 MB)
 - Open it: `gz sim out/carrot_pixel/world.sdf`
 - Render camera images headless: `uv run pixelfield render out/carrot_pixel/world.sdf` (writes `renders/top.png`, `renders/oblique.png`, about 12 s)
 - Regenerate a Crop's Variants: `uv run pixelfield generate <crop>` for carrot, beetroot, radish or lettuce (needs `uv sync --extra generate` or the dev group; preview: `gz sim out/<crop>_variants/world.sdf`). Rebuild worlds afterwards; a test fails if the committed library no longer matches its generator.
@@ -45,7 +45,7 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - All four M3 Crops side by side: `uv run pixelfield build examples/m3_crops.yaml`
 - Settle check of an articulated root crop Variant, headless (about 4 s each, writes `out/settle_<variant>/world.sdf` to open in `gz sim`): `uv run pixelfield settle assets/library/carrot/carrot_harvest_v00`
 - Build the C++ pull-out system (about 5 s; Field worlds load it from `GZ_SIM_SYSTEM_PLUGIN_PATH`, without it gz logs that the plugin is missing): `cmake -S src/pixelfield/exporters/gazebo/systems -B build/systems && cmake --build build/systems`, then `export GZ_SIM_SYSTEM_PLUGIN_PATH=$PWD/build/systems` before `gz sim`
-- Pick a Plant in a running Field world (spawns it articulated, anchored to its Pull-out Curve): `uv run pixelfield pick out/carrot_pixel r0c0-000`
+- Pick a Plant in a running Field world by id (spawns it articulated, anchored to its Pull-out Curve): `uv run pixelfield pick out/carrot_pixel r0c0-000`; watch its state with `gz topic -e -t /world/pixelfield/pixelfield/pull_out` (silent while it rests)
 - Scripted pull of a Plant, headless (about 6 s, writes `out/carrot_pixel/picks/<plant id>/pull.csv`): `uv run pixelfield pull out/carrot_pixel r0c0-000`
 - Pull a Plant by its leaf bunch with the test gripper, headless (about 8 s, writes `out/carrot_pixel/picks/<plant id>/grip.csv` with the wrist force): `uv run pixelfield grip out/carrot_pixel r0c0-000`; a weak grip that slips: `--force 5 --lift 0.06`
 - Squeeze check of a root crop Variant, headless (about 3.5 s): `uv run pixelfield squeeze assets/library/carrot/carrot_harvest_v00`

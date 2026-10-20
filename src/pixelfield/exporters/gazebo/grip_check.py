@@ -22,11 +22,11 @@ import sys
 import time
 from pathlib import Path
 
-import gz.math7
+import gz.math7  # noqa: F401, world_pose returns Pose3d only once it is loaded
 from gz.common5 import set_verbosity
 from gz.msgs10.boolean_pb2 import Boolean
-from gz.msgs10.entity_factory_pb2 import EntityFactory
 from gz.msgs10.param_pb2 import Param
+from gz.msgs10.stringmsg_pb2 import StringMsg
 from gz.msgs10.wrench_pb2 import Wrench
 from gz.sim8 import Joint, Link, Model, TestFixture, World, world_entity
 from gz.transport13 import Node
@@ -107,13 +107,8 @@ node.subscribe(Wrench, config["wrist_topic"], on_wrist)
 server.run(True, 1, False)
 report["requested"] = None
 if request:
-    x, y, z, yaw = request["pose"]
-    msg = EntityFactory(sdf_filename=request["sdf_filename"], name=request["name"])
-    msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = x, y, z
-    quaternion = gz.math7.Quaterniond(0.0, 0.0, yaw)
-    msg.pose.orientation.z, msg.pose.orientation.w = quaternion.z(), quaternion.w()
     topic = f"/world/{world_name}/pixelfield/pick"
-    ok, reply = node.request(topic, msg, EntityFactory, Boolean, 5000)
+    ok, reply = node.request(topic, StringMsg(data=request["name"]), StringMsg, Boolean, 5000)
     report["requested"] = bool(ok and reply.data)
 server.run(True, steps - 1, False)
 time.sleep(0.5)  # the last topic messages

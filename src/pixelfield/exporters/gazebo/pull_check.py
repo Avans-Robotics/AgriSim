@@ -2,14 +2,15 @@
 
 Usage: pull_check.py <world.sdf> <request json> <steps> <speed> <release>
 
-Loads a Field world (without its Sensors system), sends the pick request to the pull-out
-system, then lifts the Plant's root at <speed> m/s with a stiff spring-damper force, as a
-gripper holding the root would, and lets go once the lift target passes <release> meters, so
+Loads a Field world (without its Sensors system), picks the Plant by its id, then lifts the
+Plant's root at <speed> m/s with a stiff spring-damper force, as a gripper holding the root
+would, and lets go once the lift target passes <release> meters (0: never lifts), so
 the Plant drops. The lift is a vertical force only, so a detached Plant can tip over. Prints
 one JSON line: whether the request was accepted, whether the Plant's grouped visual exists
 before and after, and one row per step after the spawn: time, lift, pull force, the lowest
 point of the root's collision hull (world z), then d, force and attached from the system's state
-topic, matched to the step by its time stamp (None when no state was published that step).
+topic, matched to the step by its time stamp (None when no state was published that step),
+and the state topic's events as [sim time, event].
 """
 
 import json
@@ -21,8 +22,8 @@ from pathlib import Path
 import gz.math7
 from gz.common5 import set_verbosity
 from gz.msgs10.boolean_pb2 import Boolean
-from gz.msgs10.entity_factory_pb2 import EntityFactory
 from gz.msgs10.param_pb2 import Param
+from gz.msgs10.stringmsg_pb2 import StringMsg
 from gz.sim8 import Link, Model, TestFixture, World, world_entity
 from gz.transport13 import Node
 
@@ -44,6 +45,7 @@ set_verbosity(1)
 fixture = TestFixture(str(fast))
 node = Node()
 states = {}  # state topic messages by sim time in ms; delivered in another thread
+events = []
 rows, pull = [], {"root": None, "z0": None, "t0": None, "force": 0.0}
 visual = {}
 
@@ -52,6 +54,8 @@ def on_state(msg):
     ms = round(msg.header.stamp.sec * 1000 + msg.header.stamp.nsec / 1e6)
     states[ms] = [msg.params["d"].double_value, msg.params["force"].double_value,
                   msg.params["attached"].bool_value]  # fmt: skip
+    if "event" in msg.params:
+        events.append([ms / 1000, msg.params["event"].string_value])
 
 
 def grouped_visual(ecm):
@@ -78,7 +82,7 @@ def pre_update(info, ecm):
     t = (info.iterations - pull["t0"]) * STEP
     lift = root.world_pose(ecm).pos().z() - pull["z0"]
     force = PULL_STIFFNESS * (speed * t - lift) - PULL_DAMPING * (velocity.z() - speed)
-    if speed * t > release:
+    if release <= 0 or speed * t > release:
         force = 0.0
     root.add_world_force(ecm, gz.math7.Vector3d(0.0, 0.0, force))
     pull["force"] = force
@@ -102,12 +106,8 @@ server = fixture.server()
 server.run(True, 1, False)
 world_name = re.search(r'<world name="([^"]+)"', text).group(1)
 node.subscribe(Param, f"/world/{world_name}/pixelfield/pull_out", on_state)
-x, y, z, yaw = request["pose"]
-msg = EntityFactory(sdf_filename=request["sdf_filename"], name=name)
-msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = x, y, z
-quaternion = gz.math7.Quaterniond(0.0, 0.0, yaw)
-msg.pose.orientation.z, msg.pose.orientation.w = quaternion.z(), quaternion.w()
-ok, reply = node.request(f"/world/{world_name}/pixelfield/pick", msg, EntityFactory, Boolean, 5000)
+ok, reply = node.request(f"/world/{world_name}/pixelfield/pick", StringMsg(data=name), StringMsg,
+                         Boolean, 5000)  # fmt: skip
 try:
     server.run(True, steps, False)
     time.sleep(0.5)  # the last state messages
@@ -115,4 +115,5 @@ finally:
     fast.unlink()
 rows = [row[1:] + states.get(row[0], [None] * 3) for row in rows]
 print(json.dumps({"requested": bool(ok and reply.data), "visual_before": visual.get("before"),
-                  "visual_after": visual.get("after"), "rows": rows}))  # fmt: skip
+                  "visual_after": visual.get("after"), "rows": rows,
+                  "events": sorted(events)}))  # fmt: skip

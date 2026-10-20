@@ -1,7 +1,8 @@
 """Gazebo Harmonic world: flat soil, a sun and one static model per Pixel of Plants.
 
 Plants use their Variant mesh, copied into `meshes/` next to world.sdf so the output folder
-is self-contained. Crops without Variants in their library fall back to a cylinder.
+is self-contained. Crops without Variants in their library fall back to a cylinder. Root crop
+Plants also get their articulated SDF in `plants/`, loaded by the pull-out system on a pick.
 """
 
 import math
@@ -11,7 +12,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from pixelfield.core.layout import FieldLayout
+from pixelfield.core.layout import FieldLayout, to_manifest
 from pixelfield.exporters.colors import crop_colors
 
 SDF_VERSION = "1.9"
@@ -132,6 +133,9 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     ET.indent(sdf)
     path = Path(out_dir) / "world.sdf"
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
+    from pixelfield.exporters.gazebo import plant  # it imports this module
+
+    plant.write_plants(to_manifest(layout), out_dir)  # the Manifest's rounded scale and pose
     return path
 
 

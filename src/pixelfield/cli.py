@@ -173,8 +173,8 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         if args.command == "pick":
             if not plant.pick(args.world, args.plant):
                 parser.exit(1, "error: pick refused or no reply: the Plant was already picked "
-                               "(see the gz log), or the world is not running with the "
-                               "pull-out system on GZ_SIM_SYSTEM_PLUGIN_PATH\n")  # fmt: skip
+                               "(see the gz log), or no world is running with the pull-out "
+                               "system on GZ_SIM_SYSTEM_PLUGIN_PATH\n")  # fmt: skip
             print(f"picked {args.plant}")
             return
         r = plant.pull(args.world, args.plant, args.speed, args.release)

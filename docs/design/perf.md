@@ -35,6 +35,17 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
+Build time and `out/` size with the Plant SDFs written at build (M5c, ADR 0010), `pixelfield build`, wall clock:
+
+| Date | Field | Plants | Build | `out/` | of which `plants/` |
+|---|---|---|---|---|---|
+| 2026-10-20 | `amiga_10x10.yaml` before M5c (main) | 2,760 | 0.15 s | 19 MB | none |
+| 2026-10-20 | `amiga_10x10.yaml` | 2,760 | 4.3 s | 152 MB | 129 MB of SDFs |
+| 2026-10-20 | `random_10x10.yaml` | 2,760 | 4.2 s | 152 MB | 129 MB of SDFs |
+| 2026-10-20 | 10 x 10 carrot Field (hand-drawn, M2a) | 3,058 | 4.7 s | 165 MB | 142 MB of SDFs |
+
+ADR 0010 estimated about 10 s and 100 MB: the build is faster, the files 1.4x larger (46 KB per Plant on average; carrot v00 alone was 34 KB). Shared hull meshes and glb files add about 1 MB.
+
 Reading the numbers:
 
 - As built (2 Hz placeholder cameras) the 10 x 10 Field runs at 1.0x.
