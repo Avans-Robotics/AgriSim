@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+import trimesh
 
 from pixelfield.exporters.gazebo import plant
 
@@ -39,7 +40,22 @@ def test_plant_model_scales_the_physics_export(tmp_path):
         assert _floats(inertial, "pose")[:3] == pytest.approx([c * s for c in expected["com"]])
         for key, value in expected["inertia"].items():
             assert float(inertial.find("inertia").findtext(key)) == pytest.approx(value * s**5)
-        obj = tmp_path / link.find("collision").find("geometry").find("mesh").findtext("uri")
+        for i, c in enumerate(expected.get("capsules", [])):
+            # The capsule's axis (collision frame z) runs from cap centre to cap centre.
+            collision = link.find(f"collision[@name='capsule{i}']")
+            shape = collision.find("geometry").find("capsule")
+            assert float(shape.findtext("radius")) == pytest.approx(c["radius"] * s)
+            length = float(shape.findtext("length"))
+            pose = _floats(collision, "pose")
+            frame = trimesh.transformations.euler_matrix(*pose[3:], "sxyz")
+            frame[:3, 3] = pose[:3]
+            ends = trimesh.transform_points([[0, 0, -length / 2], [0, 0, length / 2]], frame)
+            expected_ends = [v * s for v in c["from"] + c["to"]]
+            assert ends.ravel().tolist() == pytest.approx(expected_ends, abs=1e-6)
+        if "hull" not in expected:
+            continue
+        collision = link.find("collision[@name='collision']")
+        obj = tmp_path / collision.find("geometry").find("mesh").findtext("uri")
         lines = obj.read_text().splitlines()
         assert sum(line.startswith("v ") for line in lines) == len(expected["hull"]["vertices"])
         assert sum(line.startswith("vn ") for line in lines) == len(expected["hull"]["vertices"])

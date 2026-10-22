@@ -4,8 +4,9 @@ picking a Plant of a built Field by id (the pull-out system in systems/PullOut.c
 
 The physics export is at scale 1; a Plant of scale s gets lengths times s, masses and joint
 stiffnesses times s^3, joint damping times s^4, inertias times s^5 and spring references
-times s (gravity torque s^4 over stiffness s^3). Collision hulls are
-written as OBJ files next to the SDF; link visuals are submeshes of the articulated glb.
+times s (gravity torque s^4 over stiffness s^3). The root's collision hull is written as an
+OBJ file next to the SDF, petiole links collide as chains of capsules; link visuals are
+submeshes of the articulated glb.
 """
 
 import json
@@ -46,8 +47,8 @@ def plant_model(
     """Non-static model of one Plant at the origin, root link first.
 
     `variant` is the library path without extension (assets/library/carrot/carrot_harvest_v00).
-    The articulated glb is copied to out_dir/meshes/ and the hulls written to
-    out_dir/meshes/<variant name>/<link>.obj, so the URIs resolve against an SDF in out_dir.
+    The articulated glb is copied to out_dir/meshes/ and the root hull written to
+    out_dir/meshes/<variant name>/root.obj, so the URIs resolve against an SDF in out_dir.
     The meshes are at scale 1, so Plants of one Variant share them: pass write_meshes=False
     once they are written, and the already loaded physics export.
     """
@@ -73,11 +74,14 @@ def plant_model(
         for key, value in link["inertia"].items():
             _text(inertia, key, _num(value * s**5))
 
-        obj = hulls / f"{link['name']}.obj"
-        if write_meshes:
-            _write_obj(obj, link["hull"])
-        collision = ET.SubElement(element, "collision", name="collision")
-        _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
+        for i, capsule in enumerate(link.get("capsules", [])):
+            _capsule(ET.SubElement(element, "collision", name=f"capsule{i}"), capsule, s)
+        if "hull" in link:
+            obj = hulls / f"{link['name']}.obj"
+            if write_meshes:
+                _write_obj(obj, link["hull"])
+            collision = ET.SubElement(element, "collision", name="collision")
+            _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
         if link["name"] == "root":
             contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
             _text(contact, "collide_bitmask", str(ROOT_BITMASK))
@@ -160,8 +164,8 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
     Each model is named by its Plant id, at its pose in the Field, and carries its Pull-out
     Curve as <pixelfield:pull_out>; hull meshes and articulated glb files are shared per
     Variant in plants/meshes/. Table columns: id, x, y, z (the Plant's pose), footprint radius
-    (the farthest collision hull point from the crown axis) and footprint height (the top of
-    the highest hull above the Plant's z), both scaled. Plants of Crops without a Pull-out
+    (the farthest collision point from the crown axis) and footprint height (the top of the
+    highest collision above the Plant's z), both scaled. Plants of Crops without a Pull-out
     Curve (lettuce) or without a Variant physics export get no file.
     """
     plants_dir = Path(out_dir) / "plants"
@@ -201,15 +205,18 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
 
 
 def _footprint(physics: dict) -> tuple[float, float]:
-    """Radius about the crown axis and top of the collision hulls in the model frame, scale 1."""
+    """Radius about the crown axis and top of the collisions in the model frame, scale 1."""
     cx, cy = next(link["pose"][:2] for link in physics["links"] if link["name"] == "root")
     radius = height = 0.0
     for link in physics["links"]:
         x, y, z, roll, pitch, yaw = link["pose"]
-        for v in link["hull"]["vertices"]:
+        # A capsule reaches its radius past its cap centres, in every direction.
+        points = [(v, 0.0) for v in link.get("hull", {}).get("vertices", [])]
+        points += [(v, c["radius"]) for c in link.get("capsules", []) for v in (c["from"], c["to"])]
+        for v, r in points:
             dx, dy, dz = _rotate(v, roll, pitch, yaw)
-            radius = max(radius, math.hypot(x + dx - cx, y + dy - cy))
-            height = max(height, z + dz)
+            radius = max(radius, math.hypot(x + dx - cx, y + dy - cy) + r)
+            height = max(height, z + dz + r)
     return radius, height
 
 
@@ -326,6 +333,20 @@ def _mesh(parent: ET.Element, uri: str, scale: float) -> ET.Element:
     _text(mesh, "uri", uri)  # resolved against the SDF file
     _text(mesh, "scale", _join((scale,) * 3))
     return mesh
+
+
+def _capsule(collision: ET.Element, capsule: dict, scale: float) -> None:
+    """SDF capsule between two cap centres (its axis is the collision frame's z), scaled."""
+    a = [c * scale for c in capsule["from"]]
+    b = [c * scale for c in capsule["to"]]
+    dx, dy, dz = (q - p for p, q in zip(a, b, strict=True))
+    centre = tuple((p + q) / 2 for p, q in zip(a, b, strict=True))
+    # Pitch tips z towards the axis, then yaw turns it about z.
+    _text(collision, "pose", _join(centre + (0.0, math.atan2(math.hypot(dx, dy), dz),
+                                             math.atan2(dy, dx))))  # fmt: skip
+    shape = ET.SubElement(ET.SubElement(collision, "geometry"), "capsule")
+    _text(shape, "radius", _num(capsule["radius"] * scale))
+    _text(shape, "length", _num(math.dist(a, b)))
 
 
 def _write_obj(path: Path, hull: dict) -> None:

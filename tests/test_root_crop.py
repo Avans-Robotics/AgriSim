@@ -135,7 +135,20 @@ def test_physics_export(name):
                                [i["ixz"], i["iyz"], izz]])  # fmt: skip
             assert link["mass"] > 0 and np.linalg.eigvalsh(tensor).min() > 0
             assert ixx + iyy >= izz and iyy + izz >= ixx and izz + ixx >= iyy
-            _assert_convex(np.array(link["hull"]["vertices"]), np.array(link["hull"]["faces"]))
+
+        _assert_convex(np.array(links["root"]["hull"]["vertices"]),
+                       np.array(links["root"]["hull"]["faces"]))  # fmt: skip
+        # a petiole link collides as a chain of capsules from its frame origin along the
+        # petiole (x), thinning towards the tip
+        crown, tip = crop["petiole_radius"]
+        for link in list(links.values())[1:]:
+            chain = link["capsules"]
+            assert "hull" not in link and len(chain) == root_crop.CAPSULES_PER_LINK
+            assert chain[0]["from"] == [0, 0, 0] and chain[0]["to"][0] > 0
+            assert all(a["to"] == b["from"] for a, b in zip(chain[:-1], chain[1:], strict=True))
+            assert np.linalg.norm(chain[-1]["to"]) < 0.3
+            radii = [c["radius"] for c in chain]
+            assert crown >= radii[0] and radii == sorted(radii, reverse=True) and radii[-1] >= tip
 
         grams = 1000 * np.array([links["root"]["mass"], sum(lk["mass"] for lk in links.values())])
         (root_low, root_high), (top_low, top_high) = MASS[name]
