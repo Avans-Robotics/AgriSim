@@ -913,3 +913,18 @@ Branch m5d-active-region at the ADR fix commit on top of 57d35fc. Validated: pyt
 ### Open items
 - User decisions: step 4 ms with the harness gains scaled by the step; roots coloured with collide bits instead of a minimum distance.
 - Then re-measure the scenario, then unpick.
+
+## 2026-10-22 M5d root colours fail, grasp friction drifts with the step
+### Goal & outcome
+User approved root collide-bit colours and a 4 ms step. Implemented (uncommitted): `_root_bits` in plant.write_plants (greedy, 5 mm margin, 3 bits used in random_10x10), PHYSICS_STEP 0.004, scripted pull gains divided by the step in ms, tests for one bit per root and touching roots on different bits (mutation-checked). Results argue against both as they stand: gripper scenario with colours 0.46x at 2 ms, 0.88x at 4 ms (0.42x, 0.72x without), and at 1 ms the gz server aborts on ODE's AABB assertion. At 4 ms four tests fail: three scripted pull tests (lower harness gains change the log) and the strongest beetroot no longer detaching.
+### Decisions & why
+None yet: back to the user.
+### Lessons / gotchas
+- Overlapping roots are unphysical, not just costly: with root-root contact off, a carrot's leaves start inside its neighbour's root and that contact cannot resolve either (both anchored); at 1 ms a body is flung far enough to abort ODE. Touching crowns are realistic, overlapping ones are not, so the layout must keep crowns apart (a minimum distance of the sum of crown radii, touch allowed).
+- Grasp friction drifts with the step on the strongest beetroot (58.4 N): a 20 N per jaw grip peaks at 42 N wrist force at 1 ms (friction allows 40), 60 N at 2 and 4 ms; the 45.8 N grip detaches at 1 and 2 ms but slips at d = 80 mm at 4 ms. Carrot grips (strong and weak) stay right at 4 ms. Cause unknown (deeper jaw penetration per step raising the normal force above the effort limit is a guess).
+- When the gz server aborts, `gz topic -e -n 1` waits forever: perf_run.sh hangs (scratch script; needs a timeout on the stats read).
+- The ODE AABB abort is a candidate for the unexplained intermittent squeeze and pytest failures.
+### State
+Branch m5d-active-region at 7029336 plus uncommitted root colours, 4 ms step and harness gains. Tests at 4 ms: 4 failures (above). Not committed on purpose.
+### Open items
+- User: drop the colours for a non-overlapping layout; step size given the grasp drift; scripted pull harness at a fixed 1 ms instead of scaled gains.
