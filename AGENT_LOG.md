@@ -946,3 +946,19 @@ Branch m5d-active-region at 8d5b614 (stacked on m5d-capsules), not pushed. Valid
 - Unpick (next chunk, design to discuss).
 - The intermittent crash: wait for its stderr.
 - Settle at 0.85 and 1.15 not re-run at 2 ms.
+
+## 2026-10-22 M5d unpick and grip --gui
+### Goal & outcome
+User approved unpick (U1 to U3) and a GUI path for the grip (Q8). Commit 9cdfb44: in the Active Region check, a Plant the region picked turns back into its static visual once its bond is intact (not broken, d under 0.1 mm), every link moved under 1 mm/s for 2 s, no robot box meets it, and every link is within 1 cm of where it settled after the spawn. Weld removed first, models a step later; the visual is rebuilt from the Pixel model's `ModelSdf` with SdfEntityCreator; an `unpicked` event goes out; the Plant can be picked again. `pixelfield grip --gui` runs the grip in real time with `gz sim -g` on the run's own partition (waits 8 s, lingers 30 s). In the carrot Pixel a probe that leaves at 0.2 s gets its 4 Plants unpicked at 2.3 to 5.0 s, all 31 static visuals back.
+### Decisions & why
+- Decided without asking, flagged to the user: a Plant picked through the pick service is never unpicked (someone asked for it; it keeps `pixelfield pick` plus a manual GUI pull and the resting-silence check working).
+- Rest is judged from link positions every 10 ms (no velocity components enabled), the settled pose taken at the first region check after the spawn.
+### Lessons / gotchas
+- A test of a restored visual must look before the robot returns: at the end the re-pick removes it again, so a final-state check passed with the restore switched off (mutation caught only after adding a snapshot step).
+- `Model.set_world_pose_cmd` moves a static probe model in a TestFixture run.
+- Region tests and the check scripts now fail with the script's stderr (run_check), to catch the intermittent crash; one region test run failed once right after a rebuild, 8 reruns passed.
+### State
+Branch m5d-active-region at 9cdfb44, not pushed. Validated: pytest 100 passed; region tests mutation-checked (never unpick, unpick by id, no visual restore each fail a test); grip --gui path checked headless with a stubbed viewer (real-time pacing, 500 linger rows at 2 ms). GUI itself UNVERIFIED (user's slot). Validator agent running.
+### Open items
+- User GUI check: `uv run pixelfield grip out/carrot_pixel <id> --gui` shows the gripper pushing neighbours, and unpicked Plants turning static.
+- The bent-leaf tolerance (1 cm) has no automated test.
