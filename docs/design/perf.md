@@ -32,6 +32,9 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 | 2026-10-16 | same | same | 2,760 / 93 | OAK-D rig, nadir | 0.96 | 384 / 495 MiB |
 | 2026-10-16 | same | same | 2,760 / 93 | OAK-D rig, pose A at the west Field edge | 0.92 | 384 / 495 MiB |
 | 2026-10-16 | same | `carrot_pixel.yaml`, server | 32 / 4 | OAK-D rig, nadir | 1.01 | 380 / 491 MiB |
+| 2026-10-22 | 2977ae1 (M5d), driver 595.99, kernel 7.0.0-38 | `random_10x10.yaml`, server | 2,760 / 93 | OAK-D rig, nadir (re-run of the 0.96 row) | 0.96 | 818 MiB total |
+| 2026-10-22 | same | same, plus the test gripper (static, jaws open, 3 cm above the crown of mid-Pixel carrot r5c4-032 under the camera): 5 Picked Plants | 2,760 / 93 | OAK-D rig, nadir | 0.21 (FAIL, budget 0.5) | 818 MiB total |
+| 2026-10-22 | same, root collisions of the Plant SDFs set to 0 by hand | same, 5 Picked Plants | 2,760 / 93 | OAK-D rig, nadir | 0.64 | 818 MiB total |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
@@ -66,6 +69,15 @@ The robot camera is an OAK-D Pro. The rig stands in for it with one RGB `camera`
 - m3b merged each Variant into one mesh with one material (ADR 0008): 3x fewer render items, 0.50x to 0.61x (nadir) and 0.51x to 0.59x (pose A at the edge), renders unchanged.
 - Upgrading gz-rendering 8.2.3 to 8.3.0 and gz-sim 8.14.0 to 8.15.0 lifts the 10 x 10 Field with the OAK-D rig to 0.92x to 0.96x, with cameras delivering 28 to 30 frames per second; the single Pixel reaches 1.0x. gz-rendering 8.3.0 stops pre-rendering every visual's children twice per frame (gz-rendering PR #1309) and turns off Ogre worker threads that occupied CPU cores (PR #1307); gz-sim 8.15.0 speeds up entity lookups. Keep at least these versions.
 - With this, per-Pixel merging or an active region (only nearby Plants detailed) is not needed for a 10 x 10 Field. Revisit for larger Fields or for M4, where only the grasped Plant needs dynamics.
+
+### Active Region (M5d, 2026-10-22)
+
+The perf check is a scenario (ADR 0010): the test gripper grasping a mid-Pixel carrot in the 10 x 10 Field with the OAK-D rig at nadir. The gripper stands static at its grasp pose, jaws open; the Active Region picks the 5 Plants around it.
+
+- With picks the cost is physics, not rendering. Without Sensors, unthrottled: the empty Field runs at 37x, the same 5 Plants picked by id without the gripper at 0.24x, with the gripper 0.26x.
+- Each of the 5 Plants alone runs at 5.6 to 8.6x. Together, two of them (r5c4-029 and r5c4-030, crowns 2.3 cm apart, crown radii 2.0 and 2.1 cm) have overlapping roots. Both roots are welded to their anchors, so the contact can never resolve: a leaf of r5c4-030 keeps moving at up to 15 cm/s and the pair runs at 0.31x; with the two root collisions off it runs at 2.6x.
+- Overlapping roots are common: in `random_10x10` 654 pairs of root crop Plants are closer than the sum of their crown radii, 1,231 of 2,760 Plants (in-row spacing 4 cm, jitter 1 cm, crown radii 1.2 to 2.2 cm).
+- With every root's collision off, the scenario runs at 0.64x, and the full carrot Pixel spike (32 Plants, physics only) at 0.089x instead of 0.036x.
 
 Rig worlds are hand-edited copies of `world.sdf` (camera models replaced by one model with both sensors). Subscribe to both `/oakd/rgb` and `/oakd/depth`.
 
