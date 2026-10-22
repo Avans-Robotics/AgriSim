@@ -962,3 +962,19 @@ Branch m5d-active-region at 9cdfb44, not pushed. Validated: pytest 100 passed; r
 ### Open items
 - User GUI check: `uv run pixelfield grip out/carrot_pixel <id> --gui` shows the gripper pushing neighbours, and unpicked Plants turning static.
 - The bent-leaf tolerance (1 cm) has no automated test.
+
+## 2026-10-22 M5d validator findings fixed
+### Goal & outcome
+Validator agent on 857951b..9cdfb44: nothing blocking. Unpick held under mass unpick (30 of 31 Plants, restored visuals byte-identical in all 8 ECM components), broken bonds never unpicked, re-pick after unpick runs a full pull, 225 pause cycles change nothing, layout has no root overlap in any example or rotated variant (exact 3D hull test), the pinned pull is byte-identical between 1 and 2 ms worlds. Seven smaller findings fixed in one commit: loud failures for worlds that do not load, layout refuses root crops without root sizes, grip --gui waits with the world running and starts the viewer inside the cleanup, a Pick owns its parsed SDF (freed on unpick), docs corrected.
+### Decisions & why
+- Refuse instead of warn when a root crop has no root sizes: the same Field Spec and seed must not give a different Manifest depending on the working directory.
+### Lessons / gotchas
+- A gz-sim server stopped between TestFixture runs answers no scene requests: a GUI attaching during a sleep sees nothing until the world runs.
+- The layout rule moves Plants 2 cm median (90th percentile 3.4 cm, max 5.8 cm), not "a few mm" as the previous entry said.
+- A TestFixture script on a broken world prints the XML error and still exits 0: scripts must check that steps ran.
+- Radish v15's root hull is 1.56x its listed radius; the margins still keep Pixels apart.
+### State
+Branch m5d-active-region, latest commit the review fixes, not pushed. Validated: pytest 100 passed plus the new layout test (core 45 passed); broken world fails pull and grip with the XML error; build from another directory refuses cleanly; grip --gui path checked headless. GUI itself UNVERIFIED.
+### Open items
+- User GUI check.
+- The dense-Pixel grip does not pull a carrot out with the 10 cm test jaws (neighbours grabbed): fine for the showcase test gripper? The real Amiga gripper will differ.
