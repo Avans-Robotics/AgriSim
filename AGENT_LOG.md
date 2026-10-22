@@ -889,3 +889,27 @@ Branch m5d-active-region: 2977ae1 plus the perf commit, stacked on m5d-capsules 
 - GUI check: the M4e gripper pulling one carrot pushes its neighbours.
 - The unidentified flaky test.
 - Unpick chunk after M5d.
+
+## 2026-10-22 M5d rethink after the failed scenario, timestep sweep
+### Goal & outcome
+User questioned the approach (why so hard, other engines, GPU, MuJoCo in Gazebo). Agreed after discussion: keep Gazebo (ROS 2, known by students and colleagues), keep full-fidelity neighbours (no cheaper models, no Plant-Plant contact switched off, no roots switched off), keep the Active Region (no collisions far from the robot), target at least 1.0x for a live Amiga showcase (0.8x floor while tuning), measure a larger physics step, then non-overlapping roots, re-measure, then unpick. Commit 57d35fc: one physics step constant (`gazebo.PHYSICS_STEP`) written into every Field world, the pull and grip scripts take the step from it or from gz. Timestep sweep (13 settles, 12 squeezes, pulls of carrot, beetroot and radish, strong and weak grip on a sparse Field, the gripper perf scenario):
+
+| Step | Settle worst | Squeeze | Scripted pull | Grip (strong, weak) | Scenario RTF |
+|---|---|---|---|---|---|
+| 1 ms | 0.57 mm/s | 12/12 | 3 detach, peaks within 0.5% | detach, -0.5%; slips, d 2.8 mm | 0.23 |
+| 2 ms | 0.57 mm/s | 12/12 | 3 detach, peaks within 0.5% | detach, -1.0%; slips | 0.42 |
+| 4 ms | 0.56 mm/s | 12/12 | carrot and radish do not detach | detach, -0.1%; slips | 0.72 |
+| 5 ms | 0.56 mm/s | 12/12 | crash (ODE AABB assertion) | not run | not run |
+
+### Decisions & why
+- Within Gazebo Harmonic, DART is the only engine that runs the Plant model: bullet-featherstone replaces universal joints by fixed ones, ignores joint springs and creates no joints at runtime but fixed-to-world (gz-physics 7 source). No maintained MuJoCo plugin (gz-physics issue #299 abandoned). GPU physics helps many parallel worlds (M7), not one live world.
+### Lessons / gotchas
+- gz-sim's default collision detector for dartsim is ODE, not FCL (corrected in the ADRs): the spike's unset and ode runs were identical.
+- The Pull-out Curve holds at every step (force matches the curve exactly); the scripted pull fails from 4 ms because its harness (a 5000 N/m, 30 N s/m force on the root) is an explicit damper with c dt / m = 1.7 for a 70 g carrot: it overshoots, and at 5 ms flings a body far enough to trip ODE's AABB assertion. The gripper path is unaffected.
+- Q2 premise was wrong: carrot crown radii (1.2 to 2.2 cm) against 4 cm in-row spacing make big neighbours touch even at nominal positions, which is realistic. Touching roots in random_10x10 have at most 2 neighbours, so 2 collide bits (roots coloured so touching roots never share a bit, robots keep all bits) separate them without a minimum distance.
+- The first sweep run died once in a squeeze at 1 ms (grip_check, exit code unknown); 12 squeezes alone and the rerun passed. Possibly the earlier unexplained pytest failure.
+### State
+Branch m5d-active-region at the ADR fix commit on top of 57d35fc. Validated: pytest 98 passed at 1 ms, pull.csv byte-identical, sweep above. Step still 1 ms.
+### Open items
+- User decisions: step 4 ms with the harness gains scaled by the step; roots coloured with collide bits instead of a minimum distance.
+- Then re-measure the scenario, then unpick.
