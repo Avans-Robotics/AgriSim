@@ -1,6 +1,6 @@
 """Scripted pull of one picked Plant, run in the system Python with the Gazebo bindings.
 
-Usage: pull_check.py <world.sdf> <request json> <steps> <speed> <release>
+Usage: pull_check.py <world.sdf> <request json> <steps> <speed> <release> <step>
 
 Loads a Field world (without its Sensors system), picks the Plant by its id, then lifts the
 Plant's root at <speed> m/s with a stiff spring-damper force, as a gripper holding the root
@@ -32,11 +32,13 @@ PULL_DAMPING = 30.0  # N s/m, on the speed relative to the lift target
 
 world_sdf, request = sys.argv[1], json.loads(sys.argv[2])
 steps, speed, release = int(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
+step = sys.argv[6]  # seconds per physics step, whatever the world's
 name = request["name"]
 hull = request["root_hull"]  # root collision hull vertices in the root link frame
 fast = Path(world_sdf).with_name(".pull_fast.sdf")
 text = Path(world_sdf).read_text()
 text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", text)
+text = re.sub(r"<max_step_size>[^<]*<", f"<max_step_size>{step}<", text)
 text = re.sub(r'<plugin filename="gz-sim-sensors-system".*?</plugin>', "", text, flags=re.S)
 fast.write_text(text)
 

@@ -203,7 +203,7 @@ def test_pull_out_damping_adds_c_times_v(tmp_path):
         d = float(row["d"])
         broken = broken or d >= c["d_peak"]
         # The system reads d and v at the start of a step; dartsim moves d by v times the step.
-        v = (d - float(previous["d"])) / plant.STEP
+        v = (d - float(previous["d"])) / plant.PULL_STEP
         law = curve(p["pull_out_force"], c["d_peak"], c["residual_fraction"], r["depth"], d,
                     broken)  # fmt: skip
         assert float(row["force"]) - law == pytest.approx(damping * v, abs=0.01)

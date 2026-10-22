@@ -28,6 +28,9 @@ SETTLE_SPEED = 0.001  # meters per second
 SYSTEM_PYTHON = "/usr/bin/python3"
 SETTLE_SCRIPT = Path(__file__).with_name("settle_check.py")
 PULL_SCRIPT = Path(__file__).with_name("pull_check.py")
+# The scripted pull checks the force law, not the robot: it runs at this step whatever the
+# world's, since its stiff lift force overshoots a light root at larger steps (M5d sweep).
+PULL_STEP = 0.001  # seconds
 PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pull speed
 PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
 DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
@@ -302,13 +305,13 @@ def pull(
     world_dir = Path(world_dir)
     request = plant_info(world_dir, plant_id)
     release = request["depth"] + PULL_AFTER if release is None else release
-    steps = round((release / speed + DROP_TIME) / STEP)
+    steps = round((release / speed + DROP_TIME) / PULL_STEP)
     path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
     result = subprocess.run(
         # By absolute path from the caller's cwd: the system finds plants/ from the world file.
         [SYSTEM_PYTHON, str(PULL_SCRIPT), str((world_dir / "world.sdf").resolve()),
-         json.dumps(request), str(steps), repr(speed), repr(release)],
+         json.dumps(request), str(steps), repr(speed), repr(release), repr(PULL_STEP)],
         capture_output=True, text=True, check=True,
         # Own partition: Field worlds share a name, so runs would see each other's topics.
         env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,

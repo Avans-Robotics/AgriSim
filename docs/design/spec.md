@@ -149,6 +149,8 @@ assets:
   stage: harvest         # growth stage slot in Variant names, optional (ADR 0008)
 ```
 
+Roots never overlap (M5d): real roots cannot share space, and two Picked Plants anchored inside each other fight forever in the physics engine. When a Plant's root (its Variant's root radius from the library's `variants.json`, times its scale) would overlap one placed before it in the same Pixel, its jitter is drawn again, up to 20 times, and it is left out if it still does not fit. Touching roots are fine. The margins keep roots in neighbouring Pixels apart for the current Crops. In `random_10x10.yaml` this moves 845 of 2,760 Plants by a few millimetres and leaves out 47.
+
 ## 7. Field Layout and Manifest
 
 The Field Layout is the only thing Exporters read. It is written next to every exported world as `manifest.json` and is the ground truth for detection labels and harvest evaluation. Draft structure:
