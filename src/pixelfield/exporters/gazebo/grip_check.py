@@ -3,7 +3,7 @@
 Usage: grip_check.py <grip world.sdf> <config json>
 
 The world has the gripper model (gripper.py). Config: plant (model name), request (pick
-request for the pull-out system, or null when the Plant is already in the world), settle,
+request for the pull-out system, or null when the Plant is already in the world), step, settle,
 close_speed, hold, lift_accel, jaw_open, speed, lift, wrist_topic. Timeline: jaws open for
 `settle` seconds, then they close at close_speed until they stall on the leaf bunch (their
 effort limit is the grip force); after the time a full close takes plus `hold`, the gripper
@@ -32,11 +32,11 @@ from gz.msgs10.wrench_pb2 import Wrench
 from gz.sim8 import Joint, Link, Model, TestFixture, World, world_entity
 from gz.transport13 import Node
 
-STEP = 0.001
 JAWS = ("jaw_left_joint", "jaw_right_joint")
 TARE = 0.05  # seconds from which the wrist force is averaged until the jaws start closing
 
 world_sdf, config = sys.argv[1], json.loads(sys.argv[2])
+STEP = config["step"]  # seconds per physics step of the world
 request = config["request"]
 start_lift = config["settle"] + config["jaw_open"] / config["close_speed"] + config["hold"]
 lift_time = config["lift"] / config["speed"] + config["speed"] / config["lift_accel"] \

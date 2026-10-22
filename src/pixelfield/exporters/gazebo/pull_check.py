@@ -27,7 +27,6 @@ from gz.msgs10.stringmsg_pb2 import StringMsg
 from gz.sim8 import Link, Model, TestFixture, World, world_entity
 from gz.transport13 import Node
 
-STEP = 0.001
 PULL_STIFFNESS = 5000.0  # N/m, gripper on the root: about 5 mm lag at 25 N
 PULL_DAMPING = 30.0  # N s/m, on the speed relative to the lift target
 
@@ -81,7 +80,7 @@ def pre_update(info, ecm):
     velocity = root.world_linear_velocity(ecm)
     if velocity is None:
         return
-    t = (info.iterations - pull["t0"]) * STEP
+    t = (info.iterations - pull["t0"]) * info.dt.total_seconds()
     lift = root.world_pose(ecm).pos().z() - pull["z0"]
     force = PULL_STIFFNESS * (speed * t - lift) - PULL_DAMPING * (velocity.z() - speed)
     if release <= 0 or speed * t > release:
@@ -94,7 +93,7 @@ def post_update(info, ecm):
     visual["after"] = grouped_visual(ecm)
     if pull["root"] is None:
         return
-    t = (info.iterations - pull["t0"]) * STEP
+    t = (info.iterations - pull["t0"]) * info.dt.total_seconds()
     lift = pull["root"].world_pose(ecm).pos().z() - pull["z0"]
     pose = pull["root"].world_pose(ecm)
     bottom = min(pose.rot().rotate_vector(gz.math7.Vector3d(*v)).z() for v in hull) + pose.pos().z()

@@ -190,7 +190,7 @@ def _run(world: Path, config: dict) -> dict:
     """Run grip_check.py on a grip world in the system Python; returns its report."""
     path = os.pathsep.join(filter(None, [str(plant.SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
-    config = {"settle": SETTLE, "close_speed": CLOSE_SPEED, "hold": HOLD,
+    config = {"step": plant.STEP, "settle": SETTLE, "close_speed": CLOSE_SPEED, "hold": HOLD,
               "lift_accel": LIFT_ACCEL, "jaw_open": JAW_OPEN, "wrist_topic": WRIST_TOPIC,
               **config}  # fmt: skip
     try:

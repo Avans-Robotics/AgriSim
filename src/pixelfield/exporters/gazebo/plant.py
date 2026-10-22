@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pixelfield.exporters import gazebo
 
-STEP = 0.001  # seconds per physics step (ADR 0006 stability check)
+STEP = gazebo.PHYSICS_STEP  # seconds per physics step
 SETTLE_TIME = 5.0  # seconds of sim time per settle check
 SETTLE_AFTER = 2.0  # seconds after which every link must be slower than SETTLE_SPEED
 SETTLE_SPEED = 0.001  # meters per second
