@@ -847,3 +847,26 @@ Branch m5d-active-region from main (8ce2350), no code changes. Spike numbers mea
 ### Open items
 - Direction after the failed spike (user decision): capsule petioles, fewer links per Picked Plant, a smaller trigger footprint, unpick, or a revised budget.
 - `real_time_factor` regex no-op in the pull and grip worlds (harmless, they only need correctness, but they run slower than they could).
+
+## 2026-10-22 M5d capsules and Active Region (grip tests open)
+### Goal & outcome
+User took the three post-spike recommendations: petiole collisions as capsules, a crown footprint for the Active Region, and a scenario perf budget with unpick as the next chunk. Branch m5d-capsules (commit 50d2372): each petiole link collides as 2 capsules along chords of its curve (`CAPSULES_PER_LINK`, `"capsules"` list in physics.json, MuJoCo fromto style), root keeps its hull, library regenerated (only physics.json changed), ADR 0006 and spec amended; suite green (94 passed). Branch m5d-active-region (stacked on it, uncommitted): the pull-out system picks Plants whose crown cylinder meets any non-Field link's box plus `<padding>` every 10 ms; `plants.tsv` gains a crown column; `<padding>` and `<footprint>` (crown or foliage) in the world's plugin element; new tests/test_region.py with tests/region_check.py; ADR 0010 and spec rewritten with the spike table and decisions.
+### Decisions & why
+- 2 capsules per link, not 1: one chord misses a carrot petiole's bend by up to 12.8 mm (median 5.4), two by 3.7 mm; cost 1.74x to 1.0x at 4 Plants. Three would give 1.6 mm.
+- Link boxes computed by the system: each collision's geometry box (sdformat `Geometry::AxisAlignedBox`, gz-sim `meshAxisAlignedBox` for meshes, mesh `<scale>` honoured) moved through its 8 corners by the collision pose, merged per link, cached per link entity, then moved by the link's world pose per check. No components, no Physics work.
+- Brute force over the whole table per link (ponytail note), SDF parse inline in PreUpdate (ponytail note), a broken Plant file is marked picked so it errors once.
+- grip_check reports `requested` true when the Plant is a model at the end: the region can pick it before the request.
+### Lessons / gotchas
+- Capsules fixed the M4e wedge: a 5 N grip over the full 0.2 m lift slipped on 4 of 4 carrots with the bond intact (d below 3 mm); with one capsule per link one carrot still broke the bond at a joint. The weak grip test now lifts the full height.
+- grip_check and pull_check filed every state message by its time stamp, whatever Plant sent it; with neighbours picked the rows mixed Plants. Both now filter on `plant`.
+- With the region, the 10 cm wide test gripper jaws close on an in-row neighbour 3.9 cm away too: pulling r0c0-000 dragged r0c0-001 up 108 mm, wrist at the 40 N friction limit, no detach. Three grip tests fail for that reason.
+- gz-sim 8's `Link::ComputeAxisAlignedBox` moves only the min and max corners of each collision's box (validator): a cube turned 45 degrees about z in its link comes out with zero width in x (checked: x 0, y +-0.0566 for a 0.08 cube). That is the M5c "narrower than the hull" sighting. A test probe approaches a Plant from the side gz gets wrong; the mutation back to gz's box fails it.
+- An empty or inverted geometry box would span everything once its corners are moved; the system skips it.
+- Mutation check: region off fails the pick test, no Field exclusion fails the Field test.
+- The M5c system reads only the first row of a 7-column plants.tsv (it misparses the rest): worlds must be rebuilt with the systems of the same commit.
+### State
+m5d-capsules: commits 50d2372 and 4b241f9 (review fixes: physics export format_version 2, ADR figures over the whole library, CLAUDE.md weak grip without --lift), validated: pytest 94 passed, ruff, validator agent (capsules match the glb tubes in all 72 Variants within 0.5 um and in gz at scales 0.85 to 1.15, library deterministic, footprint vs sampled capsule surfaces, 6 settles and 6 squeezes, 6 of 6 weak grips slip with the bond intact). m5d-active-region: stacked on 4b241f9, uncommitted; region tests 3 passed (mutation-checked three ways), pull.csv byte-identical to the capsule commit's system; 3 gripper tests FAIL (neighbours gripped), waiting for the user's decision.
+### Open items
+- Grip tests with neighbours: user decision.
+- Slot runs (settle 0.85/1.15, slow squeeze, perf scenario rows) and the GUI check.
+- Unpick chunk after M5d.
