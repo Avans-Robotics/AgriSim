@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from pixelfield.cli import main
 from pixelfield.core.spec import load_crop
@@ -26,11 +27,32 @@ needs_system = pytest.mark.skipif(not SYSTEM.is_file(),
 
 
 @pytest.fixture(scope="module")
-def field(tmp_path_factory):
-    out = tmp_path_factory.mktemp("field") / "carrot_pixel"
-    main(["build", str(REPO / "examples" / "carrot_pixel.yaml"), "-o", str(out),
-          "--crops", str(REPO / "crops")])  # fmt: skip
+def sparse_crops(tmp_path_factory):
+    """The Crops with one root crop Plant per Pixel, about 0.5 m apart: the Active Region picks
+    no neighbour, so a grip pulls only its own Plant."""
+    crops = tmp_path_factory.mktemp("sparse") / "crops"
+    shutil.copytree(REPO / "crops", crops)
+    for name in ("carrot", "beetroot", "radish"):
+        path = crops / f"{name}.yaml"
+        crop = yaml.safe_load(path.read_text())
+        crop["planting"].update(margin=0.2, row_spacing=0.5, in_row_spacing=0.5, missing_rate=0.0)
+        path.write_text(yaml.safe_dump(crop))
+    return crops
+
+
+def build(example, out, crops):
+    main(["build", str(REPO / "examples" / example), "-o", str(out), "--crops", str(crops)])
     return out
+
+
+@pytest.fixture(scope="module")
+def field(tmp_path_factory, sparse_crops):
+    return build("carrot_pixel.yaml", tmp_path_factory.mktemp("field") / "carrot", sparse_crops)
+
+
+@pytest.fixture(scope="module")
+def dense(tmp_path_factory):
+    return build("carrot_pixel.yaml", tmp_path_factory.mktemp("dense") / "carrot", REPO / "crops")
 
 
 @needs_gz
@@ -75,10 +97,19 @@ def test_a_weak_grip_slips(field):
 
 
 @needs_system
-def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path):
-    out = tmp_path / "m3_crops"
-    main(["build", str(REPO / "examples" / "m3_crops.yaml"), "-o", str(out),
-          "--crops", str(REPO / "crops")])  # fmt: skip
+def test_a_grip_in_a_full_pixel_moves_the_neighbours(dense):
+    """The Active Region picks the Plants around the jaws, so they collide instead of passing
+    through: the 10 cm wide jaws close on an in-row neighbour's leaves too and lift it."""
+    p = json.loads((dense / "manifest.json").read_text())["plants"][0]
+    r = gripper.grip(dense, p["id"])
+    neighbours = {name: d for name, d in r["plants"].items() if name != p["id"]}
+    assert r["requested"] and not r["nan"] and p["id"] in r["plants"]
+    assert neighbours and max(neighbours.values()) > 0.001
+
+
+@needs_system
+def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path, sparse_crops):
+    out = build("m3_crops.yaml", tmp_path / "m3_crops", sparse_crops)
     plants = json.loads((out / "manifest.json").read_text())["plants"]
     p = max((p for p in plants if p["crop"] == "beetroot"), key=lambda p: p["pull_out_force"])
     weak = gripper.grip(out, p["id"])

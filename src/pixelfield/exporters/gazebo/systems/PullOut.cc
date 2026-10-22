@@ -8,21 +8,31 @@
 // `pixelfield build` writes next to the world plants/<id>.sdf for every root crop Plant (its
 // model at its pose, with the curve as a custom element <pixelfield:pull_out f_peak d_peak
 // residual_fraction damping depth/>) and the table plants/plants.tsv (id, x, y, z, footprint
-// radius and height), read on the first update (ADR 0010).
+// radius and height, crown radius), read on the first update (ADR 0010).
 // Pick service /world/<world>/pixelfield/pick: gz.msgs.StringMsg with the Plant id, replied
 // with gz.msgs.Boolean.
+// Active Region (ADR 0010): every 10 ms of sim time, each link with collisions of a model that
+// is not part of the Field (soil, Pixel models r<row>c<col>, camera_* models, Picked Plants
+// and their anchors) takes its world axis-aligned box plus <padding> meters (default 0.05).
+// Every root crop Plant whose footprint meets that box is picked like a pick by id. The
+// footprint is a vertical cylinder from the Plant's z up to its foliage height, around its
+// crown with the crown radius, or with the foliage radius when <footprint> is "foliage".
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
 // published only on a step where d or the force changed, plus one message per event, which
 // also carries `event`: picked, peak_passed or detached. A resting Picked Plant is silent.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <optional>
+#include <regex>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <gz/msgs/boolean.pb.h>
@@ -34,15 +44,20 @@
 #include <gz/sim/Model.hh>
 #include <gz/sim/SdfEntityCreator.hh>
 #include <gz/sim/System.hh>
+#include <gz/sim/Util.hh>
 #include <gz/sim/World.hh>
+#include <gz/sim/components/Collision.hh>
 #include <gz/sim/components/CollisionBitmask.hh>
 #include <gz/sim/components/DetachableJoint.hh>
 #include <gz/sim/components/JointForceCmd.hh>
 #include <gz/sim/components/JointPositionLimitsCmd.hh>
 #include <gz/sim/components/JointPosition.hh>
 #include <gz/sim/components/JointVelocity.hh>
+#include <gz/sim/components/Link.hh>
 #include <gz/sim/components/Pose.hh>
 #include <gz/transport/Node.hh>
+#include <sdf/Collision.hh>
+#include <sdf/Geometry.hh>
 #include <sdf/Link.hh>
 #include <sdf/Model.hh>
 #include <sdf/Root.hh>
@@ -61,6 +76,8 @@ constexpr double kRangeMargin = 0.01;  // meters
 // about 10 um per step.
 constexpr double kQuietD = 1e-9;  // meters
 constexpr double kQuietForce = 1e-6;  // newtons
+constexpr std::chrono::milliseconds kRegionPeriod{10};  // sim time between Active Region checks
+const std::regex kPixelName("r[0-9]+c[0-9]+");  // Pixel models, ADR 0007
 
 struct Curve
 {
@@ -76,6 +93,44 @@ double Resistance(const Curve &_c, bool _broken, double _d, double _v)
   return std::max(f, 0.0) + _c.damping * _v;
 }
 
+/// The 8 corners of a box moved by a pose, boxed again: it holds everything the box held.
+gz::math::AxisAlignedBox Moved(const gz::math::AxisAlignedBox &_box,
+                               const gz::math::Pose3d &_pose)
+{
+  const gz::math::Vector3d &a = _box.Min(), &b = _box.Max();
+  gz::math::Vector3d lo(gz::math::MAX_D, gz::math::MAX_D, gz::math::MAX_D), hi = -lo;
+  for (int i = 0; i < 8; ++i)
+  {
+    gz::math::Vector3d corner = _pose.CoordPositionAdd(
+      {i & 1 ? b.X() : a.X(), i & 2 ? b.Y() : a.Y(), i & 4 ? b.Z() : a.Z()});
+    lo.Min(corner);
+    hi.Max(corner);
+  }
+  return {lo, hi};
+}
+
+/// A link's box in its own frame, from its collisions; nullopt without any. Not gz-sim's
+/// Link::ComputeAxisAlignedBox: it moves only two corners of each collision's box, so a
+/// collision turned in its link comes out too small (a cube turned 45 degrees about z gets no
+/// width in x).
+std::optional<gz::math::AxisAlignedBox> LinkBox(Entity _link, const EntityComponentManager &_ecm)
+{
+  std::optional<gz::math::AxisAlignedBox> box;
+  for (Entity collision : Link(_link).Collisions(_ecm))
+  {
+    auto element = _ecm.Component<components::CollisionElement>(collision);
+    auto pose = _ecm.Component<components::Pose>(collision);
+    if (!element || !element->Data().Geom())
+      continue;
+    auto local = element->Data().Geom()->AxisAlignedBox(&meshAxisAlignedBox);
+    if (!local || !(local->Min().X() <= local->Max().X()))
+      continue;  // no size, or an empty box that would span everything once moved
+    auto moved = Moved(*local, pose ? pose->Data() : gz::math::Pose3d::Zero);
+    box = box ? *box + moved : moved;
+  }
+  return box;
+}
+
 struct Request
 {
   std::string name;
@@ -83,11 +138,11 @@ struct Request
   Curve curve;
 };
 
-/// A row of plants/plants.tsv. M5c only reads it; the Active Region (M5d) uses the footprint.
+/// A row of plants/plants.tsv: the Plant's position and its footprint for the Active Region.
 struct Footprint
 {
   gz::math::Vector3d position;
-  double radius, height;
+  double radius, height, crown;  // foliage radius, foliage height, crown radius
 };
 
 struct Pick
@@ -104,10 +159,12 @@ struct Pick
 
 class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
 {
-  public: void Configure(const Entity &_entity, const std::shared_ptr<const sdf::Element> &,
+  public: void Configure(const Entity &_entity, const std::shared_ptr<const sdf::Element> &_sdf,
                          EntityComponentManager &_ecm, EventManager &_eventMgr) override
   {
     this->world = _entity;
+    this->padding = _sdf->Get<double>("padding", this->padding).first;
+    this->foliage = _sdf->Get<std::string>("footprint", "crown").first == "foliage";
     this->eventMgr = &_eventMgr;
     const std::string prefix = "/world/" + World(_entity).Name(_ecm).value_or("") + "/pixelfield";
     this->node.Advertise(prefix + "/pick", &PullOut::OnPick, this);
@@ -126,11 +183,11 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     std::getline(table, header);
     Footprint f;
     while (table >> id >> f.position.X() >> f.position.Y() >> f.position.Z() >> f.radius >>
-           f.height)
+           f.height >> f.crown)
       this->plants[id] = f;
     if (this->plants.empty())
       gzwarn << "PullOut: no Plants in [" << (this->dir / "plants.tsv").string()
-             << "], nothing can be picked (a Field without root crops, or built before M5c)\n";
+             << "], nothing can be picked (a Field without root crops, or built before M5d)\n";
   }
 
   /// Runs in a transport thread: parse and check only, the ECM is touched in PreUpdate. The
@@ -150,15 +207,34 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       gzerr << "Pick: [" << name << "] is not a root crop Plant of this Field\n";
       return true;
     }
-    const std::string file = (this->dir / (name + ".sdf")).string();
     lock.unlock();  // parse the file without blocking the simulation
+    auto request = this->Load(name);
+    lock.lock();
+    if (!request)
+      return true;
+    if (this->picked.count(name))
+    {
+      gzerr << "Pick: [" << name << "] was already picked\n";
+      return true;
+    }
+    this->requests.push_back(*request);
+    this->picked.insert(name);
+    _rep.set_data(true);
+    return true;
+  }
+
+  /// Parses plants/<name>.sdf into a request; nullopt (and an error) if it is not a Plant.
+  /// Touches no shared state but `roots`, under the caller's lock when it adds one.
+  private: std::optional<Request> Load(const std::string &_name)
+  {
+    const std::string file = (this->dir / (_name + ".sdf")).string();
     auto root = std::make_shared<sdf::Root>();
     auto errors = root->Load(file);
     if (!errors.empty() || root->Model() == nullptr ||
         root->Model()->LinkByName("root") == nullptr)
     {
       gzerr << "Pick: [" << file << "] is not a Plant model with a root link\n";
-      return true;
+      return std::nullopt;
     }
     auto element = root->Model()->Element()->FindElement("pixelfield:pull_out");
     double value[5];
@@ -168,7 +244,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       if (!element || !element->HasAttribute(keys[i]))
       {
         gzerr << "Pick: no <pixelfield:pull_out " << keys[i] << "> in [" << file << "]\n";
-        return true;
+        return std::nullopt;
       }
       value[i] = element->Get<double>(keys[i]);
     }
@@ -177,21 +253,72 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
           curve.residual >= 0 && curve.residual <= 1 && curve.damping >= 0))
     {
       gzerr << "Pick: invalid Pull-out Curve in [" << file << "]\n";
-      return true;
+      return std::nullopt;
     }
-    lock.lock();
-    if (this->picked.count(name))
-    {
-      gzerr << "Pick: [" << name << "] was already picked\n";
-      return true;
-    }
-    this->requests.push_back(Request{name, *root->Model(), curve});
-    this->picked.insert(name);
+    std::lock_guard<std::mutex> lock(this->rootsMutex);
     // ponytail: one sdf::Root kept per pick (a few kB, the entities may refer to its graphs);
     // free them on world reset if long training runs pick thousands of Plants.
     this->roots.push_back(root);
-    _rep.set_data(true);
-    return true;
+    return Request{_name, *root->Model(), curve};
+  }
+
+  /// Field models never trigger the Active Region; everything else in the world does.
+  private: bool IsField(const std::string &_model) const
+  {
+    const std::string anchor = "_anchor";
+    bool isAnchor = _model.size() > anchor.size() &&
+      _model.compare(_model.size() - anchor.size(), anchor.size(), anchor) == 0 &&
+      this->plants.count(_model.substr(0, _model.size() - anchor.size()));
+    return _model == "soil" || _model.rfind("camera_", 0) == 0 ||
+      std::regex_match(_model, kPixelName) || this->plants.count(_model) || isAnchor;
+  }
+
+  /// One Active Region check: picks every Plant whose footprint meets a non-Field link's box.
+  private: void Region(EntityComponentManager &_ecm)
+  {
+    std::vector<std::string> hits;
+    _ecm.Each<components::Link>([&](const Entity &_link, const components::Link *) -> bool
+    {
+      auto cached = this->boxes.find(_link);
+      if (cached == this->boxes.end())
+      {
+        // A link's box in its own frame only changes with its collisions: computed once.
+        std::optional<gz::math::AxisAlignedBox> box;
+        if (!this->IsField(Model(topLevelModel(_link, _ecm)).Name(_ecm)))
+          box = LinkBox(_link, _ecm);
+        cached = this->boxes.emplace(_link, box).first;
+      }
+      if (!cached->second)
+        return true;
+      // The world box of the link's box: larger than the link when it is turned, so it picks
+      // a few Plants too many, never too few.
+      gz::math::AxisAlignedBox world = Moved(*cached->second, worldPose(_link, _ecm));
+      const gz::math::Vector3d lo = world.Min() - gz::math::Vector3d::One * this->padding;
+      const gz::math::Vector3d hi = world.Max() + gz::math::Vector3d::One * this->padding;
+      // ponytail: every Plant against every link, about 150k cheap tests per check on a
+      // 10 x 10 Field with a robot; bucket the table per Pixel if Fields or robots grow.
+      for (const auto &[id, f] : this->plants)
+      {
+        const gz::math::Vector3d &p = f.position;
+        double r = this->foliage ? f.radius : f.crown;
+        double dx = std::max({lo.X() - p.X(), 0.0, p.X() - hi.X()});
+        double dy = std::max({lo.Y() - p.Y(), 0.0, p.Y() - hi.Y()});
+        if (p.Z() <= hi.Z() && p.Z() + f.height >= lo.Z() && dx * dx + dy * dy <= r * r &&
+            !this->picked.count(id))
+          hits.push_back(id);
+      }
+      return true;
+    });
+    for (const std::string &id : hits)
+    {
+      if (this->picked.count(id))
+        continue;  // met by two links
+      this->picked.insert(id);  // also when its file is broken: one error, not one per check
+      // ponytail: parsed in the simulation thread, a few ms per Plant; move it to a worker
+      // if a robot reaching into a bed stalls the simulation noticeably.
+      if (auto request = this->Load(id))
+        this->requests.push_back(*request);
+    }
   }
 
   public: void PreUpdate(const UpdateInfo &_info, EntityComponentManager &_ecm) override
@@ -201,6 +328,11 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     {
       this->LoadTable(_ecm);
       this->loaded = true;
+    }
+    if (!_info.paused && _info.simTime - this->lastRegion >= kRegionPeriod)
+    {
+      this->lastRegion = _info.simTime;
+      this->Region(_ecm);
     }
     for (const Request &r : this->requests)
       this->Spawn(r, _ecm);
@@ -358,7 +490,12 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: std::vector<Request> requests;
   private: std::map<std::string, Pick> picks;
   private: std::set<std::string> picked;
+  private: std::mutex rootsMutex;  // Load runs in the transport thread and in PreUpdate
   private: std::vector<std::shared_ptr<sdf::Root>> roots;
+  private: double padding = 0.05;  // meters around each link's box
+  private: bool foliage = false;  // footprint radius: foliage instead of crown
+  private: std::chrono::steady_clock::duration lastRegion{-kRegionPeriod};
+  private: std::unordered_map<Entity, std::optional<gz::math::AxisAlignedBox>> boxes;
 };
 }  // namespace pixelfield
 

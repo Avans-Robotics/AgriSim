@@ -11,8 +11,8 @@ Static Plants are visuals without collision (ADR 0007), so a robot passes throug
 ### Trigger
 
 - Every link of every model that is not part of the Field triggers the Active Region. Field models are known to the system: the soil, the Pixel models `r<row>c<col>`, the cameras, the Picked Plants and their anchors. No configuration, no robot names.
-- Every few physics steps (about every 10 ms) the system takes each such link's world axis-aligned bounding box, inflated by padding (default 0.05 m, a knob), finds the Pixels it overlaps, and picks every root crop Plant in them whose footprint intersects the box. The footprint is a vertical cylinder around the crown, from the soil up to the top of the foliage, with the foliage radius as its radius (both from the Variant physics export and the Plant's scale). It is 3D, so a chassis passing high over a bed picks nothing.
-- Once picked, a Plant stays picked: a resting Picked Plant costs links but no logic. Returning untouched Plants to their static visual ("unpick") is added only if the perf check fails.
+- Every 10 ms of sim time the system takes each such link's world axis-aligned bounding box (the link's collision box in its own frame, from gz-sim, turned into the world: a little larger than the link when it is rotated), inflated by padding (default 0.05 m, the plugin element `<padding>`), and picks every root crop Plant whose footprint intersects the box. The footprint is a vertical cylinder around the crown, from the soil up to the top of the foliage, with the crown radius (the root's widest point) as its radius, from the Variant physics export and the Plant's scale. `<footprint>foliage</footprint>` uses the foliage reach as the radius instead, as first planned; the M5d spike showed that too costly (see Contact between Plants). It is 3D, so a chassis passing high over a bed picks nothing. Every link is checked against every Plant of the table (about 150k cheap tests per check on a 10 x 10 Field); bucketing per Pixel waits until that shows in the perf rows.
+- Once picked, a Plant stays picked until unpick, the chunk after M5d (see Consequences).
 - The pick service stays: a robot repo can still pick Plants by id itself.
 - Lettuce is cut, not pulled, and has no articulated model: robots still pass through it. Lettuce as an obstacle is a later item.
 
@@ -24,9 +24,23 @@ Measured cost: 3.3 ms and 34 KB per carrot Plant, so about 10 s of build and 100
 
 ### Contact between Plants
 
-Picked Plants collide with each other, as real neighbouring leaves push each other. Their foliage overlaps at rest (carrot foliage reaches 0.12 to 0.20 m from the crown at 4 cm spacing in the row), so neighbours picked together start with interpenetrating hulls. DART corrects penetration with a capped velocity (about 1 mm/s, from memory of its contact solver, unverified), so they should drift apart gently rather than jump. The cost to watch is the contact problem per step, since touching neighbours are solved together.
+Picked Plants collide with each other, as real neighbouring leaves push each other. Their foliage overlaps at rest (carrot foliage reaches 0.12 to 0.20 m from the crown at 4 cm spacing in the row), so neighbours picked together start with interpenetrating collisions.
 
-M5d starts with a spike: pick a full carrot Pixel (about 31 Plants) and record the leaf drift and the RTF. If that fails, the fallback is one model per Pixel holding its Picked Plants: model `self_collide` off removes contact inside a Pixel, and colouring Pixels with collide bits separates neighbouring Pixels (foliage reaches at most one Pixel, so 9 bits). The fallback depends on adding links to an existing model at runtime and on DetachableJoint welds inside one skeleton, both untested.
+The M5d spike picked Plants of a carrot Pixel at once in a headless world (physics only, 1 ms step, no cameras) and failed:
+
+| Plants | Petiole collision | Real-time factor | Leaf tip drift |
+|---|---|---|---|
+| 4 | convex mesh hulls (M4) | 0.17 | 34 mm in 0.5 s, up to 8 cm/s |
+| 4 | 2 capsules per petiole link (M5d) | 1.0 | 0.7 mm in 0.5 s |
+| 32 | mesh hulls | below 0.02 | violent |
+| 32 | 2 capsules per link | 0.036 | median 0.1 mm, max 6 mm over 3 s, settling |
+| 32 | mesh hulls, no contact between Plants | 0.15 | none |
+| 32 | no petiole collisions, all joints fixed | 0.34 | none |
+
+- The guess that DART corrects penetration at about 1 mm/s was wrong for mesh hulls: FCL shoved them apart at up to 8 cm/s. Capsules separate gently, so petioles now collide as capsules (ADR 0006, amended).
+- Contact between many overlapping Plants is solved as one problem and dominates the cost. A Picked Plant also costs about 0.15 ms per step without any contact, about half of it per-link bookkeeping.
+- The planned fallback, one model per Pixel with `self_collide` off, is the "no contact between Plants" row: 0.15x for one full Pixel before cameras. Rejected, not built.
+- With the foliage footprint the test gripper over a mid-Pixel carrot picks all 32 Plants of its Pixel; with the crown footprint it picks 4 to 7. Hence the crown footprint: the cost is that leaves of unpicked neighbours still pass through a robot.
 
 ### State topic
 
@@ -49,7 +63,9 @@ With many Picked Plants a per-step message per Plant (1 kHz each) floods gz-tran
 
 ## Consequences
 
-- Wheels in Path Gaps do pick Plants: foliage at the edge of a column group reaches to within a few centimetres of a wheel. These picks count in the perf budget.
-- Picked neighbours may shift their leaves slightly after a pick while overlapping hulls separate.
+- A robot link picks a Plant only when its box comes within the padding plus the crown radius (about 7 cm for a carrot) of the crown, so wheels in Path Gaps pick only Plants that close to them.
+- Leaves of Plants that are not picked still pass through a robot, also when they overlap a Picked Plant's leaves.
+- Picked neighbours shift their leaves slightly after a pick while overlapping capsules separate (median 0.1 mm, at most 6 mm over 3 s with 32 Plants).
+- A test gripper with 10 cm wide jaws grabs the leaf bunch of an in-row neighbour 4 cm away too, and pulls it.
 - Amends ADR 0006: picks no longer build the SDF at request time, the state topic publishes only while a Plant is being pulled plus events, and choosing which Plants near the robot become dynamic is now the system's job.
-- UNVERIFIED until M5d runs: the leaf drift and contact cost of neighbours picked together, and the RTF with many Picked Plants (pass: at least 0.5x with 30 Picked Plants, 10 x 10 Field, OAK-D rig, `docs/design/perf.md`).
+- Perf budget, changed after the spike: at least 0.5x real time with the test gripper grasping a mid-Pixel carrot in the 10 x 10 Field with the OAK-D rig (`docs/design/perf.md`). 30 Picked Plants at 0.5x is out of reach: even resting and apart they cost about 4.5 ms per step. Unpick (return resting, untouched Picked Plants to their static visual) is the next chunk, so Picked Plants do not pile up behind a driving robot.

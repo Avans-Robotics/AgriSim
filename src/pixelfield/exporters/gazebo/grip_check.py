@@ -9,10 +9,11 @@ close_speed, hold, lift_accel, jaw_open, speed, lift, wrist_topic. Timeline: jaw
 effort limit is the grip force); after the time a full close takes plus `hold`, the gripper
 lifts by `lift` meters, its speed ramped up at lift_accel to `speed`, and stops. Prints one
 JSON line: whether the pick was accepted, whether any value was NaN, the final world position
-of every Plant link, and one row per step: time, gripper lift, gap between the jaw faces, the
-wrist force (upward pull on the gripper from its wrist sensor, minus its value before the
-jaws close), then d, force and attached from the pull-out system's state topic. Topic values
-are matched to the step by sim time (None when nothing was published that step).
+of every Plant link, every Picked Plant heard on the state topic with its largest d, and one
+row per step: time, gripper lift, gap between the jaw faces, the wrist force (upward pull on
+the gripper from its wrist sensor, minus its value before the jaws close), then d, force and
+attached from the pull-out system's state topic. Topic values are matched to the step by sim
+time (None when nothing was published that step).
 """
 
 import json
@@ -48,7 +49,8 @@ fixture = TestFixture(world_sdf)
 node = Node()
 # Topic messages by sim time in ms; gz-transport delivers them in another thread.
 states, wrist = {}, {}
-rows, report, joints = [], {"nan": False, "links": {}}, {}
+rows, report, joints = [], {"nan": False, "links": {}, "plants": {}}, {}
+picked = []  # whether the Plant is a model at the end
 
 
 def ms(header):
@@ -56,6 +58,10 @@ def ms(header):
 
 
 def on_state(msg):
+    plant, d = msg.params["plant"].string_value, msg.params["d"].double_value
+    report["plants"][plant] = max(report["plants"].get(plant, 0.0), d)
+    if plant != config["plant"]:
+        return  # a neighbour the Active Region picked
     states[ms(msg.header)] = [msg.params["d"].double_value, msg.params["force"].double_value,
                               msg.params["attached"].bool_value]  # fmt: skip
 
@@ -91,6 +97,7 @@ def post_update(info, ecm):
                  position[0], gap])  # fmt: skip
     if info.iterations == steps:
         model = Model(World(world_entity(ecm)).model_by_name(ecm, config["plant"]))
+        picked.append(model.valid(ecm))
         for entity in model.links(ecm):
             link = Link(entity)
             p = link.world_pose(ecm).pos()
@@ -111,6 +118,8 @@ if request:
     ok, reply = node.request(topic, StringMsg(data=request["name"]), StringMsg, Boolean, 5000)
     report["requested"] = bool(ok and reply.data)
 server.run(True, steps - 1, False)
+# The Active Region may have picked the Plant under the jaws before the request came.
+report["requested"] = report["requested"] or bool(request and picked)
 time.sleep(0.5)  # the last topic messages
 tare = [wrist[row[0]] for row in rows if row[0] in wrist and TARE < row[1] <= config["settle"]]
 tare = sum(tare) / len(tare) if tare else 0.0

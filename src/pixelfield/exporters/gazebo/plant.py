@@ -164,15 +164,16 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
     Each model is named by its Plant id, at its pose in the Field, and carries its Pull-out
     Curve as <pixelfield:pull_out>; hull meshes and articulated glb files are shared per
     Variant in plants/meshes/. Table columns: id, x, y, z (the Plant's pose), footprint radius
-    (the farthest collision point from the crown axis) and footprint height (the top of the
-    highest collision above the Plant's z), both scaled. Plants of Crops without a Pull-out
+    (the farthest collision point from the crown axis), footprint height (the top of the
+    highest collision above the Plant's z) and crown radius (the root's widest point from its
+    axis), all scaled. Plants of Crops without a Pull-out
     Curve (lettuce) or without a Variant physics export get no file.
     """
     plants_dir = Path(out_dir) / "plants"
     shutil.rmtree(plants_dir, ignore_errors=True)  # no stale files from an earlier spec
     plants_dir.mkdir(parents=True)
     variants = {}  # library path: (physics export, footprint radius and height at scale 1)
-    rows = ["id\tx\ty\tz\tradius\theight"]
+    rows = ["id\tx\ty\tz\tradius\theight\tcrown"]
     for p in manifest["plants"]:
         crop = manifest["crops"][p["crop"]]
         variant = Path(crop["library"]) / p["variant"]
@@ -182,7 +183,7 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
         if first:
             physics = json.loads(variant.with_suffix(".physics.json").read_text())
             variants[variant] = physics, _footprint(physics)
-        physics, (radius, height) = variants[variant]
+        physics, (radius, height, crown) = variants[variant]
         curve, s, pose = crop["pull_out_curve"], p["scale"], p["pose"]
         model = plant_model(variant, s, plants_dir, name=p["id"], write_meshes=first,
                             physics=physics)  # fmt: skip
@@ -199,17 +200,23 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
         ET.ElementTree(sdf).write(plants_dir / f"{p['id']}.sdf", encoding="unicode",
                                   xml_declaration=True)  # fmt: skip
         rows.append("\t".join([p["id"], *(_num(v) for v in (pose["x"], pose["y"], pose["z"],
-                                                            radius * s, height * s))]))  # fmt: skip
+                                                            radius * s, height * s,
+                                                            crown * s))]))  # fmt: skip
     (plants_dir / "plants.tsv").write_text("\n".join(rows) + "\n")
     return len(rows) - 1
 
 
-def _footprint(physics: dict) -> tuple[float, float]:
-    """Radius about the crown axis and top of the collisions in the model frame, scale 1."""
+def _footprint(physics: dict) -> tuple[float, float, float]:
+    """Radius about the crown axis, top of the collisions and the root's radius about the crown
+    axis, in the model frame at scale 1."""
     cx, cy = next(link["pose"][:2] for link in physics["links"] if link["name"] == "root")
-    radius = height = 0.0
+    radius = height = crown = 0.0
     for link in physics["links"]:
         x, y, z, roll, pitch, yaw = link["pose"]
+        if link["name"] == "root":
+            crown = max(
+                math.hypot(*_rotate(v, roll, pitch, yaw)[:2]) for v in link["hull"]["vertices"]
+            )
         # A capsule reaches its radius past its cap centres, in every direction.
         points = [(v, 0.0) for v in link.get("hull", {}).get("vertices", [])]
         points += [(v, c["radius"]) for c in link.get("capsules", []) for v in (c["from"], c["to"])]
@@ -217,7 +224,7 @@ def _footprint(physics: dict) -> tuple[float, float]:
             dx, dy, dz = _rotate(v, roll, pitch, yaw)
             radius = max(radius, math.hypot(x + dx - cx, y + dy - cy) + r)
             height = max(height, z + dz + r)
-    return radius, height
+    return radius, height, crown
 
 
 def _rotate(v: list[float], roll: float, pitch: float, yaw: float) -> tuple[float, ...]:

@@ -51,6 +51,8 @@ visual = {}
 
 
 def on_state(msg):
+    if msg.params["plant"].string_value != name:
+        return  # another Picked Plant
     ms = round(msg.header.stamp.sec * 1000 + msg.header.stamp.nsec / 1e6)
     states[ms] = [msg.params["d"].double_value, msg.params["force"].double_value,
                   msg.params["attached"].bool_value]  # fmt: skip
