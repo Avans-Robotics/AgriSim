@@ -150,14 +150,24 @@ def settle(world_sdf: Path, seconds: float = SETTLE_TIME, after: float = SETTLE_
     SETTLE_SPEED from `after` seconds on.
     """
     steps = round(seconds / STEP)
-    result = subprocess.run(
+    result = run_check(
         [SYSTEM_PYTHON, str(SETTLE_SCRIPT), Path(world_sdf).name, "plant", str(steps),
          str(round(after / STEP))],
-        cwd=Path(world_sdf).resolve().parent, capture_output=True, text=True, check=True,
+        cwd=Path(world_sdf).resolve().parent,
     )  # fmt: skip
     report = json.loads(result.stdout.strip().splitlines()[-1])
     report["settled"] = not report["nan"] and report["max_speed_after"] < SETTLE_SPEED
     return report
+
+
+def run_check(args: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run a headless check script; if it fails, raise with the end of its stderr (a crash
+    in gz-sim or the physics shows up there, not in the exit status)."""
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode:
+        raise RuntimeError(f"{Path(args[1]).name} exited with {result.returncode}:\n"
+                           f"{result.stderr[-3000:]}")  # fmt: skip
+    return result
 
 
 def write_plants(manifest: dict, out_dir: Path) -> int:
@@ -308,11 +318,10 @@ def pull(
     steps = round((release / speed + DROP_TIME) / PULL_STEP)
     path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
-    result = subprocess.run(
+    result = run_check(
         # By absolute path from the caller's cwd: the system finds plants/ from the world file.
         [SYSTEM_PYTHON, str(PULL_SCRIPT), str((world_dir / "world.sdf").resolve()),
          json.dumps(request), str(steps), repr(speed), repr(release), repr(PULL_STEP)],
-        capture_output=True, text=True, check=True,
         # Own partition: Field worlds share a name, so runs would see each other's topics.
         env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
              "GZ_PARTITION": f"pixelfield-{os.getpid()}"},

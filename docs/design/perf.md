@@ -35,6 +35,10 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 | 2026-10-22 | 2977ae1 (M5d), driver 595.99, kernel 7.0.0-38 | `random_10x10.yaml`, server | 2,760 / 93 | OAK-D rig, nadir (re-run of the 0.96 row) | 0.96 | 818 MiB total |
 | 2026-10-22 | same | same, plus the test gripper (static, jaws open, 3 cm above the crown of mid-Pixel carrot r5c4-032 under the camera): 5 Picked Plants | 2,760 / 93 | OAK-D rig, nadir | 0.21 (FAIL, budget 0.5) | 818 MiB total |
 | 2026-10-22 | same, root collisions of the Plant SDFs set to 0 by hand | same, 5 Picked Plants | 2,760 / 93 | OAK-D rig, nadir | 0.64 | 818 MiB total |
+| 2026-10-22 | 857951b, roots never overlap (layout) | `random_10x10.yaml`, server | 2,713 / 93 | OAK-D rig, nadir, no gripper | 0.97 | 578 MiB total |
+| 2026-10-22 | same, 1 ms step | same, test gripper over the carrot nearest the camera: 5 Picked Plants | 2,713 / 93 | OAK-D rig, nadir | 0.58 | 579 MiB total |
+| 2026-10-22 | same, 2 ms step | same | 2,713 / 93 | OAK-D rig, nadir | 0.97 | 579 MiB total |
+| 2026-10-22 | same, 4 ms step | same | 2,713 / 93 | OAK-D rig, nadir | 1.00 | 579 MiB total |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 
@@ -78,6 +82,9 @@ The perf check is a scenario (ADR 0010): the test gripper grasping a mid-Pixel c
 - Each of the 5 Plants alone runs at 5.6 to 8.6x. Together, two of them (r5c4-029 and r5c4-030, crowns 2.3 cm apart, crown radii 2.0 and 2.1 cm) have overlapping roots. Both roots are welded to their anchors, so the contact can never resolve: a leaf of r5c4-030 keeps moving at up to 15 cm/s and the pair runs at 0.31x; with the two root collisions off it runs at 2.6x.
 - Overlapping roots are common: in `random_10x10` 654 pairs of root crop Plants are closer than the sum of their crown radii, 1,231 of 2,760 Plants (in-row spacing 4 cm, jitter 1 cm, crown radii 1.2 to 2.2 cm).
 - With every root's collision off, the scenario runs at 0.64x, and the full carrot Pixel spike (32 Plants, physics only) at 0.089x instead of 0.036x.
+- Fix: the Planting Pattern keeps roots from overlapping (spec section 6); touching is allowed. Switching the root contact off instead was rejected: overlapping roots are unphysical, and with root-root contact off (collide bits per root) a carrot's leaves start inside its neighbour's root, which aborted gz (ODE AABB assertion) at 1 ms.
+- Physics step sweep with the overlapping layout (scenario at 1, 2, 4 ms: 0.23x, 0.42x, 0.72x; settle, squeeze, pull and grip checks at each): everything held up to 4 ms except the strongest beetroot's 45.8 N grip slipping at 4 ms; the scripted pull's stiff lift force overshoots from 4 ms, so it runs at its own 1 ms step. Weak 20 N grips on 12 sparse Plants peak within 1 to 3 N of each other at 1 and 2 ms, except one beetroot whose leaf bunch wedges (40.6 N at 1 ms, 60.1 N at 2 ms); wedging past friction happens at 1 ms too.
+- With the layout fixed, 2 ms reaches the camera ceiling, so Field worlds use 2 ms (`gazebo.PHYSICS_STEP`).
 
 Rig worlds are hand-edited copies of `world.sdf` (camera models replaced by one model with both sensors). Subscribe to both `/oakd/rgb` and `/oakd/depth`.
 

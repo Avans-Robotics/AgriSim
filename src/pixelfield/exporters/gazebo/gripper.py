@@ -14,7 +14,6 @@ The gripper only goes into a headless copy of a world for a test; Field worlds n
 import json
 import os
 import re
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -194,9 +193,9 @@ def _run(world: Path, config: dict) -> dict:
               "lift_accel": LIFT_ACCEL, "jaw_open": JAW_OPEN, "wrist_topic": WRIST_TOPIC,
               **config}  # fmt: skip
     try:
-        result = subprocess.run(
+        result = plant.run_check(
             [plant.SYSTEM_PYTHON, str(GRIP_SCRIPT), world.name, json.dumps(config)],
-            cwd=world.parent, capture_output=True, text=True, check=True,
+            cwd=world.parent,
             # Own partition: Field worlds share a name, so runs would see each other's topics.
             env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
                  "GZ_PARTITION": f"pixelfield-{os.getpid()}"},

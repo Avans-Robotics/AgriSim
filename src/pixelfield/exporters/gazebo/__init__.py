@@ -55,9 +55,11 @@ PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
 SOIL_BITMASK = 0x1
 # Active Region (ADR 0010): meters added around every robot link's box, and the footprint
 # radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
-# Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks,
-# the scripted pull and the grip all run at it.
-PHYSICS_STEP = 0.001
+# Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks
+# and the grip run at it (the scripted pull at its own plant.PULL_STEP). 2 ms runs the 10 x 10
+# Field with a gripper among Picked Plants at the camera ceiling, with the checks as at 1 ms;
+# 4 ms gains nothing past the cameras and lost the strongest beetroot's grip (perf.md, M5d).
+PHYSICS_STEP = 0.002
 ACTIVE_REGION_PADDING = 0.05
 ACTIVE_REGION_FOOTPRINT = "crown"
 

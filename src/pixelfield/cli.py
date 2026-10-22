@@ -5,7 +5,6 @@
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 
 from pixelfield.core.layout import build_layout, to_manifest
@@ -134,8 +133,8 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         out = Path("out") / f"squeeze_{variant.name}"
         try:
             r = gripper.squeeze(variant, out, args.scale, args.force)
-        except subprocess.CalledProcessError as e:
-            parser.exit(1, f"error: the squeeze check failed:\n{e.stderr[-2000:]}\n")
+        except RuntimeError as e:
+            parser.exit(1, f"error: the squeeze check failed:\n{e}\n")
         except (OSError, ValueError, StopIteration) as e:
             parser.exit(1, f"error: {variant} is not an articulated Variant: {e!r}\n")
         failed += not r["held"]
@@ -149,8 +148,8 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
 def _grip(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     try:
         r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift)
-    except subprocess.CalledProcessError as e:
-        parser.exit(1, f"error: the grip check failed:\n{e.stderr[-2000:]}\n")
+    except RuntimeError as e:
+        parser.exit(1, f"error: the grip check failed:\n{e}\n")
     except (OSError, ValueError) as e:
         parser.exit(1, f"error: {e}\n")
     if not r["requested"]:
@@ -178,8 +177,8 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
             print(f"picked {args.plant}")
             return
         r = plant.pull(args.world, args.plant, args.speed, args.release)
-    except subprocess.CalledProcessError as e:
-        parser.exit(1, f"error: the pull check failed:\n{e.stderr[-2000:]}\n")
+    except RuntimeError as e:
+        parser.exit(1, f"error: the pull check failed:\n{e}\n")
     except (OSError, ValueError) as e:
         parser.exit(1, f"error: {e}\n")
     if not r["requested"]:

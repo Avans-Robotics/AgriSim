@@ -56,7 +56,7 @@ The root hull lives inside the JSON rather than as a separate mesh file; an Expo
 
 ### Stability check
 
-Per Variant, in a headless world for about 5 s of sim time at a 1 ms step:
+Per Variant, in a headless world for about 5 s of sim time at the worlds' physics step (2 ms since M5d, 1 ms before; all 72 Variants settle at 0.85, 1.0 and 1.15 scale at 1 ms and at 1.0 at 2 ms):
 
 - settling: every link slower than 1 mm/s after 2 s, no NaN;
 - squeeze: box jaws closing 3 cm above the crown hold every petiole link, none tunnels out.
