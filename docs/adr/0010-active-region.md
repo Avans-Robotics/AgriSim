@@ -37,7 +37,7 @@ The M5d spike picked Plants of a carrot Pixel at once in a headless world (physi
 | 32 | mesh hulls, no contact between Plants | 0.15 | none |
 | 32 | no petiole collisions, all joints fixed | 0.34 | none |
 
-- The guess that DART corrects penetration at about 1 mm/s was wrong for mesh hulls: FCL shoved them apart at up to 8 cm/s. Capsules separate gently, so petioles now collide as capsules (ADR 0006, amended).
+- The guess that DART corrects penetration at about 1 mm/s was wrong for mesh hulls: ODE collision detection (gz-sim's default for dartsim) shoved them apart at up to 8 cm/s. Capsules separate gently, so petioles now collide as capsules (ADR 0006, amended).
 - Contact between many overlapping Plants is solved as one problem and dominates the cost. A Picked Plant also costs about 0.15 ms per step without any contact, about half of it per-link bookkeeping.
 - The planned fallback, one model per Pixel with `self_collide` off, is the "no contact between Plants" row: 0.15x for one full Pixel before cameras. Rejected, not built.
 - With the foliage footprint the test gripper over a mid-Pixel carrot picks all 32 Plants of its Pixel; with the crown footprint it picks 4 to 7. Hence the crown footprint: the cost is that leaves of unpicked neighbours still pass through a robot.
