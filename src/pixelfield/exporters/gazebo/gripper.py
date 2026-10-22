@@ -34,7 +34,7 @@ WEAK_GRIP = 5.0  # N per jaw: friction holds about 10 N, below the weakest carro
 CLOSE_SPEED = 0.05  # meters per second per jaw
 LIFT_ACCEL = 0.5  # m/s^2, ramps the lift speed up and down: gripper inertia below 0.5 N
 LIFT_EFFORT = 1000.0  # N, effort limit of the lift: a stiff arm
-GUI_WAIT = 8.0  # seconds a --gui grip waits for the GUI to load the scene before it starts
+GUI_WAIT = 8.0  # seconds a --gui grip holds its jaws open while the GUI loads the scene
 GUI_LINGER = 30.0  # seconds a --gui grip keeps the world running after the pull
 WRIST_TOPIC = "/pixelfield/gripper/wrist"  # gz.msgs.Wrench of the wrist sensor
 SETTLE = 0.1  # seconds before the jaws start closing
@@ -136,7 +136,8 @@ def grip(
     world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force, gui)
     config = {"plant": plant_id, "request": request, "speed": speed, "lift": lift}
     if gui:
-        config.update(wait=GUI_WAIT, linger=GUI_LINGER)
+        # The world runs during the wait: a GUI gets the scene only from a running server.
+        config.update(settle=SETTLE + GUI_WAIT, linger=GUI_LINGER)
     report = _run(world, config, gui)
     rows = report.pop("rows")
     log = world_dir / "picks" / plant_id / "grip.csv"
@@ -209,8 +210,10 @@ def _run(world: Path, config: dict, gui: bool = False) -> dict:
     # Own partition: Field worlds share a name, so runs would see each other's topics.
     env = {**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
            "GZ_PARTITION": f"pixelfield-{os.getpid()}"}  # fmt: skip
-    viewer = subprocess.Popen(["gz", "sim", "-g"], env=env) if gui else None
+    viewer = None
     try:
+        if gui:
+            viewer = subprocess.Popen(["gz", "sim", "-g"], env=env)
         result = plant.run_check(
             [plant.SYSTEM_PYTHON, str(GRIP_SCRIPT), world.name, json.dumps(config)],
             cwd=world.parent, env=env,
@@ -219,6 +222,10 @@ def _run(world: Path, config: dict, gui: bool = False) -> dict:
         world.unlink()
         if viewer:
             viewer.terminate()
+            try:
+                viewer.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                viewer.kill()
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 

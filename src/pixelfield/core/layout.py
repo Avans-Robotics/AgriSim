@@ -74,6 +74,11 @@ def planting_positions(
 def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
     pixels, plants = [], []
     roots = {name: _root_radii(crop) for name, crop in crops.items()}
+    for name, crop in crops.items():
+        if crop.pull_out_curve and roots[name] is None:
+            raise ValueError(f"{name}: no root size for each of its {crop.variants} Variants in "
+                             f"{crop.library}/variants.json, needed to keep roots apart (the "
+                             "library path is relative to the working directory)")  # fmt: skip
     for row, names in enumerate(spec.grid):
         for col, name in enumerate(names):
             origin = (spec.column_x(col), (spec.rows - 1 - row) * spec.pixel_size)

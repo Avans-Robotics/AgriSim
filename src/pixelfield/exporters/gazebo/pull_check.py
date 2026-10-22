@@ -49,6 +49,7 @@ states = {}  # state topic messages by sim time in ms; delivered in another thre
 events = []
 rows, pull = [], {"root": None, "z0": None, "t0": None, "force": 0.0}
 visual = {}
+stepped = []  # steps that ran: none when the world did not load
 
 
 def on_state(msg):
@@ -68,6 +69,7 @@ def grouped_visual(ecm):
 
 
 def pre_update(info, ecm):
+    stepped[:] = [info.iterations]
     if "before" not in visual:
         visual["before"] = grouped_visual(ecm)
     if pull["root"] is None:
@@ -116,6 +118,8 @@ try:
     time.sleep(0.5)  # the last state messages
 finally:
     fast.unlink()
+if not stepped:
+    sys.exit("pull_check: no simulation step ran, the world did not load (errors above)")
 rows = [row[1:] + states.get(row[0], [None] * 3) for row in rows]
 print(json.dumps({"requested": bool(ok and reply.data), "visual_before": visual.get("before"),
                   "visual_after": visual.get("after"), "rows": rows,

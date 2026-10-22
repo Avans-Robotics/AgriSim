@@ -18,7 +18,7 @@
 // footprint is a vertical cylinder from the Plant's z up to its foliage height, around its
 // crown with the crown radius, or with the foliage radius when <footprint> is "foliage".
 // Unpick (M5d): a Plant the Active Region picked whose bond is intact, whose links have been
-// at rest for 2 s, all within 1 cm of where they settled after the spawn, and that no such box
+// at rest for 2 s, all within 1 cm of where they were just after the spawn (the static visual's pose), and that no such box
 // meets, turns back into its static visual; it can be picked again. A Plant picked by id stays.
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
 // published only on a step where d or the force changed, plus one message per event, which
@@ -86,7 +86,7 @@ constexpr std::chrono::milliseconds kRegionPeriod{10};  // sim time between Acti
 const std::regex kPixelName("r[0-9]+c[0-9]+");  // Pixel models, ADR 0007
 // Unpick: at rest means no link faster than kRestSpeed for kRestTime, the root no higher than
 // kRestDepth (an intact bond pulls a lifted root back down) and every link within
-// kRestTolerance of where it settled, so turning static shows no visible jump.
+// kRestTolerance of where it was just after the spawn, so turning static shows no visible jump.
 constexpr double kRestSpeed = 0.001;  // m/s
 constexpr std::chrono::seconds kRestTime{2};
 constexpr double kRestDepth = 1e-4;  // meters
@@ -150,6 +150,7 @@ struct Request
   sdf::Model model;
   Curve curve;
   bool byId = false;
+  std::shared_ptr<sdf::Root> root;  // the parsed file, kept while its entities may refer to it
 };
 
 /// A row of plants/plants.tsv: the Plant's position and its footprint for the Active Region.
@@ -166,11 +167,12 @@ struct Pick
   Entity plant, anchor, slide, weld, root;
   Entity pixelLink;  // the link that held the Plant's static visual
   std::optional<sdf::Visual> visual;  // that visual, to bring back on unpick
-  std::vector<std::pair<Entity, gz::math::Vector3d>> settled;  // link positions after spawn
+  std::vector<std::pair<Entity, gz::math::Vector3d>> spawned;  // link positions just after the spawn
   std::vector<gz::math::Vector3d> last;  // link positions at the previous Active Region check
   std::chrono::steady_clock::duration lastCheck{}, quietSince{};
   int unpicking = 0;  // 1: weld removed this step, 2: remove the models and restore the visual
   bool byId = false;  // picked through the service, not by the Active Region: never unpicked
+  std::shared_ptr<sdf::Root> sdfRoot;  // freed on unpick, kept for good once detached
   bool broken = false;
   bool detached = false;
   bool announced = false;  // the picked event went out
@@ -246,7 +248,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   }
 
   /// Parses plants/<name>.sdf into a request; nullopt (and an error) if it is not a Plant.
-  /// Touches no shared state but `roots`, under the caller's lock when it adds one.
+  /// Touches no shared state.
   private: std::optional<Request> Load(const std::string &_name)
   {
     const std::string file = (this->dir / (_name + ".sdf")).string();
@@ -277,11 +279,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       gzerr << "Pick: invalid Pull-out Curve in [" << file << "]\n";
       return std::nullopt;
     }
-    std::lock_guard<std::mutex> lock(this->rootsMutex);
-    // ponytail: one sdf::Root kept per pick (a few kB, the entities may refer to its graphs);
-    // free them on world reset if long training runs pick thousands of Plants.
-    this->roots.push_back(root);
-    return Request{_name, *root->Model(), curve};
+    return Request{_name, *root->Model(), curve, false, root};
   }
 
   /// Field models never trigger the Active Region; everything else in the world does.
@@ -384,24 +382,24 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   {
     if (p.byId)
       return false;  // asked for by id: stays picked
-    if (p.settled.empty())
+    if (p.spawned.empty())
     {
       for (Entity link : Model(p.plant).Links(_ecm))
-        p.settled.emplace_back(link, worldPose(link, _ecm).Pos());
-      for (const auto &[link, at] : p.settled)
+        p.spawned.emplace_back(link, worldPose(link, _ecm).Pos());
+      for (const auto &[link, at] : p.spawned)
         p.last.push_back(at);
       p.lastCheck = p.quietSince = _now;
       return false;
     }
     std::vector<gz::math::Vector3d> now;
-    for (const auto &[link, at] : p.settled)
+    for (const auto &[link, at] : p.spawned)
       now.push_back(worldPose(link, _ecm).Pos());
     double seconds = std::chrono::duration<double>(_now - p.lastCheck).count();
     bool moving = false, bent = false;
     for (size_t i = 0; i < now.size(); ++i)
     {
       moving |= now[i].Distance(p.last[i]) > kRestSpeed * seconds;
-      bent |= now[i].Distance(p.settled[i].second) > kRestTolerance;
+      bent |= now[i].Distance(p.spawned[i].second) > kRestTolerance;
     }
     auto position = _ecm.Component<components::JointPosition>(p.slide);
     bool lifted = p.broken || (position && !position->Data().empty() &&
@@ -505,6 +503,9 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
         _ecm.CreateComponent(collision, components::CollideBitmaskCmd(kAllBits));
       p.detached = true;
       event = "detached";
+      // ponytail: a pulled-out Plant's model stays, so its sdf::Root does too (a few kB each);
+      // free them on world reset if long runs pull thousands of Plants.
+      this->roots.push_back(p.sdfRoot);
     }
     if (!event && std::abs(d - p.sentD) <= kQuietD && std::abs(force - p.sentForce) <= kQuietForce)
       return true;  // resting: silent
@@ -526,6 +527,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     Model pixel(world.ModelByName(_ecm, _r.name.substr(0, _r.name.find('-'))));
     Pick pick{_r.name, _r.curve};
     pick.byId = _r.byId;
+    pick.sdfRoot = _r.root;
     for (Entity link : pixel.Links(_ecm))
     {
       Entity visual = Link(link).VisualByName(_ecm, _r.name);
@@ -593,7 +595,6 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: std::vector<Request> requests;
   private: std::map<std::string, Pick> picks;
   private: std::set<std::string> picked;
-  private: std::mutex rootsMutex;  // Load runs in the transport thread and in PreUpdate
   private: std::vector<std::shared_ptr<sdf::Root>> roots;
   private: double padding = 0.05;  // meters around each link's box
   private: bool foliage = false;  // footprint radius: foliage instead of crown

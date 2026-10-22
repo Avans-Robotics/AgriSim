@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import math
 import re
@@ -82,6 +83,14 @@ def test_roots_never_overlap(tmp_path):
             rb = sizes[b.variant]["root"]["radius"] * b.scale
             assert math.dist((a.x, a.y), (b.x, b.y)) >= ra + rb - 1e-12, (a.id, b.id)
     assert len(plants) > 0.85 * 9 * 33  # few left out beyond the missing rate (0.08)
+
+
+def test_a_root_crop_without_root_sizes_is_refused(tmp_path):
+    path = tmp_path / "spec.yaml"
+    path.write_text("seed: 42\nlegend:\n  C: carrot\ngrid: |\n  C\n")
+    crop = dataclasses.replace(CARROT, library=str(tmp_path / "no_library"))
+    with pytest.raises(ValueError, match="root size"):
+        build_layout(load_field_spec(path), {"carrot": crop})
 
 
 def test_editing_one_pixel_keeps_the_others(tmp_path):

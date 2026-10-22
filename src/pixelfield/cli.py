@@ -91,7 +91,10 @@ def main(argv: list[str] | None = None) -> None:
     except (OSError, ValueError, KeyError, TypeError) as e:
         parser.exit(1, f"error: {e}\n")
 
-    layout = build_layout(spec, crops)
+    try:
+        layout = build_layout(spec, crops)
+    except ValueError as e:
+        parser.exit(1, f"error: {e}\n")
     out = args.out or Path("out") / args.spec.stem
     out.mkdir(parents=True, exist_ok=True)
     (out / "manifest.json").write_text(json.dumps(to_manifest(layout), indent=2) + "\n")
@@ -120,7 +123,10 @@ def _settle(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     failed = 0
     for variant in args.variants:
         world = plant.settle_world(variant, Path("out") / f"settle_{variant.name}", args.scale)
-        r = plant.settle(world)
+        try:
+            r = plant.settle(world)
+        except RuntimeError as e:
+            parser.exit(1, f"error: the settle check failed:\n{e}\n")
         failed += not r["settled"]
         print(f"{variant.name}: {'settled' if r['settled'] else 'NOT settled'}, "
               f"max speed after {plant.SETTLE_AFTER:g} s {r['max_speed_after'] * 1000:.2f} mm/s "
