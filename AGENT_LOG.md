@@ -928,3 +928,21 @@ None yet: back to the user.
 Branch m5d-active-region at 7029336 plus uncommitted root colours, 4 ms step and harness gains. Tests at 4 ms: 4 failures (above). Not committed on purpose.
 ### Open items
 - User: drop the colours for a non-overlapping layout; step size given the grasp drift; scripted pull harness at a fixed 1 ms instead of scaled gains.
+
+## 2026-10-22 M5d scenario at the camera ceiling: no overlapping roots, 2 ms step
+### Goal & outcome
+User approved: drop root colours, keep crowns apart in the layout, scripted pull at its own 1 ms, choose the step after the layout fix and the grasp drift. Commits 857951b (Planting Pattern redraws jitter so no two roots overlap, touching allowed, radii from variants.json, Plant left out after 20 tries; scripted pull pinned to plant.PULL_STEP) and 8d5b614 (PHYSICS_STEP 2 ms; settle, pull and grip scripts raise with their stderr; CLI catches that). Gripper scenario on the new layout: 0.58x at 1 ms, 0.97x at 2 ms, 1.00x at 4 ms; rig alone 0.97x. Pass bar (as fast as the cameras allow, at least 0.8x) met at 2 ms.
+### Decisions & why
+- 2 ms, not 4: 2 ms already reaches the camera ceiling; 4 ms lost the strongest beetroot's 45.8 N grip. Grasp friction is not step-dependent in a systematic way: 12 sparse 20 N grips peak within 1 to 3 N at 1 and 2 ms except one wedging beetroot (40.6 vs 60.1 N); wedging past friction occurs at 1 ms too (46.9 N on another beetroot).
+- Overlap check only within a Pixel: margins (4 to 5 cm) keep crowns of neighbouring Pixels apart for all current Crops (beetroot crown radius up to 4.5 cm).
+### Lessons / gotchas
+- In random_10x10 the layout rule moves 845 of 2,760 Plants by a few mm and leaves out 47; no overlapping pair remains in any example.
+- The weak 20 N grip limit "friction allows 2 mu F" holds for parallel petioles only: jaws sliding up a bunch that spreads outward meet geometric resistance too (gap closes from 16 to 5 mm over a 0.12 m lift).
+- The intermittent check-script crash struck again once in the slow squeeze at 2 ms (carrot v03, fine in 8 reruns). Its stderr will now be in the error.
+### State
+Branch m5d-active-region at 8d5b614 (stacked on m5d-capsules), not pushed. Validated at 2 ms: pytest 99 passed; slow settle 72/72; slow squeeze 71/72 (v03 intermittent, then 5/5); perf rows in perf.md.
+### Open items
+- GUI check of the gripper pushing neighbours (needs a GUI path for the test gripper).
+- Unpick (next chunk, design to discuss).
+- The intermittent crash: wait for its stderr.
+- Settle at 0.85 and 1.15 not re-run at 2 ms.
