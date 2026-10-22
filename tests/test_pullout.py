@@ -62,7 +62,7 @@ def test_build_writes_the_sdf_of_every_root_crop_plant(field):
         assert float(element.get("depth")) == pytest.approx(request["depth"])
         root = model.find("link[@name='root']")
         assert root.findtext("collision/surface/contact/collide_bitmask") == str(plant.ROOT_BITMASK)
-        # Hulls and the articulated glb are shared per Variant, scaled by the model.
+        # The root hull and the articulated glb are shared per Variant, scaled by the model.
         uri = root.findtext("collision/geometry/mesh/uri")
         assert uri == f"meshes/{p['variant']}/root.obj" and (field / "plants" / uri).is_file()
         assert root.findtext("collision/geometry/mesh/scale") == " ".join([repr(p["scale"])] * 3)

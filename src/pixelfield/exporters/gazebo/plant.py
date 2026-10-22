@@ -82,7 +82,7 @@ def plant_model(
                 _write_obj(obj, link["hull"])
             collision = ET.SubElement(element, "collision", name="collision")
             _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
-        if link["name"] == "root":
+        for collision in element.findall("collision") if link["name"] == "root" else []:
             contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
             _text(contact, "collide_bitmask", str(ROOT_BITMASK))
         visual = ET.SubElement(element, "visual", name="visual")

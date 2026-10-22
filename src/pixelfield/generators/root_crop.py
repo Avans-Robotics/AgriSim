@@ -321,7 +321,7 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
                            "stiffness": [stiffness, stiffness], "damping": damping,
                            "spring_reference": reference})  # fmt: skip
     model = {
-        "format_version": 1,
+        "format_version": 2,  # 2: petiole links collide as capsules, not hulls
         "root_length": sizes["root"]["length"],  # crown top to tip
         "root_depth": sizes["root"]["length"] - sizes["root"]["top"],  # below the soil
         "links": links,
