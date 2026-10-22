@@ -870,3 +870,22 @@ m5d-capsules: commits 50d2372 and 4b241f9 (review fixes: physics export format_v
 - Grip tests with neighbours: user decision.
 - Slot runs (settle 0.85/1.15, slow squeeze, perf scenario rows) and the GUI check.
 - Unpick chunk after M5d.
+
+## 2026-10-22 M5d slot runs and the overlapping roots
+### Goal & outcome
+User approved the sparse-Field grip tests and the slot. Grip tests now use crops copied with one root crop Plant per Pixel (margin 0.2, spacing 0.5, no missing Plants, neighbours at least 0.48 m apart); a new test grips in the dense carrot Pixel and checks a neighbour is picked and moved; grip_check reports every Picked Plant heard with its largest d. Commit 2977ae1 (region) and the perf commit on m5d-active-region. Slot: settle at scale 0.85 and 1.15 all 144 settled (worst carrot v19 at 1.15: 0.57 mm/s, 2.3 mm travel); slow squeeze 72 of 72 held (4 min); rig re-run 0.96x (matches); gripper scenario 0.21x, FAIL.
+### Decisions & why
+- Perf scenario world: fresh `random_10x10` build, camera models replaced by the old `oakd` rig model (visuals only, so it never triggers the region), test gripper as a static model at its grasp pose. A non-static gripper without its control script would fall.
+### Lessons / gotchas
+- The scenario's cost is physics: two picked carrots 2.3 cm apart have overlapping roots (crown radii about 2 cm). Both roots are welded to anchors, so the contact never resolves; a leaf keeps moving at up to 15 cm/s and the pair alone runs at 0.31x (2.6x with the two root collisions off). 1,231 of 2,760 Plants in random_10x10 are in such a pair.
+- With all root collisions off: scenario 0.64x (pass), 32-Plant spike 0.089x (was 0.036x).
+- Collide bitmasks cannot switch off root-root contact while roots still touch robots: equal masks always collide.
+- The old rig worlds in out/random_10x10 (world_nadir.sdf and others) predate the pull-out system; perf_rig.sdf and perf_grip.sdf are the M5d ones (out/ only, rebuilt by the scratch script).
+- One full pytest run out of four had one failing test that could not be identified (no -rf) or reproduced in 13 targeted and 2 full reruns. UNVERIFIED flake.
+### State
+Branch m5d-active-region: 2977ae1 plus the perf commit, stacked on m5d-capsules (50d2372, 4b241f9). Validated: pytest 98 passed (3 of 4 runs), ruff, region tests mutation-checked, slot runs above. Perf check FAILS until the root contact is decided. GUI check by the user not done.
+### Open items
+- Root-root contact of Picked Plants: user decision (root collision off while attached, a minimum Plant distance in the Planting Pattern, or accept).
+- GUI check: the M4e gripper pulling one carrot pushes its neighbours.
+- The unidentified flaky test.
+- Unpick chunk after M5d.
