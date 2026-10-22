@@ -4,7 +4,6 @@ import csv
 import json
 import math
 import os
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -37,13 +36,13 @@ def table(field):
     return {row["id"]: {k: float(v) for k, v in row.items() if k != "id"} for row in rows}
 
 
-def run(field, probes, pick=None, steps=50):
+def run(field, probes, pick=None, steps=50, moves=(), snapshot=None):
     path = os.pathsep.join(filter(None, [str(plant.SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
-    result = subprocess.run(
+    result = plant.run_check(
         [plant.SYSTEM_PYTHON, str(SCRIPT), str(field / "world.sdf"),
-         json.dumps({"probes": probes, "steps": steps, "pick": pick})],
-        capture_output=True, text=True, check=True,
+         json.dumps({"probes": probes, "steps": steps, "pick": pick, "moves": list(moves),
+                     "snapshot": snapshot})],
         env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
              "GZ_PARTITION": f"pixelfield-{os.getpid()}"},
     )  # fmt: skip
@@ -117,9 +116,42 @@ def test_boxes_pick_the_plants_whose_crown_footprint_they_meet(field):
 def test_field_models_never_pick(field):
     plants = table(field)
     first = next(iter(plants))
-    # Soil, Pixel, cameras, then a Picked Plant and its anchor: only the Plant asked for.
-    r = run(field, [], pick=first, steps=200)
+    # Soil, Pixel, cameras, then a Picked Plant and its anchor: only the Plant asked for. It
+    # rests for 3 s untouched, but a Plant picked by id is never unpicked.
+    r = run(field, [], pick=first, steps=round(3.0 / gazebo.PHYSICS_STEP))
     assert r["requested"] is True and r["picked"] == [first]
+    assert [event for _, event, _ in r["events"]] == ["picked"]
+
+
+@needs_system
+def test_plants_left_alone_turn_static_and_can_be_picked_again(field):
+    plants = table(field)
+    west = min(plants, key=lambda n: plants[n]["x"])
+    east = max(plants, key=lambda n: plants[n]["x"])
+    pw, pe = plants[west], plants[east]
+    step = gazebo.PHYSICS_STEP
+    away, back, end = round(0.2 / step), round(8.0 / step), round(8.2 / step)
+    probes = [probe("leaving", pe["x"], pe["y"], 0.1), probe("staying", pw["x"], pw["y"], 0.1)]
+    moves = [
+        {"at": away, "probe": "leaving", "to": [-1.0, -1.0, 0.1]},
+        {"at": back, "probe": "leaving", "to": [pe["x"], pe["y"], 0.1]},
+    ]
+    r = run(field, probes, steps=end, moves=moves, snapshot=back - 1)
+    near_east = meets(plants, (pe["x"], pe["y"], 0.1), (HALF,) * 3)
+    near_west = meets(plants, (pw["x"], pw["y"], 0.1), (HALF,) * 3)
+    assert east in near_east and not near_east & near_west  # the two groups are apart
+    events = {}
+    for plant_id, event, _ in r["events"]:
+        events.setdefault(plant_id, []).append(event)
+    # The robot left: its Plants came to rest, turned static, and were picked again on return.
+    for plant_id in near_east:
+        assert events[plant_id] == ["picked", "unpicked", "picked"], plant_id
+    # Still under a robot link: never unpicked.
+    for plant_id in near_west:
+        assert events[plant_id] == ["picked"], plant_id
+    assert set(r["picked"]) == near_east | near_west
+    assert set(r["visuals_then"]) == set(plants) - near_west  # static again before the return
+    assert set(r["visuals"]) == set(plants) - near_east - near_west
 
 
 def test_the_world_sets_the_region_knobs(field):

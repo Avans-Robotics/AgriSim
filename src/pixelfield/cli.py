@@ -58,6 +58,9 @@ def main(argv: list[str] | None = None) -> None:
                              help="grip force per jaw, N")  # fmt: skip
     grip.add_argument("--lift", type=float,
                       help="lift this far, m (default: past the root depth)")  # fmt: skip
+    grip.add_argument("--gui", action="store_true",
+                      help="run in real time with a gz GUI attached, and keep it open "
+                           f"{gripper.GUI_LINGER:g} s after the pull")  # fmt: skip
     pull.add_argument("--release", type=float,
                       help="let go at this lift, m (default: past the root depth)")  # fmt: skip
     args = parser.parse_args(argv)
@@ -147,7 +150,7 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
 
 def _grip(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     try:
-        r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift)
+        r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift, args.gui)
     except RuntimeError as e:
         parser.exit(1, f"error: the grip check failed:\n{e}\n")
     except (OSError, ValueError) as e:

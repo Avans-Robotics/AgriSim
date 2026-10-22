@@ -14,6 +14,7 @@ The gripper only goes into a headless copy of a world for a test; Field worlds n
 import json
 import os
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -33,6 +34,8 @@ WEAK_GRIP = 5.0  # N per jaw: friction holds about 10 N, below the weakest carro
 CLOSE_SPEED = 0.05  # meters per second per jaw
 LIFT_ACCEL = 0.5  # m/s^2, ramps the lift speed up and down: gripper inertia below 0.5 N
 LIFT_EFFORT = 1000.0  # N, effort limit of the lift: a stiff arm
+GUI_WAIT = 8.0  # seconds a --gui grip waits for the GUI to load the scene before it starts
+GUI_LINGER = 30.0  # seconds a --gui grip keeps the world running after the pull
 WRIST_TOPIC = "/pixelfield/gripper/wrist"  # gz.msgs.Wrench of the wrist sensor
 SETTLE = 0.1  # seconds before the jaws start closing
 HOLD = 0.3  # seconds after the time a full close takes before the lift starts
@@ -84,14 +87,18 @@ def gripper_model(x: float, y: float, z: float, grip_force: float) -> ET.Element
     return model
 
 
-def grip_world(world_sdf: Path, grip: tuple[float, float, float], grip_force: float) -> Path:
+def grip_world(
+    world_sdf: Path, grip: tuple[float, float, float], grip_force: float, realtime: bool = False
+) -> Path:
     """Headless copy of a world with the gripper, next to it so mesh URIs still resolve.
 
-    Unthrottled (real_time_factor 0) and without the Sensors system, like the scripted pull.
+    Without the Sensors system, like the scripted pull, and unthrottled (real_time_factor 0)
+    unless `realtime`, for watching it in a GUI.
     """
     world_sdf = Path(world_sdf)
     text = world_sdf.read_text()
-    text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", text)
+    if not realtime:
+        text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", text)
     text = re.sub(r'<plugin filename="gz-sim-sensors-system".*?</plugin>', "", text, flags=re.S)
     model = ET.tostring(gripper_model(*grip, grip_force), encoding="unicode")
     path = world_sdf.with_name(".grip_fast.sdf")
@@ -105,8 +112,11 @@ def grip(
     grip_force: float = GRIP_FORCE,
     speed: float = plant.PULL_SPEED,
     lift: float | None = None,
+    gui: bool = False,
 ) -> dict:
-    """Pull a Plant of a built Field by its leaf bunch, headless.
+    """Pull a Plant of a built Field by its leaf bunch, headless, or in real time with a
+    `gz sim -g` GUI attached when `gui` (it waits GUI_WAIT for the GUI, keeps the world running
+    GUI_LINGER after the pull, then closes the GUI).
 
     Picks the Plant, closes the jaws GRIP_HEIGHT above its crown with `grip_force` per jaw and
     lifts the gripper by `lift` meters (default PULL_AFTER past the root depth) at `speed`.
@@ -123,8 +133,11 @@ def grip(
             raise ValueError(f"the {name} must be above 0")
     x, y, z, _ = request["pose"]
     crown = max(v[2] for v in request["root_hull"])
-    world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force)
-    report = _run(world, {"plant": plant_id, "request": request, "speed": speed, "lift": lift})
+    world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force, gui)
+    config = {"plant": plant_id, "request": request, "speed": speed, "lift": lift}
+    if gui:
+        config.update(wait=GUI_WAIT, linger=GUI_LINGER)
+    report = _run(world, config, gui)
     rows = report.pop("rows")
     log = world_dir / "picks" / plant_id / "grip.csv"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -185,23 +198,27 @@ def squeeze(
             "held": not report["nan"] and not escaped and gap > 0.0}  # fmt: skip
 
 
-def _run(world: Path, config: dict) -> dict:
-    """Run grip_check.py on a grip world in the system Python; returns its report."""
+def _run(world: Path, config: dict, gui: bool = False) -> dict:
+    """Run grip_check.py on a grip world in the system Python; returns its report. With `gui`,
+    a `gz sim -g` in the same partition shows it."""
     path = os.pathsep.join(filter(None, [str(plant.SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
     config = {"step": plant.STEP, "settle": SETTLE, "close_speed": CLOSE_SPEED, "hold": HOLD,
               "lift_accel": LIFT_ACCEL, "jaw_open": JAW_OPEN, "wrist_topic": WRIST_TOPIC,
               **config}  # fmt: skip
+    # Own partition: Field worlds share a name, so runs would see each other's topics.
+    env = {**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
+           "GZ_PARTITION": f"pixelfield-{os.getpid()}"}  # fmt: skip
+    viewer = subprocess.Popen(["gz", "sim", "-g"], env=env) if gui else None
     try:
         result = plant.run_check(
             [plant.SYSTEM_PYTHON, str(GRIP_SCRIPT), world.name, json.dumps(config)],
-            cwd=world.parent,
-            # Own partition: Field worlds share a name, so runs would see each other's topics.
-            env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
-                 "GZ_PARTITION": f"pixelfield-{os.getpid()}"},
+            cwd=world.parent, env=env,
         )  # fmt: skip
     finally:
         world.unlink()
+        if viewer:
+            viewer.terminate()
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 

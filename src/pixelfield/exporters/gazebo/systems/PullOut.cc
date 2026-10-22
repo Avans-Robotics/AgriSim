@@ -2,8 +2,8 @@
 // Plant's grouped visual, spawns its articulated model, welds the root to an anchor on a
 // vertical prismatic joint and applies the Pull-out Curve as the joint force every step until
 // the root has travelled its root depth, then detaches it. Any number of Plants can be picked
-// at once, each Plant id once. After the peak the anchor's lower limit follows the highest
-// point reached, so a released, part-pulled root stays where it is.
+// at once. After the peak the anchor's lower limit follows the highest point reached, so a
+// released, part-pulled root stays where it is.
 //
 // `pixelfield build` writes next to the world plants/<id>.sdf for every root crop Plant (its
 // model at its pose, with the curve as a custom element <pixelfield:pull_out f_peak d_peak
@@ -17,9 +17,13 @@
 // Every root crop Plant whose footprint meets that box is picked like a pick by id. The
 // footprint is a vertical cylinder from the Plant's z up to its foliage height, around its
 // crown with the crown radius, or with the foliage radius when <footprint> is "foliage".
+// Unpick (M5d): a Plant the Active Region picked whose bond is intact, whose links have been
+// at rest for 2 s, all within 1 cm of where they settled after the spawn, and that no such box
+// meets, turns back into its static visual; it can be picked again. A Plant picked by id stays.
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
 // published only on a step where d or the force changed, plus one message per event, which
-// also carries `event`: picked, peak_passed or detached. A resting Picked Plant is silent.
+// also carries `event`: picked, peak_passed, detached or unpicked. A resting Picked Plant is
+// silent.
 
 #include <algorithm>
 #include <chrono>
@@ -54,6 +58,7 @@
 #include <gz/sim/components/JointPosition.hh>
 #include <gz/sim/components/JointVelocity.hh>
 #include <gz/sim/components/Link.hh>
+#include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Pose.hh>
 #include <gz/transport/Node.hh>
 #include <sdf/Collision.hh>
@@ -61,6 +66,7 @@
 #include <sdf/Link.hh>
 #include <sdf/Model.hh>
 #include <sdf/Root.hh>
+#include <sdf/Visual.hh>
 
 namespace pixelfield
 {
@@ -78,6 +84,13 @@ constexpr double kQuietD = 1e-9;  // meters
 constexpr double kQuietForce = 1e-6;  // newtons
 constexpr std::chrono::milliseconds kRegionPeriod{10};  // sim time between Active Region checks
 const std::regex kPixelName("r[0-9]+c[0-9]+");  // Pixel models, ADR 0007
+// Unpick: at rest means no link faster than kRestSpeed for kRestTime, the root no higher than
+// kRestDepth (an intact bond pulls a lifted root back down) and every link within
+// kRestTolerance of where it settled, so turning static shows no visible jump.
+constexpr double kRestSpeed = 0.001;  // m/s
+constexpr std::chrono::seconds kRestTime{2};
+constexpr double kRestDepth = 1e-4;  // meters
+constexpr double kRestTolerance = 0.01;  // meters
 
 struct Curve
 {
@@ -136,6 +149,7 @@ struct Request
   std::string name;
   sdf::Model model;
   Curve curve;
+  bool byId = false;
 };
 
 /// A row of plants/plants.tsv: the Plant's position and its footprint for the Active Region.
@@ -149,7 +163,14 @@ struct Pick
 {
   std::string name;
   Curve curve;
-  Entity anchor, slide, weld, root;
+  Entity plant, anchor, slide, weld, root;
+  Entity pixelLink;  // the link that held the Plant's static visual
+  std::optional<sdf::Visual> visual;  // that visual, to bring back on unpick
+  std::vector<std::pair<Entity, gz::math::Vector3d>> settled;  // link positions after spawn
+  std::vector<gz::math::Vector3d> last;  // link positions at the previous Active Region check
+  std::chrono::steady_clock::duration lastCheck{}, quietSince{};
+  int unpicking = 0;  // 1: weld removed this step, 2: remove the models and restore the visual
+  bool byId = false;  // picked through the service, not by the Active Region: never unpicked
   bool broken = false;
   bool detached = false;
   bool announced = false;  // the picked event went out
@@ -217,6 +238,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       gzerr << "Pick: [" << name << "] was already picked\n";
       return true;
     }
+    request->byId = true;
     this->requests.push_back(*request);
     this->picked.insert(name);
     _rep.set_data(true);
@@ -273,10 +295,11 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       std::regex_match(_model, kPixelName) || this->plants.count(_model) || isAnchor;
   }
 
-  /// One Active Region check: picks every Plant whose footprint meets a non-Field link's box.
-  private: void Region(EntityComponentManager &_ecm)
+  /// One Active Region check: picks every Plant whose footprint meets a non-Field link's box,
+  /// and starts to unpick Picked Plants that are at rest and met by none.
+  private: void Region(EntityComponentManager &_ecm, std::chrono::steady_clock::duration _now)
   {
-    std::vector<std::string> hits;
+    std::set<std::string> hits;  // met by a box, picked or not
     _ecm.Each<components::Link>([&](const Entity &_link, const components::Link *) -> bool
     {
       auto cached = this->boxes.find(_link);
@@ -303,16 +326,23 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
         double r = this->foliage ? f.radius : f.crown;
         double dx = std::max({lo.X() - p.X(), 0.0, p.X() - hi.X()});
         double dy = std::max({lo.Y() - p.Y(), 0.0, p.Y() - hi.Y()});
-        if (p.Z() <= hi.Z() && p.Z() + f.height >= lo.Z() && dx * dx + dy * dy <= r * r &&
-            !this->picked.count(id))
-          hits.push_back(id);
+        if (p.Z() <= hi.Z() && p.Z() + f.height >= lo.Z() && dx * dx + dy * dy <= r * r)
+          hits.insert(id);
       }
       return true;
     });
+    for (auto &[id, p] : this->picks)
+    {
+      if (!p.detached && !p.unpicking && this->AtRest(p, hits.count(id), _now, _ecm))
+      {
+        _ecm.RequestRemoveEntity(p.weld);  // the models go a step later, as on detach
+        p.unpicking = 1;
+      }
+    }
     for (const std::string &id : hits)
     {
       if (this->picked.count(id))
-        continue;  // met by two links
+        continue;
       this->picked.insert(id);  // also when its file is broken: one error, not one per check
       // ponytail: parsed in the simulation thread, a few ms per Plant; move it to a worker
       // if a robot reaching into a bed stalls the simulation noticeably.
@@ -332,7 +362,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     if (!_info.paused && _info.simTime - this->lastRegion >= kRegionPeriod)
     {
       this->lastRegion = _info.simTime;
-      this->Region(_ecm);
+      this->Region(_ecm, _info.simTime);
     }
     for (const Request &r : this->requests)
       this->Spawn(r, _ecm);
@@ -340,7 +370,86 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     if (_info.paused)
       return;
     for (auto it = this->picks.begin(); it != this->picks.end();)
-      it = this->Step(it->second, _info, _ecm) ? std::next(it) : this->picks.erase(it);
+    {
+      Pick &p = it->second;
+      bool keep = p.unpicking ? p.unpicking++ < 2 || !this->Unpick(p, _info, _ecm)
+                              : this->Step(p, _info, _ecm);
+      it = keep ? std::next(it) : this->picks.erase(it);
+    }
+  }
+
+  /// Whether a Picked Plant has been at rest long enough to turn static again (kRest*).
+  private: bool AtRest(Pick &p, bool _met, std::chrono::steady_clock::duration _now,
+                       const EntityComponentManager &_ecm)
+  {
+    if (p.byId)
+      return false;  // asked for by id: stays picked
+    if (p.settled.empty())
+    {
+      for (Entity link : Model(p.plant).Links(_ecm))
+        p.settled.emplace_back(link, worldPose(link, _ecm).Pos());
+      for (const auto &[link, at] : p.settled)
+        p.last.push_back(at);
+      p.lastCheck = p.quietSince = _now;
+      return false;
+    }
+    std::vector<gz::math::Vector3d> now;
+    for (const auto &[link, at] : p.settled)
+      now.push_back(worldPose(link, _ecm).Pos());
+    double seconds = std::chrono::duration<double>(_now - p.lastCheck).count();
+    bool moving = false, bent = false;
+    for (size_t i = 0; i < now.size(); ++i)
+    {
+      moving |= now[i].Distance(p.last[i]) > kRestSpeed * seconds;
+      bent |= now[i].Distance(p.settled[i].second) > kRestTolerance;
+    }
+    auto position = _ecm.Component<components::JointPosition>(p.slide);
+    bool lifted = p.broken || (position && !position->Data().empty() &&
+                               position->Data()[0] > kRestDepth);
+    if (moving || lifted || _met)
+      p.quietSince = _now;
+    p.last = now;
+    p.lastCheck = _now;
+    return !bent && _now - p.quietSince >= kRestTime;
+  }
+
+  /// Removes a Picked Plant and its anchor and brings back its static visual; true when done.
+  private: bool Unpick(Pick &p, const UpdateInfo &_info, EntityComponentManager &_ecm)
+  {
+    _ecm.RequestRemoveEntity(p.plant, true);
+    _ecm.RequestRemoveEntity(p.anchor, true);
+    if (p.visual)
+    {
+      SdfEntityCreator creator(_ecm, *this->eventMgr);
+      Entity visual = creator.CreateEntities(&*p.visual);
+      creator.SetParent(visual, p.pixelLink);
+    }
+    this->picked.erase(p.name);
+    this->Publish(p.name, 0.0, 0.0, true, "unpicked", _info);
+    gzmsg << "Pick: [" << p.name << "] unpicked\n";
+    return true;
+  }
+
+  private: void Publish(const std::string &_name, double _d, double _force, bool _attached,
+                        const char *_event, const UpdateInfo &_info)
+  {
+    gz::msgs::Param msg;
+    msg.mutable_header()->mutable_stamp()->CopyFrom(convert<gz::msgs::Time>(_info.simTime));
+    auto &params = *msg.mutable_params();
+    params["plant"].set_type(gz::msgs::Any::STRING);
+    params["plant"].set_string_value(_name);
+    params["d"].set_type(gz::msgs::Any::DOUBLE);
+    params["d"].set_double_value(_d);
+    params["force"].set_type(gz::msgs::Any::DOUBLE);
+    params["force"].set_double_value(_force);
+    params["attached"].set_type(gz::msgs::Any::BOOLEAN);
+    params["attached"].set_bool_value(_attached);
+    if (_event)
+    {
+      params["event"].set_type(gz::msgs::Any::STRING);
+      params["event"].set_string_value(_event);
+    }
+    this->state.Publish(msg);
   }
 
   /// One physics step of one picked Plant; false once it is done.
@@ -401,24 +510,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       return true;  // resting: silent
     p.sentD = d;
     p.sentForce = force;
-
-    gz::msgs::Param msg;
-    msg.mutable_header()->mutable_stamp()->CopyFrom(convert<gz::msgs::Time>(_info.simTime));
-    auto &params = *msg.mutable_params();
-    params["plant"].set_type(gz::msgs::Any::STRING);
-    params["plant"].set_string_value(p.name);
-    params["d"].set_type(gz::msgs::Any::DOUBLE);
-    params["d"].set_double_value(d);
-    params["force"].set_type(gz::msgs::Any::DOUBLE);
-    params["force"].set_double_value(force);
-    params["attached"].set_type(gz::msgs::Any::BOOLEAN);
-    params["attached"].set_bool_value(attached);
-    if (event)
-    {
-      params["event"].set_type(gz::msgs::Any::STRING);
-      params["event"].set_string_value(event);
-    }
-    this->state.Publish(msg);
+    this->Publish(p.name, d, force, attached, event, _info);
     return true;
   }
 
@@ -432,18 +524,24 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     }
     // Plants are visuals of their Pixel's model r<row>c<col> (ADR 0007), ids r<row>c<col>-<n>.
     Model pixel(world.ModelByName(_ecm, _r.name.substr(0, _r.name.find('-'))));
-    bool removed = false;
+    Pick pick{_r.name, _r.curve};
+    pick.byId = _r.byId;
     for (Entity link : pixel.Links(_ecm))
     {
       Entity visual = Link(link).VisualByName(_ecm, _r.name);
       if (visual != kNullEntity)
       {
         _ecm.RequestRemoveEntity(visual);
-        removed = true;
+        pick.pixelLink = link;
       }
     }
-    if (!removed)
+    if (pick.pixelLink == kNullEntity)
       gzwarn << "Pick: no grouped visual [" << _r.name << "] to remove\n";
+    // Its SDF, to bring the static visual back on unpick.
+    auto pixelSdf = _ecm.Component<components::ModelSdf>(pixel.Entity());
+    for (uint64_t i = 0; pixelSdf && i < pixelSdf->Data().LinkCount(); ++i)
+      if (auto visual = pixelSdf->Data().LinkByIndex(i)->VisualByName(_r.name))
+        pick.visual = *visual;
 
     // The model's pose in its file is the Plant's pose in the Field.
     SdfEntityCreator creator(_ecm, *this->eventMgr);
@@ -475,7 +573,12 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     Entity weld = _ecm.CreateEntity();
     _ecm.CreateComponent(weld, components::DetachableJoint(
       {anchorModel.LinkByName(_ecm, "anchor"), root, "fixed"}));
-    this->picks[_r.name] = Pick{_r.name, _r.curve, anchor, slide, weld, root};
+    pick.plant = plant;
+    pick.anchor = anchor;
+    pick.slide = slide;
+    pick.weld = weld;
+    pick.root = root;
+    this->picks[_r.name] = pick;
     gzmsg << "Pick: [" << _r.name << "] spawned and anchored\n";
   }
 

@@ -4,7 +4,8 @@ Usage: grip_check.py <grip world.sdf> <config json>
 
 The world has the gripper model (gripper.py). Config: plant (model name), request (pick
 request for the pull-out system, or null when the Plant is already in the world), step, settle,
-close_speed, hold, lift_accel, jaw_open, speed, lift, wrist_topic. Timeline: jaws open for
+close_speed, hold, lift_accel, jaw_open, speed, lift, wrist_topic, optionally wait and linger
+(seconds before the first step and after the pull, for a GUI). Timeline: jaws open for
 `settle` seconds, then they close at close_speed until they stall on the leaf bunch (their
 effort limit is the grip force); after the time a full close takes plus `hold`, the gripper
 lifts by `lift` meters, its speed ramped up at lift_accel to `speed`, and stops. Prints one
@@ -112,12 +113,15 @@ world_name = re.search(r'<world name="([^"]+)"', text).group(1)
 node.subscribe(Param, f"/world/{world_name}/pixelfield/pull_out", on_state)
 node.subscribe(Wrench, config["wrist_topic"], on_wrist)
 server.run(True, 1, False)
+time.sleep(config.get("wait", 0.0))  # a GUI loading the scene
 report["requested"] = None
 if request:
     topic = f"/world/{world_name}/pixelfield/pick"
     ok, reply = node.request(topic, StringMsg(data=request["name"]), StringMsg, Boolean, 5000)
     report["requested"] = bool(ok and reply.data)
 server.run(True, steps - 1, False)
+if config.get("linger"):
+    server.run(True, round(config["linger"] / STEP), False)  # to look around in the GUI
 # The Active Region may have picked the Plant under the jaws before the request came.
 report["requested"] = report["requested"] or bool(request and picked)
 time.sleep(0.5)  # the last topic messages

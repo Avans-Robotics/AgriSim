@@ -45,7 +45,7 @@ The force in newtons needed to pull one Plant out of the soil.
 _Avoid_: extraction force, uprooting force
 
 **Picked Plant**:
-A Plant spawned as its own articulated model in a running world, held by its Pull-out Curve until it is pulled out.
+A Plant spawned as its own articulated model in a running world, held by its Pull-out Curve until it is pulled out, or until it turns back into its static visual when left alone (unpick).
 _Avoid_: dynamic plant, spawned plant
 
 **Active Region**:
