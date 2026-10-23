@@ -978,3 +978,16 @@ Branch m5d-active-region, latest commit the review fixes, not pushed. Validated:
 ### Open items
 - User GUI check.
 - The dense-Pixel grip does not pull a carrot out with the 10 cm test jaws (neighbours grabbed): fine for the showcase test gripper? The real Amiga gripper will differ.
+
+## 2026-10-23 M5d test gripper across the row, jaws sized per Plant
+### Goal & outcome
+User GUI check: the jaws looked like they missed the target and lifted another carrot. Measured: gripping r0c0-015 lifted its in-row neighbour r0c0-016 by 21.9 mm (bond broken) while the target rose 0.1 mm. Cause: jaws closed along the row (east-west) from 6 cm out and were 10 cm wide, so they swept through and clamped the in-row neighbours' bunches 4 to 5 cm away. User approved G1. Uncommitted: the Manifest's Crops gain `row_direction` (resolved Field override or Crop default); the gripper turns to close across the rows; jaw width = the gripped Plant's leaf bunch diameter at grip height plus 1 cm (`jaw_width`, carrot about 3.5, radish 4.1, beetroot 5.9 cm). In the dense carrot Pixel three targets now detach at their root depth and neighbours only get pushed (d 1.6 to 3.9 mm, bond intact). Slow squeeze 72/72 with the sized jaws (a fixed 4 cm let 22 beetroot and other Variants escape: beetroot bunches are 4.9 to 5.3 cm at grip height).
+### Decisions & why
+- Jaw width per Plant instead of one width: in-row spacing (4, 6, 8 cm) and bunch width differ per Crop; no single width clears carrot neighbours and holds a beetroot bunch.
+### Lessons / gotchas
+- Wedging of the leaf bunch between the jaws depends on the angle between the jaws and the Plant's random yaw: weak 5 N grips broke the bond on 1 to 2 of 4 sparse carrots in every jaw orientation and width tried, the old configuration included (48.7 mm on one). The M4e weak-grip and strongest-beetroot tests passed because of their particular angle, not because wedging was gone.
+- The strongest beetroot's wrist force over its Pull-out Force: 0.98 along x, 1.11 to 1.29 across the rows (wedging and stick-slip peaks on the wrist).
+### State
+Branch m5d-active-region at fd5ec43 plus the uncommitted gripper change. Tests: 2 failures (weak grip bond holds; strongest beetroot within 5%), both angle-dependent wedging; squeeze 72/72; dense grip test passes.
+### Open items
+- User decision on what the weak-grip and strong-grip tests should assert.
