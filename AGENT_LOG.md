@@ -1007,3 +1007,18 @@ Branches, none pushed, none merged: m5d-capsules (50d2372, 4b241f9; green) and m
 - The intermittent check-script crash (stderr now captured).
 - Settle at 0.85 and 1.15 at 2 ms not re-run; bent-leaf unpick tolerance untested.
 - Then M5e packaging; merge order m5d-capsules, then m5d-active-region.
+
+## 2026-10-23 M5d finished: grip tests, wedging, linked jaws
+### Goal & outcome
+User asked to finish fast. G2 done (e846fd7): grip tests check what holds at any jaw angle (weak grip: no detach, friction-limited sliding; strong grips: detach at the root depth, soil force within 3% of the Pull-out Force, which is one 2 ms step of a 5 cm/s pull, wrist carrying at least 95%); grip report gains peak_force; ADR 0006 no longer claims capsules removed the wedging. The shaking the user saw (a61dd3d): the held carrot swung 7 mm at the root because two force-capped jaw servos leave the jaw pair free to slide as a unit; each jaw now backs off when ahead of the other (JAW_LINK 200 1/s), root motion under 0.2 mm. Settle at 0.85 and 1.15 at 2 ms: 72/72 each.
+### Decisions & why
+- Linked jaws in the controller, not one fixed jaw: a parallel gripper's fingers are mechanically mirrored, and a single moving jaw would push the bunch sideways.
+### Lessons / gotchas
+- The 1% soil-force tolerance held at 1 ms but the peak is sampled once per step: at 2 ms the last sample before the peak can be 2% low.
+- With linked jaws, r0c0-020 in the dense carrot Pixel no longer comes out: its close in-row neighbour's bunch ends up between the jaws too (neighbour lifted 49.6 mm, wrist 39.2 N at the 40 N friction limit). r0c0-015 and r0c0-005 come out.
+### State
+m5d-capsules (50d2372, 4b241f9) and m5d-active-region stacked on it (latest a61dd3d), not pushed. Validated: pytest 101 passed, 144 skipped; slow settle 72/72 at scales 0.85, 1.0, 1.15 and squeeze 72/72 at 2 ms; perf scenario 0.97x (camera ceiling); GUI check of the grip by the user (before the linked jaws).
+### Open items
+- User: GUI check that the shaking is gone (`uv run pixelfield grip out/carrot_pixel r0c0-015 --gui`).
+- The intermittent check-script crash (stderr now captured); the 1 cm bent-leaf unpick tolerance has no automated test.
+- Merge m5d-capsules, then m5d-active-region; then M5e packaging.
