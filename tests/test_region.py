@@ -66,7 +66,7 @@ def probe(name, x, y, z, offset=(0.0, 0.0, 0.0), half=HALF, yaw=0.0):
     """A cube of side 2 half centred at (x, y, z), turned by yaw in its link, the link moved
     by -offset."""
     return {"name": name, "pose": [x - offset[0], y - offset[1], z - offset[2]],
-            "size": [2 * half] * 3, "offset": [*offset, 0.0, 0.0, yaw]}  # fmt: skip
+            "size": [2 * half] * 3, "offsets": [[*offset, 0.0, 0.0, yaw]]}  # fmt: skip
 
 
 @needs_system
@@ -104,6 +104,21 @@ def test_boxes_pick_the_plants_whose_crown_footprint_they_meet(field):
     assert north not in set().union(*expected.values())
     expected["turned"] = meets(plants, centre, (reach, reach, TURNED))
     assert north in expected["turned"]
+
+    # Two cubes in one link, west and east of the Pixel, like the wheel forks of a robot base
+    # straddling a bed: the box of the whole link would hold every Plant at that y, each
+    # cube's box holds none.
+    west_x = pw["x"] - pw["crown"] - PAD - HALF - 0.01
+    east_x = pe["x"] + pe["crown"] + PAD + HALF + 0.01
+    mid = (west_x + east_x) / 2
+    span = {"name": "span", "pose": [mid, pa["y"], z], "size": [2 * HALF] * 3,
+            "offsets": [[west_x - mid, 0, 0, 0, 0, 0], [east_x - mid, 0, 0, 0, 0, 0]]}  # fmt: skip
+    probes.append(span)
+    assert a in meets(plants, (mid, pa["y"], z), ((east_x - west_x) / 2 + HALF, HALF, HALF))
+    expected["span"] = meets(plants, (west_x, pa["y"], z), (HALF,) * 3) | meets(
+        plants, (east_x, pa["y"], z), (HALF,) * 3
+    )
+    assert not expected["span"]
 
     r = run(field, probes, pick=a)
     assert set(r["picked"]) == set().union(*expected.values())

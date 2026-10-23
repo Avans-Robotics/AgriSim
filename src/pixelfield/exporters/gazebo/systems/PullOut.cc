@@ -13,8 +13,10 @@
 // with gz.msgs.Boolean.
 // Active Region (ADR 0010): every 10 ms of sim time, each link with collisions of a model that
 // is not part of the Field (soil, Pixel models r<row>c<col>, camera_* models, Picked Plants
-// and their anchors) takes its world axis-aligned box plus <padding> meters (default 0.05).
-// Every root crop Plant whose footprint meets that box is picked like a pick by id. The
+// and their anchors) takes the world axis-aligned box of each of its collisions plus <padding>
+// meters (default 0.05). Every root crop Plant whose footprint meets one of those boxes is
+// picked like a pick by id. One box per collision, not per link: a robot base whose wheel forks
+// and cross tubes share a link would otherwise pick every Plant under it. The
 // footprint is a vertical cylinder from the Plant's z up to its foliage height, around its
 // crown with the crown radius, or with the foliage radius when <footprint> is "foliage".
 // Unpick (M5d): a Plant the Active Region picked whose bond is intact, whose links have been
@@ -122,13 +124,13 @@ gz::math::AxisAlignedBox Moved(const gz::math::AxisAlignedBox &_box,
   return {lo, hi};
 }
 
-/// A link's box in its own frame, from its collisions; nullopt without any. Not gz-sim's
+/// The box of each of a link's collisions, in the link's frame; empty without any. Not gz-sim's
 /// Link::ComputeAxisAlignedBox: it moves only two corners of each collision's box, so a
 /// collision turned in its link comes out too small (a cube turned 45 degrees about z gets no
 /// width in x).
-std::optional<gz::math::AxisAlignedBox> LinkBox(Entity _link, const EntityComponentManager &_ecm)
+std::vector<gz::math::AxisAlignedBox> LinkBoxes(Entity _link, const EntityComponentManager &_ecm)
 {
-  std::optional<gz::math::AxisAlignedBox> box;
+  std::vector<gz::math::AxisAlignedBox> boxes;
   for (Entity collision : Link(_link).Collisions(_ecm))
   {
     auto element = _ecm.Component<components::CollisionElement>(collision);
@@ -138,10 +140,9 @@ std::optional<gz::math::AxisAlignedBox> LinkBox(Entity _link, const EntityCompon
     auto local = element->Data().Geom()->AxisAlignedBox(&meshAxisAlignedBox);
     if (!local || !(local->Min().X() <= local->Max().X()))
       continue;  // no size, or an empty box that would span everything once moved
-    auto moved = Moved(*local, pose ? pose->Data() : gz::math::Pose3d::Zero);
-    box = box ? *box + moved : moved;
+    boxes.push_back(Moved(*local, pose ? pose->Data() : gz::math::Pose3d::Zero));
   }
-  return box;
+  return boxes;
 }
 
 struct Request
@@ -293,7 +294,8 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       std::regex_match(_model, kPixelName) || this->plants.count(_model) || isAnchor;
   }
 
-  /// One Active Region check: picks every Plant whose footprint meets a non-Field link's box,
+  /// One Active Region check: picks every Plant whose footprint meets a box of a non-Field
+  /// link's collision,
   /// and starts to unpick Picked Plants that are at rest and met by none.
   private: void Region(EntityComponentManager &_ecm, std::chrono::steady_clock::duration _now)
   {
@@ -303,29 +305,34 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       auto cached = this->boxes.find(_link);
       if (cached == this->boxes.end())
       {
-        // A link's box in its own frame only changes with its collisions: computed once.
-        std::optional<gz::math::AxisAlignedBox> box;
+        // A link's boxes in its own frame only change with its collisions: computed once.
+        std::vector<gz::math::AxisAlignedBox> boxes;
         if (!this->IsField(Model(topLevelModel(_link, _ecm)).Name(_ecm)))
-          box = LinkBox(_link, _ecm);
-        cached = this->boxes.emplace(_link, box).first;
+          boxes = LinkBoxes(_link, _ecm);
+        cached = this->boxes.emplace(_link, std::move(boxes)).first;
       }
-      if (!cached->second)
+      if (cached->second.empty())
         return true;
-      // The world box of the link's box: larger than the link when it is turned, so it picks
-      // a few Plants too many, never too few.
-      gz::math::AxisAlignedBox world = Moved(*cached->second, worldPose(_link, _ecm));
-      const gz::math::Vector3d lo = world.Min() - gz::math::Vector3d::One * this->padding;
-      const gz::math::Vector3d hi = world.Max() + gz::math::Vector3d::One * this->padding;
-      // ponytail: every Plant against every link, about 150k cheap tests per check on a
-      // 10 x 10 Field with a robot; bucket the table per Pixel if Fields or robots grow.
-      for (const auto &[id, f] : this->plants)
+      const gz::math::Pose3d pose = worldPose(_link, _ecm);
+      for (const gz::math::AxisAlignedBox &box : cached->second)
       {
-        const gz::math::Vector3d &p = f.position;
-        double r = this->foliage ? f.radius : f.crown;
-        double dx = std::max({lo.X() - p.X(), 0.0, p.X() - hi.X()});
-        double dy = std::max({lo.Y() - p.Y(), 0.0, p.Y() - hi.Y()});
-        if (p.Z() <= hi.Z() && p.Z() + f.height >= lo.Z() && dx * dx + dy * dy <= r * r)
-          hits.insert(id);
+        // The world box of the collision's box: larger than the collision when it is turned,
+        // so it picks a few Plants too many, never too few.
+        gz::math::AxisAlignedBox world = Moved(box, pose);
+        const gz::math::Vector3d lo = world.Min() - gz::math::Vector3d::One * this->padding;
+        const gz::math::Vector3d hi = world.Max() + gz::math::Vector3d::One * this->padding;
+        // ponytail: every Plant against every collision, about 150k cheap tests per check on
+        // a 10 x 10 Field with a few robot links; bucket the table per Pixel if Fields or
+        // robots grow.
+        for (const auto &[id, f] : this->plants)
+        {
+          const gz::math::Vector3d &p = f.position;
+          double r = this->foliage ? f.radius : f.crown;
+          double dx = std::max({lo.X() - p.X(), 0.0, p.X() - hi.X()});
+          double dy = std::max({lo.Y() - p.Y(), 0.0, p.Y() - hi.Y()});
+          if (p.Z() <= hi.Z() && p.Z() + f.height >= lo.Z() && dx * dx + dy * dy <= r * r)
+            hits.insert(id);
+        }
       }
       return true;
     });
@@ -599,7 +606,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: double padding = 0.05;  // meters around each link's box
   private: bool foliage = false;  // footprint radius: foliage instead of crown
   private: std::chrono::steady_clock::duration lastRegion{-kRegionPeriod};
-  private: std::unordered_map<Entity, std::optional<gz::math::AxisAlignedBox>> boxes;
+  private: std::unordered_map<Entity, std::vector<gz::math::AxisAlignedBox>> boxes;
 };
 }  // namespace pixelfield
 
