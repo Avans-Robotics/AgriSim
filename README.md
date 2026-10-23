@@ -43,7 +43,7 @@ pixelfield build /opt/pixelfield/examples/amiga_10x10.yaml -o ~/fields/amiga_10x
 ros2 launch amiga_arm_description gazebo.launch.py gz_args:="-r $HOME/fields/amiga_10x10/world.sdf"   # amiga_ros2
 ```
 
-The world is always named `pixelfield`. Its topics, the pick service and the frames are the robot interface ([spec section 14](docs/design/spec.md#14-robot-interface)). Without the systems on `GZ_SIM_SYSTEM_PLUGIN_PATH` the world still runs, but no Plant can be picked. `pixelfield pull` and `grip` (headless checks) need the gz Python bindings, which `source /opt/ros/jazzy/setup.bash` provides in a ROS image.
+Spawn the robot in the Path Gaps or the Border, not on Plants: a robot spawned onto Plants crushes them and they stay picked (the unchanged amiga_ros2 launch spawns at the Field origin, the south-west corner, and runs at about 0.003x; spawned at x 2.024, y 1.5, heading north, the Amiga drives the gaps at 1.0x, see [perf.md](docs/design/perf.md)). The world is always named `pixelfield`. Its topics, the pick service and the frames are the robot interface ([spec section 14](docs/design/spec.md#14-robot-interface)). Without the systems on `GZ_SIM_SYSTEM_PLUGIN_PATH` the world still runs, but no Plant can be picked. `pixelfield pull` and `grip` (headless checks) need the gz Python bindings, which `source /opt/ros/jazzy/setup.bash` provides in a ROS image.
 
 ## Documentation
 

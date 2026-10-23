@@ -86,6 +86,21 @@ The perf check is a scenario (ADR 0010): the test gripper grasping a mid-Pixel c
 - Physics step sweep with the overlapping layout (scenario at 1, 2, 4 ms: 0.23x, 0.42x, 0.72x; settle, squeeze, pull and grip checks at each): everything held up to 4 ms except the strongest beetroot's 45.8 N grip slipping at 4 ms; the scripted pull's stiff lift force overshoots from 4 ms, so it runs at its own 1 ms step. Weak 20 N grips on 12 sparse Plants peak within 1 to 3 N of each other at 1 and 2 ms, except one beetroot whose leaf bunch wedges (40.6 N at 1 ms, 60.1 N at 2 ms); wedging past friction happens at 1 ms too.
 - With the layout fixed, 2 ms reaches the camera ceiling, so Field worlds use 2 ms (`gazebo.PHYSICS_STEP`).
 
+### Amiga from amiga_ros2 (M5e, 2026-10-23)
+
+The M5e check: in the `amiga-ros:jazzy` image (gz-sim 8.15.0, gz-rendering 8.2.3; `/dev/dri` passed in, EGL fails on the NVIDIA node), pixelfield installed from tag `v0.5.0` as in the README, `amiga_10x10.yaml` built, amiga_ros2's `gazebo.launch.py` with `gz_args:="-s -r --headless-rendering <world.sdf>"` (server only, cameras not subscribed). The spawn pose needs a copy of the launch file with `-x 2.024 -y 1.5 -Y 1.5707963` (wheels in the first two Path Gaps, heading north); the unchanged launch spawns at the Field origin. RTF from single `/stats` readings, which stay steady here since no camera blocks the simulation; sim time kept pace with them.
+
+| Commit | Scenario | Picked Plants | RTF |
+|---|---|---|---|
+| a2c6a96 | Field without the pull-out system, unchanged launch (Amiga at the origin) | none | 1.00 |
+| a2c6a96 | Unchanged launch: the Amiga spawns at the origin, one wheel and fork on the carrots of r8c0 and r8c1 | 27 to 28, crushed, never unpicked | 0.003 |
+| a2c6a96 | Spawned in the gaps, standing 20 s, then driving north at 0.3 m/s for 10 m (twice) | 1 standing, 3 while driving, all 3 unpicked | 0.95 to 1.03 |
+| main (per-link box) | Spawned in the gaps, standing | 144 | 0.001 to 0.01 |
+| a2c6a96 | Spawned in the gaps, then moved 20 cm east by `set_pose` and back | 33, of which 28 unpicked 24 s later | about 0.2, back towards 1.0 as they unpick |
+
+- A robot must spawn in the Path Gaps or in the Border, not on Plants: a wheel spawned inside anchored roots crushes them, and bent Plants stay picked.
+- In every launch, the empty world too, the `joint_state_broadcaster` spawner timed out ("Switch controller timed out after 5 seconds") and only `lite6_traj_controller` was active; driving does not depend on it (gz DiffDrive). An amiga_ros2 matter.
+
 Rig worlds are hand-edited copies of `world.sdf` (camera models replaced by one model with both sensors). Subscribe to both `/oakd/rgb` and `/oakd/depth`.
 
 ## How to measure
