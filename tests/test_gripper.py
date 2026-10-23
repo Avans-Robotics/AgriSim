@@ -76,9 +76,13 @@ def test_a_pull_by_the_tops_detaches_within_the_pull_out_force_range(field):
     assert r["requested"] and not r["nan"]
     assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
     low, high = load_crop(REPO / "crops" / "carrot.yaml").pull_out_force
-    pulled = r["peak_wrist"] - r["weight"]  # what the soil held
-    assert low <= pulled <= high * 1.05
-    assert pulled == pytest.approx(p["pull_out_force"], rel=0.05)
+    assert low <= r["peak_force"] <= high
+    # The soil held its Pull-out Force, sampled once per step: at 2 ms a 5 cm/s pull moves the
+    # root 0.1 mm per step, 2% of the way to the peak.
+    assert r["peak_force"] == pytest.approx(p["pull_out_force"], rel=0.03)
+    # The wrist carries at least that. It can read more: a leaf bunch that wedges between the
+    # jaws, depending on their angle to the Plant, adds stick-slip peaks (ADR 0006).
+    assert r["peak_wrist"] - r["weight"] >= 0.95 * p["pull_out_force"]
 
 
 @needs_system
@@ -86,8 +90,8 @@ def test_a_weak_grip_slips(field):
     manifest = json.loads((field / "manifest.json").read_text())
     p = manifest["plants"][0]
     r = gripper.grip(field, p["id"], gripper.WEAK_GRIP)
+    # Not pulled out. A bunch that wedges can still break the soil bond on the way (ADR 0006).
     assert r["requested"] and r["detach_d"] is None
-    assert r["max_d"] < manifest["crops"]["carrot"]["pull_out_curve"]["d_peak"]  # bond holds
     assert r["slip"] > 0.05
     rows = list(csv.DictReader(r["log"].open()))
     sliding = [float(row["wrist_force"]) for row in rows
@@ -122,7 +126,8 @@ def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path, sparse_crops):
     force = 1.5 * (p["pull_out_force"] + weak["weight"]) / (2 * gripper.JAW_MU)
     r = gripper.grip(out, p["id"], force)
     assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
-    assert r["peak_wrist"] - r["weight"] == pytest.approx(p["pull_out_force"], rel=0.05)
+    assert r["peak_force"] == pytest.approx(p["pull_out_force"], rel=0.03)
+    assert r["peak_wrist"] - r["weight"] >= 0.95 * p["pull_out_force"]
 
 
 # About 3.5 s per Variant, 4 minutes for all: PIXELFIELD_SLOW=1 uv run pytest -k squeezed

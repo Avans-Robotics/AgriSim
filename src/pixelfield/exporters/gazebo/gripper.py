@@ -192,6 +192,7 @@ def grip(
         **request,
         **report,
         "peak_wrist": max((row[3] for row in attached if row[3] is not None), default=0.0),
+        "peak_force": max((row[5] for row in attached), default=0.0),  # the soil's
         "detach_d": detach[4] if detach else None,
         "max_d": max((row[4] for row in attached), default=0.0),
         "slip": rows[-1][1] - d_end if not detach else None,
