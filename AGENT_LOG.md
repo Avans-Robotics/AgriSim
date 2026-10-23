@@ -991,3 +991,19 @@ User GUI check: the jaws looked like they missed the target and lifted another c
 Branch m5d-active-region at fd5ec43 plus the uncommitted gripper change. Tests: 2 failures (weak grip bond holds; strongest beetroot within 5%), both angle-dependent wedging; squeeze 72/72; dense grip test passes.
 ### Open items
 - User decision on what the weak-grip and strong-grip tests should assert.
+
+## 2026-10-23 Session wrap-up: M5d state
+### Goal & outcome
+User checked the new gripper in the GUI: the target comes out, but the gripper and carrot shake once the carrot is fully out. Committed the gripper change with the two angle-dependent test failures noted in the message. Session wrapped up at the user's request.
+### Decisions & why
+None
+### Lessons / gotchas
+- Shaking after the carrot is out is unexplained: likely the jaw servos (velocity commands capped by the effort limit) chattering on thin capsules at the 2 ms step, or stick-slip of the held bunch; not measured.
+### State
+Branches, none pushed, none merged: m5d-capsules (50d2372, 4b241f9; green) and m5d-active-region stacked on it (latest the gripper commit). On m5d-active-region: pytest 2 known failures (weak grip bond, strongest beetroot wrist within 5%), everything else passes; slow settle 72/72 and squeeze 72/72 at 2 ms; perf scenario 0.97x (camera ceiling).
+### Open items
+- G2: what the weak and strong grip tests assert (proposal: friction-limited sliding and no detach; soil force within 1% and wrist at least 95%), and correct ADR 0006's claim that capsules removed wedging.
+- Shaking of the gripper with a pulled-out carrot.
+- The intermittent check-script crash (stderr now captured).
+- Settle at 0.85 and 1.15 at 2 ms not re-run; bent-leaf unpick tolerance untested.
+- Then M5e packaging; merge order m5d-capsules, then m5d-active-region.
