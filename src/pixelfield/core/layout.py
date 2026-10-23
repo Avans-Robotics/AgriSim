@@ -189,6 +189,10 @@ def to_manifest(layout: FieldLayout) -> dict:
             name: {
                 "library": crop.library,
                 "pull_out_curve": asdict(crop.pull_out_curve) if crop.pull_out_curve else None,
+                # radians, the direction its rows run (the Field-wide override, else the Crop's)
+                "row_direction": crop.planting.row_direction
+                if spec.row_direction is None
+                else spec.row_direction,
             }
             for name, crop in sorted(layout.crops.items())
         },

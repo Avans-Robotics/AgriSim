@@ -97,14 +97,17 @@ def test_a_weak_grip_slips(field):
 
 
 @needs_system
-def test_a_grip_in_a_full_pixel_moves_the_neighbours(dense):
-    """The Active Region picks the Plants around the jaws, so they collide instead of passing
-    through: the 10 cm wide jaws close on an in-row neighbour's leaves too and lift it."""
-    p = json.loads((dense / "manifest.json").read_text())["plants"][0]
+def test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours(dense):
+    """The Active Region picks the Plants around the jaws, so their leaves collide instead of
+    passing through. Jaws closing across the row, as wide as the target's bunch, pull the
+    target out; its neighbours are pushed but keep their soil bond."""
+    manifest = json.loads((dense / "manifest.json").read_text())
+    p = manifest["plants"][0]
     r = gripper.grip(dense, p["id"])
     neighbours = {name: d for name, d in r["plants"].items() if name != p["id"]}
-    assert r["requested"] and not r["nan"] and p["id"] in r["plants"]
-    assert neighbours and max(neighbours.values()) > 0.001
+    assert r["requested"] and not r["nan"] and neighbours
+    assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
+    assert max(neighbours.values()) < manifest["crops"]["carrot"]["pull_out_curve"]["d_peak"]
 
 
 @needs_system

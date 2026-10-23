@@ -253,7 +253,8 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
     """What the scripted pull and grip need about one root crop Plant of a built Field.
 
     Returns name, sdf_filename (plants/<plant id>.sdf, written by build), pose (x, y, z, yaw),
-    the Plant's Pull-out Force, and its root depth, mass and root hull vertices, all scaled.
+    the Plant's Pull-out Force, and its root depth, mass and root hull vertices, all scaled,
+    the direction its Crop's rows run, its Variant (library path) and scale.
     """
     world_dir = Path(world_dir)
     manifest = json.loads((world_dir / "manifest.json").read_text())
@@ -265,6 +266,9 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
         raise ValueError(f"no {sdf}: {plant_id} is not a root crop Plant, or the world was "
                          "built before pick by id, rebuild it")  # fmt: skip
     crop = manifest["crops"][p["crop"]]
+    if "row_direction" not in crop:
+        raise ValueError(f"{world_dir / 'manifest.json'} has no row direction: built before "
+                         "M5d, rebuild it")  # fmt: skip
     physics = json.loads((Path(crop["library"]) / p["variant"]).with_suffix(".physics.json")
                          .read_text())  # fmt: skip
     s = p["scale"]
@@ -278,6 +282,9 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
         "depth": physics["root_depth"] * s,
         "mass": sum(link["mass"] for link in physics["links"]) * s**3,
         "root_hull": [[c * s for c in v] for v in root["hull"]["vertices"]],
+        "row_direction": crop["row_direction"],
+        "variant": str(Path(crop["library"]) / p["variant"]),  # library path without extension
+        "scale": s,
     }
 
 

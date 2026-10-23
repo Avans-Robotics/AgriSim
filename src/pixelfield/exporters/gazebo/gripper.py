@@ -12,6 +12,7 @@ The gripper only goes into a headless copy of a world for a test; Field worlds n
 """
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -21,7 +22,12 @@ from pathlib import Path
 from pixelfield.exporters.gazebo import plant
 
 GRIP_HEIGHT = 0.03  # meters above the crown, the ADR 0006 squeeze check
-JAW_SIZE = (0.01, 0.10, 0.02)  # meters: thickness (along x), width, height
+JAW_THICKNESS = 0.01  # meters, along x, the closing direction
+JAW_HEIGHT = 0.02  # meters
+# The jaws are as wide as the gripped Plant's leaf bunch at grip height plus this, so they hold
+# all its petioles but stay clear of its in-row neighbours (carrot about 3.5 cm, beetroot about
+# 6.3 cm; 10 cm jaws closed on the neighbours' leaves instead, M5d).
+JAW_MARGIN = 0.01  # meters
 JAW_OPEN = 0.06  # meters from the centre to each open jaw face; leaf bunches reach 3.3 cm
 JAW_MASS = 0.1  # kg per jaw
 PALM_MASS = 0.3  # kg, below the wrist sensor
@@ -43,10 +49,31 @@ SQUEEZE_TIME = 1.0  # seconds the squeeze check holds the bunch
 GRIP_SCRIPT = Path(__file__).with_name("grip_check.py")
 
 
-def gripper_model(x: float, y: float, z: float, grip_force: float) -> ET.Element:
-    """Gripper with its jaw centre at (x, y, z) and open jaws."""
+def jaw_width(physics: dict, scale: float) -> float:
+    """Jaw width for one Plant: the diameter of its leaf bunch GRIP_HEIGHT above its crown
+    (twice the farthest point from the crown axis where a petiole capsule crosses that height),
+    plus JAW_MARGIN."""
+    root = next(link for link in physics["links"] if link["name"] == "root")
+    z = max(v[2] for v in root["hull"]["vertices"]) + GRIP_HEIGHT / scale  # at scale 1
+    radius = 0.0
+    for link in physics["links"]:
+        origin, angles = link["pose"][:3], link["pose"][3:]
+        for capsule in link.get("capsules", []):
+            a, b = ([o + c for o, c in zip(origin, plant._rotate(v, *angles), strict=True)]
+                    for v in (capsule["from"], capsule["to"]))  # fmt: skip
+            if a[2] != b[2] and min(a[2], b[2]) <= z <= max(a[2], b[2]):
+                t = (z - a[2]) / (b[2] - a[2])
+                radius = max(radius, math.hypot(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    return 2 * radius * scale + JAW_MARGIN
+
+
+def gripper_model(
+    x: float, y: float, z: float, grip_force: float, yaw: float = 0.0, width: float = 0.1
+) -> ET.Element:
+    """Gripper with its jaw centre at (x, y, z), open jaws `width` wide closing along its x
+    axis, turned by yaw about z."""
     model = ET.Element("model", name="gripper")
-    _text(model, "pose", plant._join((x, y, z, 0.0, 0.0, 0.0)))
+    _text(model, "pose", plant._join((x, y, z, 0.0, 0.0, yaw)))
     # The arm: a carriage on the lift. The wrist sensor sits on the fixed joint to the palm
     # (gz's ForceTorque sensor needs a parent link, so it cannot sit on the lift joint).
     for name, mass in (("carriage", CARRIAGE_MASS), ("palm", PALM_MASS)):
@@ -66,7 +93,7 @@ def gripper_model(x: float, y: float, z: float, grip_force: float) -> ET.Element
     ET.SubElement(model, "plugin", filename="gz-sim-forcetorque-system",
                   name="gz::sim::systems::ForceTorque")  # fmt: skip
 
-    thickness, width, height = JAW_SIZE
+    thickness = JAW_THICKNESS
     for side, sign in (("left", -1.0), ("right", 1.0)):
         jaw = ET.SubElement(model, "link", name=f"jaw_{side}")
         _text(
@@ -76,7 +103,7 @@ def gripper_model(x: float, y: float, z: float, grip_force: float) -> ET.Element
         for tag in ("collision", "visual"):
             element = ET.SubElement(jaw, tag, name=tag)
             box = ET.SubElement(ET.SubElement(element, "geometry"), "box")
-            _text(box, "size", plant._join(JAW_SIZE))
+            _text(box, "size", plant._join((thickness, width, JAW_HEIGHT)))
         friction = ET.SubElement(ET.SubElement(jaw.find("collision"), "surface"), "friction")
         ode = ET.SubElement(friction, "ode")
         _text(ode, "mu", plant._num(JAW_MU))
@@ -88,7 +115,12 @@ def gripper_model(x: float, y: float, z: float, grip_force: float) -> ET.Element
 
 
 def grip_world(
-    world_sdf: Path, grip: tuple[float, float, float], grip_force: float, realtime: bool = False
+    world_sdf: Path,
+    grip: tuple[float, float, float],
+    grip_force: float,
+    realtime: bool = False,
+    yaw: float = 0.0,
+    width: float = 0.1,
 ) -> Path:
     """Headless copy of a world with the gripper, next to it so mesh URIs still resolve.
 
@@ -100,7 +132,7 @@ def grip_world(
     if not realtime:
         text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", text)
     text = re.sub(r'<plugin filename="gz-sim-sensors-system".*?</plugin>', "", text, flags=re.S)
-    model = ET.tostring(gripper_model(*grip, grip_force), encoding="unicode")
+    model = ET.tostring(gripper_model(*grip, grip_force, yaw, width), encoding="unicode")
     path = world_sdf.with_name(".grip_fast.sdf")
     path.write_text(text.replace("</world>", model + "</world>", 1))
     return path
@@ -118,8 +150,9 @@ def grip(
     `gz sim -g` GUI attached when `gui` (it waits GUI_WAIT for the GUI, keeps the world running
     GUI_LINGER after the pull, then closes the GUI).
 
-    Picks the Plant, closes the jaws GRIP_HEIGHT above its crown with `grip_force` per jaw and
-    lifts the gripper by `lift` meters (default PULL_AFTER past the root depth) at `speed`.
+    Picks the Plant, closes the jaws GRIP_HEIGHT above its crown, across its rows, with
+    `grip_force` per jaw and lifts the gripper by `lift` meters (default PULL_AFTER past the
+    root depth) at `speed`.
     Writes picks/<plant id>/grip.csv (time, gripper lift, gap between the jaws, wrist force,
     then d, force, attached from the system's state topic). The report adds the pick request, the
     peak wrist force while attached, d at detach (None if it never detached), the largest d,
@@ -133,7 +166,13 @@ def grip(
             raise ValueError(f"the {name} must be above 0")
     x, y, z, _ = request["pose"]
     crown = max(v[2] for v in request["root_hull"])
-    world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force, gui)
+    # The jaws close across the rows, as a picker reaching between two rows would: along the
+    # row they would sweep through the in-row neighbours' leaves first.
+    yaw = request["row_direction"] + math.pi / 2
+    physics = json.loads(Path(request["variant"]).with_suffix(".physics.json").read_text())
+    width = jaw_width(physics, request["scale"])
+    world = grip_world(world_dir / "world.sdf", (x, y, z + crown + GRIP_HEIGHT), grip_force, gui,
+                       yaw, width)  # fmt: skip
     config = {"plant": plant_id, "request": request, "speed": speed, "lift": lift}
     if gui:
         # The world runs during the wait: a GUI gets the scene only from a running server.
@@ -177,8 +216,9 @@ def squeeze(
     physics = json.loads(variant.with_suffix(".physics.json").read_text())
     root = next(link for link in physics["links"] if link["name"] == "root")
     crown = max(v[2] for v in root["hull"]["vertices"]) * scale
+    width = jaw_width(physics, scale)
     world = plant.settle_world(variant, out_dir, scale)
-    fast = grip_world(world, (0.0, 0.0, crown + GRIP_HEIGHT), grip_force)
+    fast = grip_world(world, (0.0, 0.0, crown + GRIP_HEIGHT), grip_force, width=width)
     report = _run(fast, {"plant": "plant", "request": None, "speed": 0.0, "lift": 0.0,
                          "hold": SQUEEZE_TIME})  # fmt: skip
     gap = report["rows"][-1][2]
@@ -193,7 +233,7 @@ def squeeze(
             continue
         t = (z - az) / (bz - az)
         px, py = ax + t * (bx - ax), ay + t * (by - ay)
-        if not (abs(px) <= gap / 2 + 0.001 and abs(py) <= JAW_SIZE[1] / 2):
+        if not (abs(px) <= gap / 2 + 0.001 and abs(py) <= width / 2):
             escaped.append(leaf)
     return {"gap": gap, "leaves": len(leaves), "escaped": escaped, "nan": report["nan"],
             "held": not report["nan"] and not escaped and gap > 0.0}  # fmt: skip

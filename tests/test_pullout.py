@@ -39,6 +39,7 @@ def test_manifest_has_the_pull_out_curve(field):
     assert manifest["crops"]["carrot"] == {
         "library": "assets/library/carrot",
         "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0},
+        "row_direction": 0.0,
     }
     assert load_crop(REPO / "crops" / "lettuce.yaml").pull_out_curve is None  # cut, not pulled
 
