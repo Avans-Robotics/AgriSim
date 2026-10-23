@@ -28,8 +28,7 @@ PALM_MASS = 0.3  # kg, below the wrist sensor
 CARRIAGE_MASS = 0.5  # kg, above it
 JAW_MU = 1.0  # friction of the jaw pads on petioles, guess
 # N per jaw: friction holds 2 * JAW_MU * 20 = 40 N, above any carrot (26 N), below the about
-# 43 N that damages a carrot. The convex hulls of curved petioles widen in places and the hulls
-# step at the link joints, so jaws sliding up the bunch can wedge and hold more than friction.
+# 43 N that damages a carrot.
 GRIP_FORCE = 20.0
 WEAK_GRIP = 5.0  # N per jaw: friction holds about 10 N, below the weakest carrot (15 N)
 CLOSE_SPEED = 0.05  # meters per second per jaw

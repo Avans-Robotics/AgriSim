@@ -63,8 +63,7 @@ def test_a_pull_by_the_tops_detaches_within_the_pull_out_force_range(field):
 def test_a_weak_grip_slips(field):
     manifest = json.loads((field / "manifest.json").read_text())
     p = manifest["plants"][0]
-    # A short lift: further up, the jaws catch on the step between petiole link hulls.
-    r = gripper.grip(field, p["id"], gripper.WEAK_GRIP, lift=0.06)
+    r = gripper.grip(field, p["id"], gripper.WEAK_GRIP)
     assert r["requested"] and r["detach_d"] is None
     assert r["max_d"] < manifest["crops"]["carrot"]["pull_out_curve"]["d_peak"]  # bond holds
     assert r["slip"] > 0.05
@@ -83,8 +82,7 @@ def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path):
     plants = json.loads((out / "manifest.json").read_text())["plants"]
     p = max((p for p in plants if p["crop"] == "beetroot"), key=lambda p: p["pull_out_force"])
     weak = gripper.grip(out, p["id"])
-    # The default grip does not get it out. Friction alone holds 40 N, but the jaws wedge on the
-    # petiole hulls and break the soil bond anyway; the root then slips out of the grip.
+    # The default grip does not get it out: friction holds 40 N; the root slips out of the grip.
     assert weak["requested"] and weak["detach_d"] is None and weak["slip"] > 0.02
     # A grip whose friction holds the Pull-out Force plus the weight, with a 1.5x margin.
     force = 1.5 * (p["pull_out_force"] + weak["weight"]) / (2 * gripper.JAW_MU)

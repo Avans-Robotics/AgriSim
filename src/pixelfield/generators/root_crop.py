@@ -117,6 +117,7 @@ BLADE_STATIONS = 10  # cross-sections along a simple leaf blade, three times tha
 BLADE_COLUMNS = 3  # points per side across the blade, plus the midrib
 MAX_TRIANGLES = 8000
 PETIOLE_LINKS = 3  # rigid links per petiole in the articulated export (ADR 0006)
+CAPSULES_PER_LINK = 2  # collision capsules along each petiole link, following its bend
 assert PETIOLE_SEGMENTS % PETIOLE_LINKS == 0  # each link takes whole tube segments
 HULL_SECTIONS = 8  # facets around the root's collision hull
 MASS_SAMPLES = 8  # point masses along each petiole link
@@ -244,8 +245,11 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
     The model is plain JSON at scale 1, z up, in the Variant frame (origin on the soil
     surface at the root axis). Links: a rigid root plus PETIOLE_LINKS links per leaf, each
     with a pose [x, y, z, roll, pitch, yaw] (SDF convention), mass, center of mass and
-    inertia about it in the link frame, and a convex collision hull in the link frame.
-    A petiole link's frame sits at its start: x along the petiole, y sideways, z up.
+    inertia about it in the link frame, and a collision shape in the link frame: the root a
+    convex hull (vertices and faces), a petiole link CAPSULES_PER_LINK capsules (the centres
+    of their end caps, from and to, and their radius) along chords of its stretch of petiole,
+    each as thick as the petiole where it starts. A petiole link's frame sits at its start: x
+    along the petiole, y sideways, z up.
     Joints are universal, at the child link's frame, bending about its y and z axes, with
     stiffness k = E I / l per axis, damping from a damping ratio and a spring reference that
     holds the generated shape against gravity (the generated shape is the shape under load).
@@ -258,7 +262,8 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
     density = const["root_density"]
     hull = _revolve(*root.metadata["revolve"], sections=HULL_SECTIONS).convex_hull
     samples = [(root.center_mass, root.volume * density, root.moment_inertia * density)]
-    links = [_link("root", np.eye(4), samples, hull)]
+    links = [_link("root", np.eye(4), samples, {"hull": {"vertices": hull.vertices,
+                                                          "faces": hull.faces}})]  # fmt: skip
     visuals = {"root": (root, uv(0, root.vertices))}  # the root frame is the Variant frame
     joints = []
     sides = crop["petiole_sides"]
@@ -285,13 +290,18 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
                 samples += [(c, m, np.zeros((3, 3))) for c, m in zip(centers, masses, strict=True)]
                 parts.append((blade, 2))
             name = f"leaf{k:02d}_link{i}"
-            hull = trimesh.convex.convex_hull(_to_frame(tube.vertices[ring], frame))
-            link = _link(name, frame, samples, hull)
+            # Capsules along chords of the petiole: mesh hulls of curved segments made contact
+            # between neighbouring Plants slow and violent (M5d spike), and wedged in a gripper.
+            ts = np.linspace(t0, t1, CAPSULES_PER_LINK + 1)
+            ends = _to_frame(np.array([_bezier(curve, t)[0] for t in ts]), frame)
+            capsules = [{"from": a, "to": b, "radius": r0 + t * (r1 - r0)}  # the thick end
+                        for a, b, t in zip(ends[:-1], ends[1:], ts[:-1], strict=True)]  # fmt: skip
+            link = _link(name, frame, samples, {"capsules": capsules})
+            r = r0 + t0 * (r1 - r0)
             links.append(link)
             visual = trimesh.util.concatenate([m for m, _ in parts])
             visual.vertices = _to_frame(visual.vertices, frame)
             visuals[name] = (visual, np.vstack([uv(c, m.vertices) for m, c in parts]))
-            r = r0 + t0 * (r1 - r0)
             stiffness = const["petiole_modulus"] * math.pi * (2 * r) ** 4 / 64 / length
             chain.append((link, samples, frame, stiffness))
         for i, (link, _, frame, stiffness) in enumerate(chain):
@@ -311,7 +321,7 @@ def articulated(rng: random.Random, meshes: dict, sizes: dict, crop: dict) -> tu
                            "stiffness": [stiffness, stiffness], "damping": damping,
                            "spring_reference": reference})  # fmt: skip
     model = {
-        "format_version": 1,
+        "format_version": 2,  # 2: petiole links collide as capsules, not hulls
         "root_length": sizes["root"]["length"],  # crown top to tip
         "root_depth": sizes["root"]["length"] - sizes["root"]["top"],  # below the soil
         "links": links,
@@ -354,8 +364,8 @@ def _inertia(samples, origin: np.ndarray) -> np.ndarray:
     return total
 
 
-def _link(name: str, frame: np.ndarray, samples, hull: trimesh.Trimesh) -> dict:
-    """One link of the articulated model from its samples; the hull is in the link frame."""
+def _link(name: str, frame: np.ndarray, samples, collision: dict) -> dict:
+    """One link of the articulated model from its samples; the collision is in the link frame."""
     mass = sum(m for _, m, _ in samples)
     com = sum(m * np.asarray(p) for p, m, _ in samples) / mass
     rotation = frame[:3, :3]
@@ -375,7 +385,7 @@ def _link(name: str, frame: np.ndarray, samples, hull: trimesh.Trimesh) -> dict:
             "ixz": i[0, 2],
             "iyz": i[1, 2],
         },  # fmt: skip
-        "hull": {"vertices": hull.vertices, "faces": hull.faces},
+        **collision,
     }
 
 

@@ -62,7 +62,7 @@ def test_build_writes_the_sdf_of_every_root_crop_plant(field):
         assert float(element.get("depth")) == pytest.approx(request["depth"])
         root = model.find("link[@name='root']")
         assert root.findtext("collision/surface/contact/collide_bitmask") == str(plant.ROOT_BITMASK)
-        # Hulls and the articulated glb are shared per Variant, scaled by the model.
+        # The root hull and the articulated glb are shared per Variant, scaled by the model.
         uri = root.findtext("collision/geometry/mesh/uri")
         assert uri == f"meshes/{p['variant']}/root.obj" and (field / "plants" / uri).is_file()
         assert root.findtext("collision/geometry/mesh/scale") == " ".join([repr(p["scale"])] * 3)
@@ -78,17 +78,21 @@ def test_plant_table_has_position_and_footprint(field):
     assert [row["id"] for row in rows] == [p["id"] for p in plants]
     for p, row in zip(plants, rows, strict=True):
         assert [float(row[k]) for k in "xyz"] == [p["pose"][k] for k in "xyz"]
-        # Independent footprint: every hull vertex in the model frame through trimesh's Euler
-        # angles (static x, y, z: SDF's roll, pitch, yaw).
+        # Independent footprint: every root hull vertex and capsule cap centre (plus the
+        # capsule radius) in the model frame through trimesh's Euler angles (static x, y, z:
+        # SDF's roll, pitch, yaw).
         physics = json.loads((REPO / "assets" / "library" / "carrot" / p["variant"])
                              .with_suffix(".physics.json").read_text())  # fmt: skip
-        points = []
+        points = []  # (x, y, z, how far the collision reaches past the point)
         for link in physics["links"]:
             matrix = trimesh.transformations.euler_matrix(*link["pose"][3:], "sxyz")
             matrix[:3, 3] = link["pose"][:3]
-            points += trimesh.transform_points(link["hull"]["vertices"], matrix).tolist()
-        radius = max((x * x + y * y) ** 0.5 for x, y, _ in points) * p["scale"]
-        height = max(z for _, _, z in points) * p["scale"]
+            shapes = [(link["hull"]["vertices"], 0)] if "hull" in link else []
+            shapes += [([c["from"], c["to"]], c["radius"]) for c in link.get("capsules", [])]
+            for local, r in shapes:
+                points += [(*v, r) for v in trimesh.transform_points(local, matrix).tolist()]
+        radius = max((x * x + y * y) ** 0.5 + r for x, y, _, r in points) * p["scale"]
+        height = max(z + r for _, _, z, r in points) * p["scale"]
         assert float(row["radius"]) == pytest.approx(radius, rel=1e-9)
         assert float(row["height"]) == pytest.approx(height, rel=1e-9)
         assert 0.05 < radius < 0.3 and 0.1 < height < 0.5  # a carrot's foliage

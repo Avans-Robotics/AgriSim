@@ -814,3 +814,36 @@ Branch m5c-pick-by-id from main, commit 87376e9, not pushed. Validated: pytest 9
 - `plants/` is 142 MB for 10 x 10, 1.4x the ADR 0010 estimate; the ADR's ceiling (one scale-1 SDF per Variant) applies if Fields grow.
 - `pull` and `grip` still need the repo root as cwd (library paths in the Manifest): m5e.
 - If one step crosses both d_peak and the root depth, only `detached` is sent (not seen even at 50 m/s).
+
+## 2026-10-22 M5d spike: full carrot Pixel picked at once fails
+### Goal & outcome
+Spike of ADR 0010 before building the Active Region: pick every Plant of `carrot_pixel` (32) by id in a headless, unthrottled world without Sensors, and measure leaf drift, NaN and physics-only RTF. FAILED: the full Pixel with contact runs below 0.02x with the mesh hulls (10 s of sim time did not finish in 10 min), and the leaves of neighbours picked together are shoved apart violently. Stopped before building the region, as agreed. Physics only, 1 ms step (the Field world has no `<physics>` element, so dartsim defaults), throttle removed:
+
+| Plants | Petiole collision | RTF | Leaf tip drift |
+|---|---|---|---|
+| 1 | mesh hulls (as built) | at least 1.0 | 0.1 mm |
+| 4 | mesh hulls, FCL (default) | 0.17 | 34 mm in 0.5 s, up to 83 mm/s |
+| 4 | mesh hulls, bullet detector | 0.20 | 0.9 mm in 0.5 s |
+| 4 | capsules fitted to the hulls | 1.48 | 1.1 mm in 0.5 s |
+| 4 | hulls, no Plant-Plant contact (bitmask 0) | 1.8 | 0.07 mm |
+| 32 | capsules | 0.036 (PGS solver: 0.035) | max 10 mm, median 1 mm over 3 s, slowing |
+| 32 | hulls, no Plant-Plant contact | 0.13 to 0.15 | none |
+| 32 | no petiole collisions | 0.19 | none |
+| 32 | no petiole collisions, all joints fixed | 0.34 | none |
+
+### Decisions & why
+- Spike verdict FAIL, region not built: ADR 0010's per-Pixel fallback (no contact inside a Pixel) is the "no Plant-Plant contact" row, 0.15x for one full Pixel before cameras, so it fails the 0.5x-with-30 budget too.
+- User delegated the M5d choices (box from `Link::ComputeAxisAlignedBox` cached per link, brute force over the table, `<padding>` in the plugin element, inline SDF parse, grip tests run with the region, probe-box tests, slot runs without new code); they wait for the direction after the spike.
+### Lessons / gotchas
+- ADR 0010's "DART corrects penetration with a capped velocity of about 1 mm/s" is wrong for mesh hulls under FCL: interpenetrating hulls are pushed out at up to 8 cm/s. Bullet or capsules separate them at about 1 to 4 mm/s.
+- Contact between mesh hulls is the dominant cost (4 Plants: 0.17x vs 1.8x without contact). Capsules remove most of it at 4 Plants, but 32 overlapping Plants form one contact island and run at 0.036x.
+- A Picked Plant costs about 0.15 ms per step without any contact; about half remains with every joint fixed, so per-link bookkeeping (gz-sim or DART bodies) matters as much as articulation.
+- `<dart><collision_detector>dart</collision_detector>` does not support mesh shapes; `ode` gave the same numbers as the default.
+- Field worlds have no `<physics>` element, so the `real_time_factor` regex in `pull_check.py` and `grip_world` replaces nothing: scripted pulls and grips run throttled at 1.0x.
+- `pkill -f <pattern>` typed into a shell kills that shell too, since its command line has the pattern; kill by pid. Profiling with gdb or perf is blocked here (ptrace refused, perf_event_paranoid 4).
+- Spike script (scratchpad, not committed): TestFixture, pick by id through the service, link positions every 10 ms; capsule copies fitted by PCA (axis = longest extent, radius = median distance from it).
+### State
+Branch m5d-active-region from main (8ce2350), no code changes. Spike numbers measured and observed; the capsule rows use rough fitted capsules, not a generator change.
+### Open items
+- Direction after the failed spike (user decision): capsule petioles, fewer links per Picked Plant, a smaller trigger footprint, unpick, or a revised budget.
+- `real_time_factor` regex no-op in the pull and grip worlds (harmless, they only need correctness, but they run slower than they could).
