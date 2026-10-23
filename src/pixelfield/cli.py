@@ -65,6 +65,9 @@ def main(argv: list[str] | None = None) -> None:
     pull.add_argument("--release", type=float,
                       help="let go at this lift, m (default: past the root depth)")  # fmt: skip
     args = parser.parse_args(argv)
+    if not (ROOT / "assets").is_dir():
+        parser.exit(1, f"error: no Asset Library in {ROOT}: install pixelfield editable from its "
+                       "clone (pip install -e)\n")  # fmt: skip
     if args.command in ("pick", "pull"):
         _pick(parser, args)
         return
@@ -89,6 +92,11 @@ def main(argv: list[str] | None = None) -> None:
         spec = load_field_spec(args.spec)
         names = {name for row in spec.grid for name in row if name}
         crops = {name: load_crop(args.crops / f"{name}.yaml") for name in names}
+        for crop in crops.values():
+            if not (ROOT / crop.library).is_dir():
+                raise ValueError(f"{crop.name}: no Asset Library folder {ROOT / crop.library} "
+                                 "(a relative library path is relative to the pixelfield "
+                                 "checkout)")  # fmt: skip
     except (OSError, ValueError, KeyError, TypeError) as e:
         parser.exit(1, f"error: {e}\n")
 

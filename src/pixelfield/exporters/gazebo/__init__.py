@@ -54,7 +54,7 @@ PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
 # A picked root starts below the soil plane, so it must not collide with the soil: the soil
 # keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
 SOIL_BITMASK = 0x1
-# Active Region (ADR 0010): meters added around every robot link's box, and the footprint
+# Active Region (ADR 0010): meters added around every robot collision's box, and the footprint
 # radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
 # Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks
 # and the grip run at it (the scripted pull at its own plant.PULL_STEP). 2 ms runs the 10 x 10

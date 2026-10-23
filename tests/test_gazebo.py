@@ -161,6 +161,24 @@ def test_build_and_pick_info_work_from_any_working_directory(tmp_path, monkeypat
     assert Path(info["variant"]).with_suffix(".physics.json").is_file()
 
 
+def test_build_refuses_a_missing_library_and_a_checkout_without_assets(
+    tmp_path, monkeypatch, capsys
+):
+    crops = tmp_path / "crops"
+    crops.mkdir()
+    shutil.copy(REPO / "crops" / "carrot.yaml", crops)
+    lettuce = (REPO / "crops" / "lettuce.yaml").read_text()
+    (crops / "lettuce.yaml").write_text(lettuce.replace("assets/library/lettuce", "mylib/lettuce"))
+    args = ["build", str(REPO / "examples" / "mixed.yaml"), "-o", str(tmp_path / "out")]
+    with pytest.raises(SystemExit):
+        main([*args, "--crops", str(crops)])
+    assert "no Asset Library folder" in capsys.readouterr().err
+    monkeypatch.setattr("pixelfield.cli.ROOT", tmp_path)  # as a non-editable install sees it
+    with pytest.raises(SystemExit):
+        main(args)
+    assert "install pixelfield editable" in capsys.readouterr().err
+
+
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
 def test_world_passes_gz_sdf_check(mixed):
     world_sdf, _ = mixed

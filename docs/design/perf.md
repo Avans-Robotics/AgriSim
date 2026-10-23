@@ -95,7 +95,7 @@ The M5e check: in the `amiga-ros:jazzy` image (gz-sim 8.15.0, gz-rendering 8.2.3
 | a2c6a96 | Field without the pull-out system, unchanged launch (Amiga at the origin) | none | 1.00 |
 | a2c6a96 | Unchanged launch: the Amiga spawns at the origin, one wheel and fork on the carrots of r8c0 and r8c1 | 27 to 28, crushed, never unpicked | 0.003 |
 | a2c6a96 | Spawned in the gaps, standing 20 s, then driving north at 0.3 m/s for 10 m (twice) | 1 standing, 3 while driving, all 3 unpicked | 0.95 to 1.03 |
-| main (per-link box) | Spawned in the gaps, standing | 144 | 0.001 to 0.01 |
+| 6616cd5 (per-link box) | Spawned in the gaps, standing | 144 | 0.001 to 0.01 |
 | a2c6a96 | Spawned in the gaps, then moved 20 cm east by `set_pose` and back | 33, of which 28 unpicked 24 s later | about 0.2, back towards 1.0 as they unpick |
 
 - A robot must spawn in the Path Gaps or in the Border, not on Plants: a wheel spawned inside anchored roots crushes them, and bent Plants stay picked.

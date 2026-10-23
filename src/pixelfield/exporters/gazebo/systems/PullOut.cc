@@ -295,8 +295,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   }
 
   /// One Active Region check: picks every Plant whose footprint meets a box of a non-Field
-  /// link's collision,
-  /// and starts to unpick Picked Plants that are at rest and met by none.
+  /// link's collision, and starts to unpick Picked Plants that are at rest and met by none.
   private: void Region(EntityComponentManager &_ecm, std::chrono::steady_clock::duration _now)
   {
     std::set<std::string> hits;  // met by a box, picked or not
@@ -603,7 +602,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: std::map<std::string, Pick> picks;
   private: std::set<std::string> picked;
   private: std::vector<std::shared_ptr<sdf::Root>> roots;
-  private: double padding = 0.05;  // meters around each link's box
+  private: double padding = 0.05;  // meters around each collision's box
   private: bool foliage = false;  // footprint radius: foliage instead of crown
   private: std::chrono::steady_clock::duration lastRegion{-kRegionPeriod};
   private: std::unordered_map<Entity, std::vector<gz::math::AxisAlignedBox>> boxes;
