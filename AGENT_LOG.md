@@ -1022,3 +1022,26 @@ m5d-capsules (50d2372, 4b241f9) and m5d-active-region stacked on it (latest a61d
 - User: GUI check that the shaking is gone (`uv run pixelfield grip out/carrot_pixel r0c0-015 --gui`).
 - The intermittent check-script crash (stderr now captured); the 1 cm bent-leaf unpick tolerance has no automated test.
 - Merge m5d-capsules, then m5d-active-region; then M5e packaging.
+
+## 2026-10-23 M5e packaging and the Amiga in the Field
+### Goal & outcome
+User asked how far amiga_ros2 is from driving the Amiga in a Field, then said to finish M5e. Done: library paths independent of the cwd, install instructions for robot repositories (README, CLAUDE.md, spec 14), version 0.5.0 and a local tag `v0.5.0`, plus an Active Region fix found while answering. Container check in `amiga-ros:jazzy` with amiga_ros2 unchanged: clone of the tag, `pip3 install --break-system-packages -e`, systems built against the vendored gz-sim 8.15.0, Field built from another folder, launch: the Amiga stands in the Field with the pull-out system loaded. With the spawn pose in the gaps (temp copy of the launch, `-x 2.024 -y 1.5 -Y 1.5707963`) it stands and drives 10 m north at 1.0x, 3 edge Plants picked and all unpicked (perf.md, M5e section).
+### Decisions & why
+- Active Region tests one box per collision, not one per link (ADR 0010 amended): the Amiga's base_link holds the low wheel forks and the high cross tubes, so its single box picked 144 carrots under the chassis at about 0.01x. Found by reading the URDF before any run.
+- Relative library paths resolve against `pixelfield.ROOT` (the checkout), the Manifest keeps `assets/library/<crop>`: same Manifest on every machine, no format change. Needs an editable install from the clone, which ADR 0009 already prescribes; `build` refuses a non-editable install and a missing library folder loudly.
+- `SYSTEM_PYTHON` stays `/usr/bin/python3`: in a ROS image `source /opt/ros/jazzy/setup.bash` puts the vendored gz bindings (gz.sim8, gz.msgs10) on PYTHONPATH.
+- Tag kept local and moved with each commit: it must point at main after the merge, so the user tags the merge commit (or pushes this one).
+### Lessons / gotchas
+- `timeout` around `docker exec` kills only the client; processes inside the container keep running. Leftover servers in the same ROS domain (two controller managers) made later runs look hung. Clean container: no hang. Kill inside the container (a script file, so `pkill -f` does not match its own `bash -c`).
+- A stale .pyc after `git stash pop`: same mtime second and same byte size as the old source, so Python kept the old bytecode. Clear `__pycache__` after stash games.
+- The unchanged amiga_ros2 launch spawns at the Field origin, one wheel and fork on the carrots of r8c0/r8c1: 27 crushed Picked Plants that never unpick, 0.003x. A robot must spawn in the gaps or the Border (README, spec 14).
+- `amiga-ros:jazzy` has no pip and gz-rendering 8.2.3 (below the 8.3.0 floor; matters once it has a camera). EGL fails on the NVIDIA node with `/dev/dri`; headless sensors still ran.
+- In every launch, the empty world too, the `joint_state_broadcaster` spawner times out; only `lite6_traj_controller` activates. amiga_ros2 issue, driving is unaffected (gz DiffDrive).
+### State
+Branch m5e-packaging from main, commits a2c6a96, 95c50b3, 35f9e36, 9af4e39, local tag v0.5.0 on 9af4e39, not pushed. Validated: pytest 103 passed, 144 skipped (slow); ruff; region test fails against main's per-link system and passes now; cwd test fails without the path change; build, pull and grip from a scratch folder; container check and drive runs (on 95c50b3 code, later commits are docs, comments and the CLI refusals, tested on the host); validator agent (mesh, visual-only, nested and empty links; unpick with two-collision links; Manifest without machine paths).
+### Open items
+- User: push the branch, PR, merge, then tag `v0.5.0` on the merge commit and push the tag (the README clone command needs it on GitHub).
+- amiga_ros2 (their repo): spawn pose launch args (x, y, yaw), the joint_state_broadcaster timeout, gz-rendering 8.3.0 in the image, the pick service and pull_out bridges for harvesting.
+- `test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours` failed once in 4 full-suite runs, passed in 4 isolated runs; no traceback kept. Probably the M5d intermittent check-script failure.
+- Camera `<save>` paths in world.sdf (`renders/top`) are relative to the server's cwd: under `ros2 launch` any camera subscriber writes PNGs into the launch folder (the untracked `renders/` in the repo root). Pre-existing.
+- The 1 cm bent-leaf unpick tolerance still has no automated test.
