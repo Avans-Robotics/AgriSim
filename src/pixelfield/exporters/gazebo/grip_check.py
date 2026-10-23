@@ -34,6 +34,7 @@ from gz.sim8 import Joint, Link, Model, TestFixture, World, world_entity
 from gz.transport13 import Node
 
 JAWS = ("jaw_left_joint", "jaw_right_joint")
+JAW_LINK = 200.0  # 1/s: a jaw 0.25 mm ahead of the other backs off at the closing speed
 TARE = 0.05  # seconds from which the wrist force is averaged until the jaws start closing
 
 world_sdf, config = sys.argv[1], json.loads(sys.argv[2])
@@ -80,8 +81,13 @@ def pre_update(info, ecm):
         for joint in joints.values():
             joint.enable_position_check(ecm, True)
     t = info.iterations * STEP
-    for name in JAWS:
-        joints[name].set_velocity(ecm, [config["close_speed"] if t >= config["settle"] else 0.0])
+    # The jaws act as if linked, like a parallel gripper's rack and pinion: a jaw ahead of the
+    # other is slowed or backed off. Two force-capped servos alone push equally on a held bunch
+    # and leave the pair free to slide along the closing axis, which shook a pulled-out Plant.
+    left, right = ((joints[name].position(ecm) or [0.0])[0] for name in JAWS)
+    close = config["close_speed"] if t >= config["settle"] else 0.0
+    for name, ahead in zip(JAWS, (left - right, right - left), strict=True):
+        joints[name].set_velocity(ecm, [close - JAW_LINK * ahead])
     position = (joints["lift"].position(ecm) or [0.0])[0]
     lift = 0.0
     if config["lift"] and t >= start_lift and position < config["lift"]:
