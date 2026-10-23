@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import math
 import re
@@ -69,6 +70,27 @@ def test_missing_rate_is_roughly_respected(tmp_path):
     expected = 100 * len(planting_positions(CARROT.planting, 0.5, 0.0))
     missing = 1 - len(layout.plants) / expected
     assert abs(missing - CARROT.planting.missing_rate) < 0.02
+
+
+def test_roots_never_overlap(tmp_path):
+    """Carrot crowns (up to 2.3 cm radius) at 4 cm spacing with 1 cm jitter overlap often;
+    the layout redraws the jitter or leaves the Plant out. Touching is allowed."""
+    sizes = json.loads((REPO / CARROT.library / "variants.json").read_text())
+    plants = layout_of(tmp_path, "  C C C\n  C C C\n  C C C\n").plants
+    for i, a in enumerate(plants):
+        ra = sizes[a.variant]["root"]["radius"] * a.scale
+        for b in plants[i + 1 :]:
+            rb = sizes[b.variant]["root"]["radius"] * b.scale
+            assert math.dist((a.x, a.y), (b.x, b.y)) >= ra + rb - 1e-12, (a.id, b.id)
+    assert len(plants) > 0.85 * 9 * 33  # few left out beyond the missing rate (0.08)
+
+
+def test_a_root_crop_without_root_sizes_is_refused(tmp_path):
+    path = tmp_path / "spec.yaml"
+    path.write_text("seed: 42\nlegend:\n  C: carrot\ngrid: |\n  C\n")
+    crop = dataclasses.replace(CARROT, library=str(tmp_path / "no_library"))
+    with pytest.raises(ValueError, match="root size"):
+        build_layout(load_field_spec(path), {"carrot": crop})
 
 
 def test_editing_one_pixel_keeps_the_others(tmp_path):

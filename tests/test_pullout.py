@@ -39,6 +39,7 @@ def test_manifest_has_the_pull_out_curve(field):
     assert manifest["crops"]["carrot"] == {
         "library": "assets/library/carrot",
         "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0},
+        "row_direction": 0.0,
     }
     assert load_crop(REPO / "crops" / "lettuce.yaml").pull_out_curve is None  # cut, not pulled
 
@@ -96,6 +97,10 @@ def test_plant_table_has_position_and_footprint(field):
         assert float(row["radius"]) == pytest.approx(radius, rel=1e-9)
         assert float(row["height"]) == pytest.approx(height, rel=1e-9)
         assert 0.05 < radius < 0.3 and 0.1 < height < 0.5  # a carrot's foliage
+        root = next(link for link in physics["links"] if link["name"] == "root")
+        crown = max((x * x + y * y) ** 0.5 for x, y, _ in root["hull"]["vertices"]) * p["scale"]
+        assert float(row["crown"]) == pytest.approx(crown, rel=1e-9)
+        assert 0.005 < crown < 0.05  # a carrot's shoulder
 
 
 def test_lettuce_gets_no_plant_sdf(tmp_path):
@@ -199,7 +204,7 @@ def test_pull_out_damping_adds_c_times_v(tmp_path):
         d = float(row["d"])
         broken = broken or d >= c["d_peak"]
         # The system reads d and v at the start of a step; dartsim moves d by v times the step.
-        v = (d - float(previous["d"])) / plant.STEP
+        v = (d - float(previous["d"])) / plant.PULL_STEP
         law = curve(p["pull_out_force"], c["d_peak"], c["residual_fraction"], r["depth"], d,
                     broken)  # fmt: skip
         assert float(row["force"]) - law == pytest.approx(damping * v, abs=0.01)

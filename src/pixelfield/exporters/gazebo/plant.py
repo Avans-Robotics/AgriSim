@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pixelfield.exporters import gazebo
 
-STEP = 0.001  # seconds per physics step (ADR 0006 stability check)
+STEP = gazebo.PHYSICS_STEP  # seconds per physics step
 SETTLE_TIME = 5.0  # seconds of sim time per settle check
 SETTLE_AFTER = 2.0  # seconds after which every link must be slower than SETTLE_SPEED
 SETTLE_SPEED = 0.001  # meters per second
@@ -28,6 +28,9 @@ SETTLE_SPEED = 0.001  # meters per second
 SYSTEM_PYTHON = "/usr/bin/python3"
 SETTLE_SCRIPT = Path(__file__).with_name("settle_check.py")
 PULL_SCRIPT = Path(__file__).with_name("pull_check.py")
+# The scripted pull checks the force law, not the robot: it runs at this step whatever the
+# world's, since its stiff lift force overshoots a light root at larger steps (M5d sweep).
+PULL_STEP = 0.001  # seconds
 PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pull speed
 PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
 DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
@@ -147,14 +150,24 @@ def settle(world_sdf: Path, seconds: float = SETTLE_TIME, after: float = SETTLE_
     SETTLE_SPEED from `after` seconds on.
     """
     steps = round(seconds / STEP)
-    result = subprocess.run(
+    result = run_check(
         [SYSTEM_PYTHON, str(SETTLE_SCRIPT), Path(world_sdf).name, "plant", str(steps),
          str(round(after / STEP))],
-        cwd=Path(world_sdf).resolve().parent, capture_output=True, text=True, check=True,
+        cwd=Path(world_sdf).resolve().parent,
     )  # fmt: skip
     report = json.loads(result.stdout.strip().splitlines()[-1])
     report["settled"] = not report["nan"] and report["max_speed_after"] < SETTLE_SPEED
     return report
+
+
+def run_check(args: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run a headless check script; if it fails, raise with the end of its stderr (a crash
+    in gz-sim or the physics shows up there, not in the exit status)."""
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode:
+        raise RuntimeError(f"{Path(args[1]).name} exited with {result.returncode}:\n"
+                           f"{result.stderr[-3000:]}")  # fmt: skip
+    return result
 
 
 def write_plants(manifest: dict, out_dir: Path) -> int:
@@ -164,15 +177,16 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
     Each model is named by its Plant id, at its pose in the Field, and carries its Pull-out
     Curve as <pixelfield:pull_out>; hull meshes and articulated glb files are shared per
     Variant in plants/meshes/. Table columns: id, x, y, z (the Plant's pose), footprint radius
-    (the farthest collision point from the crown axis) and footprint height (the top of the
-    highest collision above the Plant's z), both scaled. Plants of Crops without a Pull-out
+    (the farthest collision point from the crown axis), footprint height (the top of the
+    highest collision above the Plant's z) and crown radius (the root's widest point from its
+    axis), all scaled. Plants of Crops without a Pull-out
     Curve (lettuce) or without a Variant physics export get no file.
     """
     plants_dir = Path(out_dir) / "plants"
     shutil.rmtree(plants_dir, ignore_errors=True)  # no stale files from an earlier spec
     plants_dir.mkdir(parents=True)
     variants = {}  # library path: (physics export, footprint radius and height at scale 1)
-    rows = ["id\tx\ty\tz\tradius\theight"]
+    rows = ["id\tx\ty\tz\tradius\theight\tcrown"]
     for p in manifest["plants"]:
         crop = manifest["crops"][p["crop"]]
         variant = Path(crop["library"]) / p["variant"]
@@ -182,7 +196,7 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
         if first:
             physics = json.loads(variant.with_suffix(".physics.json").read_text())
             variants[variant] = physics, _footprint(physics)
-        physics, (radius, height) = variants[variant]
+        physics, (radius, height, crown) = variants[variant]
         curve, s, pose = crop["pull_out_curve"], p["scale"], p["pose"]
         model = plant_model(variant, s, plants_dir, name=p["id"], write_meshes=first,
                             physics=physics)  # fmt: skip
@@ -199,17 +213,23 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
         ET.ElementTree(sdf).write(plants_dir / f"{p['id']}.sdf", encoding="unicode",
                                   xml_declaration=True)  # fmt: skip
         rows.append("\t".join([p["id"], *(_num(v) for v in (pose["x"], pose["y"], pose["z"],
-                                                            radius * s, height * s))]))  # fmt: skip
+                                                            radius * s, height * s,
+                                                            crown * s))]))  # fmt: skip
     (plants_dir / "plants.tsv").write_text("\n".join(rows) + "\n")
     return len(rows) - 1
 
 
-def _footprint(physics: dict) -> tuple[float, float]:
-    """Radius about the crown axis and top of the collisions in the model frame, scale 1."""
+def _footprint(physics: dict) -> tuple[float, float, float]:
+    """Radius about the crown axis, top of the collisions and the root's radius about the crown
+    axis, in the model frame at scale 1."""
     cx, cy = next(link["pose"][:2] for link in physics["links"] if link["name"] == "root")
-    radius = height = 0.0
+    radius = height = crown = 0.0
     for link in physics["links"]:
         x, y, z, roll, pitch, yaw = link["pose"]
+        if link["name"] == "root":
+            crown = max(
+                math.hypot(*_rotate(v, roll, pitch, yaw)[:2]) for v in link["hull"]["vertices"]
+            )
         # A capsule reaches its radius past its cap centres, in every direction.
         points = [(v, 0.0) for v in link.get("hull", {}).get("vertices", [])]
         points += [(v, c["radius"]) for c in link.get("capsules", []) for v in (c["from"], c["to"])]
@@ -217,7 +237,7 @@ def _footprint(physics: dict) -> tuple[float, float]:
             dx, dy, dz = _rotate(v, roll, pitch, yaw)
             radius = max(radius, math.hypot(x + dx - cx, y + dy - cy) + r)
             height = max(height, z + dz + r)
-    return radius, height
+    return radius, height, crown
 
 
 def _rotate(v: list[float], roll: float, pitch: float, yaw: float) -> tuple[float, ...]:
@@ -233,7 +253,8 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
     """What the scripted pull and grip need about one root crop Plant of a built Field.
 
     Returns name, sdf_filename (plants/<plant id>.sdf, written by build), pose (x, y, z, yaw),
-    the Plant's Pull-out Force, and its root depth, mass and root hull vertices, all scaled.
+    the Plant's Pull-out Force, and its root depth, mass and root hull vertices, all scaled,
+    the direction its Crop's rows run, its Variant (library path) and scale.
     """
     world_dir = Path(world_dir)
     manifest = json.loads((world_dir / "manifest.json").read_text())
@@ -245,6 +266,9 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
         raise ValueError(f"no {sdf}: {plant_id} is not a root crop Plant, or the world was "
                          "built before pick by id, rebuild it")  # fmt: skip
     crop = manifest["crops"][p["crop"]]
+    if "row_direction" not in crop:
+        raise ValueError(f"{world_dir / 'manifest.json'} has no row direction: built before "
+                         "M5d, rebuild it")  # fmt: skip
     physics = json.loads((Path(crop["library"]) / p["variant"]).with_suffix(".physics.json")
                          .read_text())  # fmt: skip
     s = p["scale"]
@@ -258,6 +282,9 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
         "depth": physics["root_depth"] * s,
         "mass": sum(link["mass"] for link in physics["links"]) * s**3,
         "root_hull": [[c * s for c in v] for v in root["hull"]["vertices"]],
+        "row_direction": crop["row_direction"],
+        "variant": str(Path(crop["library"]) / p["variant"]),  # library path without extension
+        "scale": s,
     }
 
 
@@ -295,14 +322,13 @@ def pull(
     world_dir = Path(world_dir)
     request = plant_info(world_dir, plant_id)
     release = request["depth"] + PULL_AFTER if release is None else release
-    steps = round((release / speed + DROP_TIME) / STEP)
+    steps = round((release / speed + DROP_TIME) / PULL_STEP)
     path = os.pathsep.join(filter(None, [str(SYSTEMS_BUILD),
                                          os.environ.get("GZ_SIM_SYSTEM_PLUGIN_PATH")]))  # fmt: skip
-    result = subprocess.run(
+    result = run_check(
         # By absolute path from the caller's cwd: the system finds plants/ from the world file.
         [SYSTEM_PYTHON, str(PULL_SCRIPT), str((world_dir / "world.sdf").resolve()),
-         json.dumps(request), str(steps), repr(speed), repr(release)],
-        capture_output=True, text=True, check=True,
+         json.dumps(request), str(steps), repr(speed), repr(release), repr(PULL_STEP)],
         # Own partition: Field worlds share a name, so runs would see each other's topics.
         env={**os.environ, "GZ_SIM_SYSTEM_PLUGIN_PATH": path,
              "GZ_PARTITION": f"pixelfield-{os.getpid()}"},

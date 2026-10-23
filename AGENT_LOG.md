@@ -847,3 +847,178 @@ Branch m5d-active-region from main (8ce2350), no code changes. Spike numbers mea
 ### Open items
 - Direction after the failed spike (user decision): capsule petioles, fewer links per Picked Plant, a smaller trigger footprint, unpick, or a revised budget.
 - `real_time_factor` regex no-op in the pull and grip worlds (harmless, they only need correctness, but they run slower than they could).
+
+## 2026-10-22 M5d capsules and Active Region (grip tests open)
+### Goal & outcome
+User took the three post-spike recommendations: petiole collisions as capsules, a crown footprint for the Active Region, and a scenario perf budget with unpick as the next chunk. Branch m5d-capsules (commit 50d2372): each petiole link collides as 2 capsules along chords of its curve (`CAPSULES_PER_LINK`, `"capsules"` list in physics.json, MuJoCo fromto style), root keeps its hull, library regenerated (only physics.json changed), ADR 0006 and spec amended; suite green (94 passed). Branch m5d-active-region (stacked on it, uncommitted): the pull-out system picks Plants whose crown cylinder meets any non-Field link's box plus `<padding>` every 10 ms; `plants.tsv` gains a crown column; `<padding>` and `<footprint>` (crown or foliage) in the world's plugin element; new tests/test_region.py with tests/region_check.py; ADR 0010 and spec rewritten with the spike table and decisions.
+### Decisions & why
+- 2 capsules per link, not 1: one chord misses a carrot petiole's bend by up to 12.8 mm (median 5.4), two by 3.7 mm; cost 1.74x to 1.0x at 4 Plants. Three would give 1.6 mm.
+- Link boxes computed by the system: each collision's geometry box (sdformat `Geometry::AxisAlignedBox`, gz-sim `meshAxisAlignedBox` for meshes, mesh `<scale>` honoured) moved through its 8 corners by the collision pose, merged per link, cached per link entity, then moved by the link's world pose per check. No components, no Physics work.
+- Brute force over the whole table per link (ponytail note), SDF parse inline in PreUpdate (ponytail note), a broken Plant file is marked picked so it errors once.
+- grip_check reports `requested` true when the Plant is a model at the end: the region can pick it before the request.
+### Lessons / gotchas
+- Capsules fixed the M4e wedge: a 5 N grip over the full 0.2 m lift slipped on 4 of 4 carrots with the bond intact (d below 3 mm); with one capsule per link one carrot still broke the bond at a joint. The weak grip test now lifts the full height.
+- grip_check and pull_check filed every state message by its time stamp, whatever Plant sent it; with neighbours picked the rows mixed Plants. Both now filter on `plant`.
+- With the region, the 10 cm wide test gripper jaws close on an in-row neighbour 3.9 cm away too: pulling r0c0-000 dragged r0c0-001 up 108 mm, wrist at the 40 N friction limit, no detach. Three grip tests fail for that reason.
+- gz-sim 8's `Link::ComputeAxisAlignedBox` moves only the min and max corners of each collision's box (validator): a cube turned 45 degrees about z in its link comes out with zero width in x (checked: x 0, y +-0.0566 for a 0.08 cube). That is the M5c "narrower than the hull" sighting. A test probe approaches a Plant from the side gz gets wrong; the mutation back to gz's box fails it.
+- An empty or inverted geometry box would span everything once its corners are moved; the system skips it.
+- Mutation check: region off fails the pick test, no Field exclusion fails the Field test.
+- The M5c system reads only the first row of a 7-column plants.tsv (it misparses the rest): worlds must be rebuilt with the systems of the same commit.
+### State
+m5d-capsules: commits 50d2372 and 4b241f9 (review fixes: physics export format_version 2, ADR figures over the whole library, CLAUDE.md weak grip without --lift), validated: pytest 94 passed, ruff, validator agent (capsules match the glb tubes in all 72 Variants within 0.5 um and in gz at scales 0.85 to 1.15, library deterministic, footprint vs sampled capsule surfaces, 6 settles and 6 squeezes, 6 of 6 weak grips slip with the bond intact). m5d-active-region: stacked on 4b241f9, uncommitted; region tests 3 passed (mutation-checked three ways), pull.csv byte-identical to the capsule commit's system; 3 gripper tests FAIL (neighbours gripped), waiting for the user's decision.
+### Open items
+- Grip tests with neighbours: user decision.
+- Slot runs (settle 0.85/1.15, slow squeeze, perf scenario rows) and the GUI check.
+- Unpick chunk after M5d.
+
+## 2026-10-22 M5d slot runs and the overlapping roots
+### Goal & outcome
+User approved the sparse-Field grip tests and the slot. Grip tests now use crops copied with one root crop Plant per Pixel (margin 0.2, spacing 0.5, no missing Plants, neighbours at least 0.48 m apart); a new test grips in the dense carrot Pixel and checks a neighbour is picked and moved; grip_check reports every Picked Plant heard with its largest d. Commit 2977ae1 (region) and the perf commit on m5d-active-region. Slot: settle at scale 0.85 and 1.15 all 144 settled (worst carrot v19 at 1.15: 0.57 mm/s, 2.3 mm travel); slow squeeze 72 of 72 held (4 min); rig re-run 0.96x (matches); gripper scenario 0.21x, FAIL.
+### Decisions & why
+- Perf scenario world: fresh `random_10x10` build, camera models replaced by the old `oakd` rig model (visuals only, so it never triggers the region), test gripper as a static model at its grasp pose. A non-static gripper without its control script would fall.
+### Lessons / gotchas
+- The scenario's cost is physics: two picked carrots 2.3 cm apart have overlapping roots (crown radii about 2 cm). Both roots are welded to anchors, so the contact never resolves; a leaf keeps moving at up to 15 cm/s and the pair alone runs at 0.31x (2.6x with the two root collisions off). 1,231 of 2,760 Plants in random_10x10 are in such a pair.
+- With all root collisions off: scenario 0.64x (pass), 32-Plant spike 0.089x (was 0.036x).
+- Collide bitmasks cannot switch off root-root contact while roots still touch robots: equal masks always collide.
+- The old rig worlds in out/random_10x10 (world_nadir.sdf and others) predate the pull-out system; perf_rig.sdf and perf_grip.sdf are the M5d ones (out/ only, rebuilt by the scratch script).
+- One full pytest run out of four had one failing test that could not be identified (no -rf) or reproduced in 13 targeted and 2 full reruns. UNVERIFIED flake.
+### State
+Branch m5d-active-region: 2977ae1 plus the perf commit, stacked on m5d-capsules (50d2372, 4b241f9). Validated: pytest 98 passed (3 of 4 runs), ruff, region tests mutation-checked, slot runs above. Perf check FAILS until the root contact is decided. GUI check by the user not done.
+### Open items
+- Root-root contact of Picked Plants: user decision (root collision off while attached, a minimum Plant distance in the Planting Pattern, or accept).
+- GUI check: the M4e gripper pulling one carrot pushes its neighbours.
+- The unidentified flaky test.
+- Unpick chunk after M5d.
+
+## 2026-10-22 M5d rethink after the failed scenario, timestep sweep
+### Goal & outcome
+User questioned the approach (why so hard, other engines, GPU, MuJoCo in Gazebo). Agreed after discussion: keep Gazebo (ROS 2, known by students and colleagues), keep full-fidelity neighbours (no cheaper models, no Plant-Plant contact switched off, no roots switched off), keep the Active Region (no collisions far from the robot), target at least 1.0x for a live Amiga showcase (0.8x floor while tuning), measure a larger physics step, then non-overlapping roots, re-measure, then unpick. Commit 57d35fc: one physics step constant (`gazebo.PHYSICS_STEP`) written into every Field world, the pull and grip scripts take the step from it or from gz. Timestep sweep (13 settles, 12 squeezes, pulls of carrot, beetroot and radish, strong and weak grip on a sparse Field, the gripper perf scenario):
+
+| Step | Settle worst | Squeeze | Scripted pull | Grip (strong, weak) | Scenario RTF |
+|---|---|---|---|---|---|
+| 1 ms | 0.57 mm/s | 12/12 | 3 detach, peaks within 0.5% | detach, -0.5%; slips, d 2.8 mm | 0.23 |
+| 2 ms | 0.57 mm/s | 12/12 | 3 detach, peaks within 0.5% | detach, -1.0%; slips | 0.42 |
+| 4 ms | 0.56 mm/s | 12/12 | carrot and radish do not detach | detach, -0.1%; slips | 0.72 |
+| 5 ms | 0.56 mm/s | 12/12 | crash (ODE AABB assertion) | not run | not run |
+
+### Decisions & why
+- Within Gazebo Harmonic, DART is the only engine that runs the Plant model: bullet-featherstone replaces universal joints by fixed ones, ignores joint springs and creates no joints at runtime but fixed-to-world (gz-physics 7 source). No maintained MuJoCo plugin (gz-physics issue #299 abandoned). GPU physics helps many parallel worlds (M7), not one live world.
+### Lessons / gotchas
+- gz-sim's default collision detector for dartsim is ODE, not FCL (corrected in the ADRs): the spike's unset and ode runs were identical.
+- The Pull-out Curve holds at every step (force matches the curve exactly); the scripted pull fails from 4 ms because its harness (a 5000 N/m, 30 N s/m force on the root) is an explicit damper with c dt / m = 1.7 for a 70 g carrot: it overshoots, and at 5 ms flings a body far enough to trip ODE's AABB assertion. The gripper path is unaffected.
+- Q2 premise was wrong: carrot crown radii (1.2 to 2.2 cm) against 4 cm in-row spacing make big neighbours touch even at nominal positions, which is realistic. Touching roots in random_10x10 have at most 2 neighbours, so 2 collide bits (roots coloured so touching roots never share a bit, robots keep all bits) separate them without a minimum distance.
+- The first sweep run died once in a squeeze at 1 ms (grip_check, exit code unknown); 12 squeezes alone and the rerun passed. Possibly the earlier unexplained pytest failure.
+### State
+Branch m5d-active-region at the ADR fix commit on top of 57d35fc. Validated: pytest 98 passed at 1 ms, pull.csv byte-identical, sweep above. Step still 1 ms.
+### Open items
+- User decisions: step 4 ms with the harness gains scaled by the step; roots coloured with collide bits instead of a minimum distance.
+- Then re-measure the scenario, then unpick.
+
+## 2026-10-22 M5d root colours fail, grasp friction drifts with the step
+### Goal & outcome
+User approved root collide-bit colours and a 4 ms step. Implemented (uncommitted): `_root_bits` in plant.write_plants (greedy, 5 mm margin, 3 bits used in random_10x10), PHYSICS_STEP 0.004, scripted pull gains divided by the step in ms, tests for one bit per root and touching roots on different bits (mutation-checked). Results argue against both as they stand: gripper scenario with colours 0.46x at 2 ms, 0.88x at 4 ms (0.42x, 0.72x without), and at 1 ms the gz server aborts on ODE's AABB assertion. At 4 ms four tests fail: three scripted pull tests (lower harness gains change the log) and the strongest beetroot no longer detaching.
+### Decisions & why
+None yet: back to the user.
+### Lessons / gotchas
+- Overlapping roots are unphysical, not just costly: with root-root contact off, a carrot's leaves start inside its neighbour's root and that contact cannot resolve either (both anchored); at 1 ms a body is flung far enough to abort ODE. Touching crowns are realistic, overlapping ones are not, so the layout must keep crowns apart (a minimum distance of the sum of crown radii, touch allowed).
+- Grasp friction drifts with the step on the strongest beetroot (58.4 N): a 20 N per jaw grip peaks at 42 N wrist force at 1 ms (friction allows 40), 60 N at 2 and 4 ms; the 45.8 N grip detaches at 1 and 2 ms but slips at d = 80 mm at 4 ms. Carrot grips (strong and weak) stay right at 4 ms. Cause unknown (deeper jaw penetration per step raising the normal force above the effort limit is a guess).
+- When the gz server aborts, `gz topic -e -n 1` waits forever: perf_run.sh hangs (scratch script; needs a timeout on the stats read).
+- The ODE AABB abort is a candidate for the unexplained intermittent squeeze and pytest failures.
+### State
+Branch m5d-active-region at 7029336 plus uncommitted root colours, 4 ms step and harness gains. Tests at 4 ms: 4 failures (above). Not committed on purpose.
+### Open items
+- User: drop the colours for a non-overlapping layout; step size given the grasp drift; scripted pull harness at a fixed 1 ms instead of scaled gains.
+
+## 2026-10-22 M5d scenario at the camera ceiling: no overlapping roots, 2 ms step
+### Goal & outcome
+User approved: drop root colours, keep crowns apart in the layout, scripted pull at its own 1 ms, choose the step after the layout fix and the grasp drift. Commits 857951b (Planting Pattern redraws jitter so no two roots overlap, touching allowed, radii from variants.json, Plant left out after 20 tries; scripted pull pinned to plant.PULL_STEP) and 8d5b614 (PHYSICS_STEP 2 ms; settle, pull and grip scripts raise with their stderr; CLI catches that). Gripper scenario on the new layout: 0.58x at 1 ms, 0.97x at 2 ms, 1.00x at 4 ms; rig alone 0.97x. Pass bar (as fast as the cameras allow, at least 0.8x) met at 2 ms.
+### Decisions & why
+- 2 ms, not 4: 2 ms already reaches the camera ceiling; 4 ms lost the strongest beetroot's 45.8 N grip. Grasp friction is not step-dependent in a systematic way: 12 sparse 20 N grips peak within 1 to 3 N at 1 and 2 ms except one wedging beetroot (40.6 vs 60.1 N); wedging past friction occurs at 1 ms too (46.9 N on another beetroot).
+- Overlap check only within a Pixel: margins (4 to 5 cm) keep crowns of neighbouring Pixels apart for all current Crops (beetroot crown radius up to 4.5 cm).
+### Lessons / gotchas
+- In random_10x10 the layout rule moves 845 of 2,760 Plants by a few mm and leaves out 47; no overlapping pair remains in any example.
+- The weak 20 N grip limit "friction allows 2 mu F" holds for parallel petioles only: jaws sliding up a bunch that spreads outward meet geometric resistance too (gap closes from 16 to 5 mm over a 0.12 m lift).
+- The intermittent check-script crash struck again once in the slow squeeze at 2 ms (carrot v03, fine in 8 reruns). Its stderr will now be in the error.
+### State
+Branch m5d-active-region at 8d5b614 (stacked on m5d-capsules), not pushed. Validated at 2 ms: pytest 99 passed; slow settle 72/72; slow squeeze 71/72 (v03 intermittent, then 5/5); perf rows in perf.md.
+### Open items
+- GUI check of the gripper pushing neighbours (needs a GUI path for the test gripper).
+- Unpick (next chunk, design to discuss).
+- The intermittent crash: wait for its stderr.
+- Settle at 0.85 and 1.15 not re-run at 2 ms.
+
+## 2026-10-22 M5d unpick and grip --gui
+### Goal & outcome
+User approved unpick (U1 to U3) and a GUI path for the grip (Q8). Commit 9cdfb44: in the Active Region check, a Plant the region picked turns back into its static visual once its bond is intact (not broken, d under 0.1 mm), every link moved under 1 mm/s for 2 s, no robot box meets it, and every link is within 1 cm of where it settled after the spawn. Weld removed first, models a step later; the visual is rebuilt from the Pixel model's `ModelSdf` with SdfEntityCreator; an `unpicked` event goes out; the Plant can be picked again. `pixelfield grip --gui` runs the grip in real time with `gz sim -g` on the run's own partition (waits 8 s, lingers 30 s). In the carrot Pixel a probe that leaves at 0.2 s gets its 4 Plants unpicked at 2.3 to 5.0 s, all 31 static visuals back.
+### Decisions & why
+- Decided without asking, flagged to the user: a Plant picked through the pick service is never unpicked (someone asked for it; it keeps `pixelfield pick` plus a manual GUI pull and the resting-silence check working).
+- Rest is judged from link positions every 10 ms (no velocity components enabled), the settled pose taken at the first region check after the spawn.
+### Lessons / gotchas
+- A test of a restored visual must look before the robot returns: at the end the re-pick removes it again, so a final-state check passed with the restore switched off (mutation caught only after adding a snapshot step).
+- `Model.set_world_pose_cmd` moves a static probe model in a TestFixture run.
+- Region tests and the check scripts now fail with the script's stderr (run_check), to catch the intermittent crash; one region test run failed once right after a rebuild, 8 reruns passed.
+### State
+Branch m5d-active-region at 9cdfb44, not pushed. Validated: pytest 100 passed; region tests mutation-checked (never unpick, unpick by id, no visual restore each fail a test); grip --gui path checked headless with a stubbed viewer (real-time pacing, 500 linger rows at 2 ms). GUI itself UNVERIFIED (user's slot). Validator agent running.
+### Open items
+- User GUI check: `uv run pixelfield grip out/carrot_pixel <id> --gui` shows the gripper pushing neighbours, and unpicked Plants turning static.
+- The bent-leaf tolerance (1 cm) has no automated test.
+
+## 2026-10-22 M5d validator findings fixed
+### Goal & outcome
+Validator agent on 857951b..9cdfb44: nothing blocking. Unpick held under mass unpick (30 of 31 Plants, restored visuals byte-identical in all 8 ECM components), broken bonds never unpicked, re-pick after unpick runs a full pull, 225 pause cycles change nothing, layout has no root overlap in any example or rotated variant (exact 3D hull test), the pinned pull is byte-identical between 1 and 2 ms worlds. Seven smaller findings fixed in one commit: loud failures for worlds that do not load, layout refuses root crops without root sizes, grip --gui waits with the world running and starts the viewer inside the cleanup, a Pick owns its parsed SDF (freed on unpick), docs corrected.
+### Decisions & why
+- Refuse instead of warn when a root crop has no root sizes: the same Field Spec and seed must not give a different Manifest depending on the working directory.
+### Lessons / gotchas
+- A gz-sim server stopped between TestFixture runs answers no scene requests: a GUI attaching during a sleep sees nothing until the world runs.
+- The layout rule moves Plants 2 cm median (90th percentile 3.4 cm, max 5.8 cm), not "a few mm" as the previous entry said.
+- A TestFixture script on a broken world prints the XML error and still exits 0: scripts must check that steps ran.
+- Radish v15's root hull is 1.56x its listed radius; the margins still keep Pixels apart.
+### State
+Branch m5d-active-region, latest commit the review fixes, not pushed. Validated: pytest 100 passed plus the new layout test (core 45 passed); broken world fails pull and grip with the XML error; build from another directory refuses cleanly; grip --gui path checked headless. GUI itself UNVERIFIED.
+### Open items
+- User GUI check.
+- The dense-Pixel grip does not pull a carrot out with the 10 cm test jaws (neighbours grabbed): fine for the showcase test gripper? The real Amiga gripper will differ.
+
+## 2026-10-23 M5d test gripper across the row, jaws sized per Plant
+### Goal & outcome
+User GUI check: the jaws looked like they missed the target and lifted another carrot. Measured: gripping r0c0-015 lifted its in-row neighbour r0c0-016 by 21.9 mm (bond broken) while the target rose 0.1 mm. Cause: jaws closed along the row (east-west) from 6 cm out and were 10 cm wide, so they swept through and clamped the in-row neighbours' bunches 4 to 5 cm away. User approved G1. Uncommitted: the Manifest's Crops gain `row_direction` (resolved Field override or Crop default); the gripper turns to close across the rows; jaw width = the gripped Plant's leaf bunch diameter at grip height plus 1 cm (`jaw_width`, carrot about 3.5, radish 4.1, beetroot 5.9 cm). In the dense carrot Pixel three targets now detach at their root depth and neighbours only get pushed (d 1.6 to 3.9 mm, bond intact). Slow squeeze 72/72 with the sized jaws (a fixed 4 cm let 22 beetroot and other Variants escape: beetroot bunches are 4.9 to 5.3 cm at grip height).
+### Decisions & why
+- Jaw width per Plant instead of one width: in-row spacing (4, 6, 8 cm) and bunch width differ per Crop; no single width clears carrot neighbours and holds a beetroot bunch.
+### Lessons / gotchas
+- Wedging of the leaf bunch between the jaws depends on the angle between the jaws and the Plant's random yaw: weak 5 N grips broke the bond on 1 to 2 of 4 sparse carrots in every jaw orientation and width tried, the old configuration included (48.7 mm on one). The M4e weak-grip and strongest-beetroot tests passed because of their particular angle, not because wedging was gone.
+- The strongest beetroot's wrist force over its Pull-out Force: 0.98 along x, 1.11 to 1.29 across the rows (wedging and stick-slip peaks on the wrist).
+### State
+Branch m5d-active-region at fd5ec43 plus the uncommitted gripper change. Tests: 2 failures (weak grip bond holds; strongest beetroot within 5%), both angle-dependent wedging; squeeze 72/72; dense grip test passes.
+### Open items
+- User decision on what the weak-grip and strong-grip tests should assert.
+
+## 2026-10-23 Session wrap-up: M5d state
+### Goal & outcome
+User checked the new gripper in the GUI: the target comes out, but the gripper and carrot shake once the carrot is fully out. Committed the gripper change with the two angle-dependent test failures noted in the message. Session wrapped up at the user's request.
+### Decisions & why
+None
+### Lessons / gotchas
+- Shaking after the carrot is out is unexplained: likely the jaw servos (velocity commands capped by the effort limit) chattering on thin capsules at the 2 ms step, or stick-slip of the held bunch; not measured.
+### State
+Branches, none pushed, none merged: m5d-capsules (50d2372, 4b241f9; green) and m5d-active-region stacked on it (latest the gripper commit). On m5d-active-region: pytest 2 known failures (weak grip bond, strongest beetroot wrist within 5%), everything else passes; slow settle 72/72 and squeeze 72/72 at 2 ms; perf scenario 0.97x (camera ceiling).
+### Open items
+- G2: what the weak and strong grip tests assert (proposal: friction-limited sliding and no detach; soil force within 1% and wrist at least 95%), and correct ADR 0006's claim that capsules removed wedging.
+- Shaking of the gripper with a pulled-out carrot.
+- The intermittent check-script crash (stderr now captured).
+- Settle at 0.85 and 1.15 at 2 ms not re-run; bent-leaf unpick tolerance untested.
+- Then M5e packaging; merge order m5d-capsules, then m5d-active-region.
+
+## 2026-10-23 M5d finished: grip tests, wedging, linked jaws
+### Goal & outcome
+User asked to finish fast. G2 done (e846fd7): grip tests check what holds at any jaw angle (weak grip: no detach, friction-limited sliding; strong grips: detach at the root depth, soil force within 3% of the Pull-out Force, which is one 2 ms step of a 5 cm/s pull, wrist carrying at least 95%); grip report gains peak_force; ADR 0006 no longer claims capsules removed the wedging. The shaking the user saw (a61dd3d): the held carrot swung 7 mm at the root because two force-capped jaw servos leave the jaw pair free to slide as a unit; each jaw now backs off when ahead of the other (JAW_LINK 200 1/s), root motion under 0.2 mm. Settle at 0.85 and 1.15 at 2 ms: 72/72 each.
+### Decisions & why
+- Linked jaws in the controller, not one fixed jaw: a parallel gripper's fingers are mechanically mirrored, and a single moving jaw would push the bunch sideways.
+### Lessons / gotchas
+- The 1% soil-force tolerance held at 1 ms but the peak is sampled once per step: at 2 ms the last sample before the peak can be 2% low.
+- With linked jaws, r0c0-020 in the dense carrot Pixel no longer comes out: its close in-row neighbour's bunch ends up between the jaws too (neighbour lifted 49.6 mm, wrist 39.2 N at the 40 N friction limit). r0c0-015 and r0c0-005 come out.
+### State
+m5d-capsules (50d2372, 4b241f9) and m5d-active-region stacked on it (latest a61dd3d), not pushed. Validated: pytest 101 passed, 144 skipped; slow settle 72/72 at scales 0.85, 1.0, 1.15 and squeeze 72/72 at 2 ms; perf scenario 0.97x (camera ceiling); GUI check of the grip by the user (before the linked jaws).
+### Open items
+- User: GUI check that the shaking is gone (`uv run pixelfield grip out/carrot_pixel r0c0-015 --gui`).
+- The intermittent check-script crash (stderr now captured); the 1 cm bent-leaf unpick tolerance has no automated test.
+- Merge m5d-capsules, then m5d-active-region; then M5e packaging.

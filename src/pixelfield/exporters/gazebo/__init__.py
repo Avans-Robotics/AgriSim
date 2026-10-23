@@ -53,14 +53,29 @@ PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
 # A picked root starts below the soil plane, so it must not collide with the soil: the soil
 # keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
 SOIL_BITMASK = 0x1
+# Active Region (ADR 0010): meters added around every robot link's box, and the footprint
+# radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
+# Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks
+# and the grip run at it (the scripted pull at its own plant.PULL_STEP). 2 ms runs the 10 x 10
+# Field with a gripper among Picked Plants at the camera ceiling, with the checks as at 1 ms;
+# 4 ms gains nothing past the cameras and lost the strongest beetroot's grip (perf.md, M5d).
+PHYSICS_STEP = 0.002
+ACTIVE_REGION_PADDING = 0.05
+ACTIVE_REGION_FOOTPRINT = "crown"
 
 
 def export(layout: FieldLayout, out_dir: Path) -> Path:
     spec = layout.spec
     sdf = ET.Element("sdf", version=SDF_VERSION)
     world = ET.SubElement(sdf, "world", name=WORLD_NAME)
-    for filename, name in [*SYSTEMS.items(), PULL_OUT_SYSTEM]:
+    physics = ET.SubElement(world, "physics", name="step", type="dart")
+    _text(physics, "max_step_size", str(PHYSICS_STEP))
+    _text(physics, "real_time_factor", "1")
+    for filename, name in SYSTEMS.items():
         ET.SubElement(world, "plugin", filename=filename, name=name)
+    pull_out = ET.SubElement(world, "plugin", filename=PULL_OUT_SYSTEM[0], name=PULL_OUT_SYSTEM[1])
+    _text(pull_out, "padding", str(ACTIVE_REGION_PADDING))
+    _text(pull_out, "footprint", ACTIVE_REGION_FOOTPRINT)
     world.append(_sensors())
     world.append(_scene())
     world.append(_sun())

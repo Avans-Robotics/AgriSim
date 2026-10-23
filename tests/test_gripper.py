@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from pixelfield.cli import main
 from pixelfield.core.spec import load_crop
@@ -26,11 +27,32 @@ needs_system = pytest.mark.skipif(not SYSTEM.is_file(),
 
 
 @pytest.fixture(scope="module")
-def field(tmp_path_factory):
-    out = tmp_path_factory.mktemp("field") / "carrot_pixel"
-    main(["build", str(REPO / "examples" / "carrot_pixel.yaml"), "-o", str(out),
-          "--crops", str(REPO / "crops")])  # fmt: skip
+def sparse_crops(tmp_path_factory):
+    """The Crops with one root crop Plant per Pixel, about 0.5 m apart: the Active Region picks
+    no neighbour, so a grip pulls only its own Plant."""
+    crops = tmp_path_factory.mktemp("sparse") / "crops"
+    shutil.copytree(REPO / "crops", crops)
+    for name in ("carrot", "beetroot", "radish"):
+        path = crops / f"{name}.yaml"
+        crop = yaml.safe_load(path.read_text())
+        crop["planting"].update(margin=0.2, row_spacing=0.5, in_row_spacing=0.5, missing_rate=0.0)
+        path.write_text(yaml.safe_dump(crop))
+    return crops
+
+
+def build(example, out, crops):
+    main(["build", str(REPO / "examples" / example), "-o", str(out), "--crops", str(crops)])
     return out
+
+
+@pytest.fixture(scope="module")
+def field(tmp_path_factory, sparse_crops):
+    return build("carrot_pixel.yaml", tmp_path_factory.mktemp("field") / "carrot", sparse_crops)
+
+
+@pytest.fixture(scope="module")
+def dense(tmp_path_factory):
+    return build("carrot_pixel.yaml", tmp_path_factory.mktemp("dense") / "carrot", REPO / "crops")
 
 
 @needs_gz
@@ -54,9 +76,13 @@ def test_a_pull_by_the_tops_detaches_within_the_pull_out_force_range(field):
     assert r["requested"] and not r["nan"]
     assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
     low, high = load_crop(REPO / "crops" / "carrot.yaml").pull_out_force
-    pulled = r["peak_wrist"] - r["weight"]  # what the soil held
-    assert low <= pulled <= high * 1.05
-    assert pulled == pytest.approx(p["pull_out_force"], rel=0.05)
+    assert low <= r["peak_force"] <= high
+    # The soil held its Pull-out Force, sampled once per step: at 2 ms a 5 cm/s pull moves the
+    # root 0.1 mm per step, 2% of the way to the peak.
+    assert r["peak_force"] == pytest.approx(p["pull_out_force"], rel=0.03)
+    # The wrist carries at least that. It can read more: a leaf bunch that wedges between the
+    # jaws, depending on their angle to the Plant, adds stick-slip peaks (ADR 0006).
+    assert r["peak_wrist"] - r["weight"] >= 0.95 * p["pull_out_force"]
 
 
 @needs_system
@@ -64,8 +90,8 @@ def test_a_weak_grip_slips(field):
     manifest = json.loads((field / "manifest.json").read_text())
     p = manifest["plants"][0]
     r = gripper.grip(field, p["id"], gripper.WEAK_GRIP)
+    # Not pulled out. A bunch that wedges can still break the soil bond on the way (ADR 0006).
     assert r["requested"] and r["detach_d"] is None
-    assert r["max_d"] < manifest["crops"]["carrot"]["pull_out_curve"]["d_peak"]  # bond holds
     assert r["slip"] > 0.05
     rows = list(csv.DictReader(r["log"].open()))
     sliding = [float(row["wrist_force"]) for row in rows
@@ -75,10 +101,22 @@ def test_a_weak_grip_slips(field):
 
 
 @needs_system
-def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path):
-    out = tmp_path / "m3_crops"
-    main(["build", str(REPO / "examples" / "m3_crops.yaml"), "-o", str(out),
-          "--crops", str(REPO / "crops")])  # fmt: skip
+def test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours(dense):
+    """The Active Region picks the Plants around the jaws, so their leaves collide instead of
+    passing through. Jaws closing across the row, as wide as the target's bunch, pull the
+    target out; its neighbours are pushed but keep their soil bond."""
+    manifest = json.loads((dense / "manifest.json").read_text())
+    p = manifest["plants"][0]
+    r = gripper.grip(dense, p["id"])
+    neighbours = {name: d for name, d in r["plants"].items() if name != p["id"]}
+    assert r["requested"] and not r["nan"] and neighbours
+    assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
+    assert max(neighbours.values()) < manifest["crops"]["carrot"]["pull_out_curve"]["d_peak"]
+
+
+@needs_system
+def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path, sparse_crops):
+    out = build("m3_crops.yaml", tmp_path / "m3_crops", sparse_crops)
     plants = json.loads((out / "manifest.json").read_text())["plants"]
     p = max((p for p in plants if p["crop"] == "beetroot"), key=lambda p: p["pull_out_force"])
     weak = gripper.grip(out, p["id"])
@@ -88,7 +126,8 @@ def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path):
     force = 1.5 * (p["pull_out_force"] + weak["weight"]) / (2 * gripper.JAW_MU)
     r = gripper.grip(out, p["id"], force)
     assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
-    assert r["peak_wrist"] - r["weight"] == pytest.approx(p["pull_out_force"], rel=0.05)
+    assert r["peak_force"] == pytest.approx(p["pull_out_force"], rel=0.03)
+    assert r["peak_wrist"] - r["weight"] >= 0.95 * p["pull_out_force"]
 
 
 # About 3.5 s per Variant, 4 minutes for all: PIXELFIELD_SLOW=1 uv run pytest -k squeezed

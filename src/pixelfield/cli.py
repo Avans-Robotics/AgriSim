@@ -5,7 +5,6 @@
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 
 from pixelfield.core.layout import build_layout, to_manifest
@@ -59,6 +58,9 @@ def main(argv: list[str] | None = None) -> None:
                              help="grip force per jaw, N")  # fmt: skip
     grip.add_argument("--lift", type=float,
                       help="lift this far, m (default: past the root depth)")  # fmt: skip
+    grip.add_argument("--gui", action="store_true",
+                      help="run in real time with a gz GUI attached, and keep it open "
+                           f"{gripper.GUI_LINGER:g} s after the pull")  # fmt: skip
     pull.add_argument("--release", type=float,
                       help="let go at this lift, m (default: past the root depth)")  # fmt: skip
     args = parser.parse_args(argv)
@@ -89,7 +91,10 @@ def main(argv: list[str] | None = None) -> None:
     except (OSError, ValueError, KeyError, TypeError) as e:
         parser.exit(1, f"error: {e}\n")
 
-    layout = build_layout(spec, crops)
+    try:
+        layout = build_layout(spec, crops)
+    except ValueError as e:
+        parser.exit(1, f"error: {e}\n")
     out = args.out or Path("out") / args.spec.stem
     out.mkdir(parents=True, exist_ok=True)
     (out / "manifest.json").write_text(json.dumps(to_manifest(layout), indent=2) + "\n")
@@ -118,7 +123,10 @@ def _settle(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     failed = 0
     for variant in args.variants:
         world = plant.settle_world(variant, Path("out") / f"settle_{variant.name}", args.scale)
-        r = plant.settle(world)
+        try:
+            r = plant.settle(world)
+        except RuntimeError as e:
+            parser.exit(1, f"error: the settle check failed:\n{e}\n")
         failed += not r["settled"]
         print(f"{variant.name}: {'settled' if r['settled'] else 'NOT settled'}, "
               f"max speed after {plant.SETTLE_AFTER:g} s {r['max_speed_after'] * 1000:.2f} mm/s "
@@ -134,8 +142,8 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         out = Path("out") / f"squeeze_{variant.name}"
         try:
             r = gripper.squeeze(variant, out, args.scale, args.force)
-        except subprocess.CalledProcessError as e:
-            parser.exit(1, f"error: the squeeze check failed:\n{e.stderr[-2000:]}\n")
+        except RuntimeError as e:
+            parser.exit(1, f"error: the squeeze check failed:\n{e}\n")
         except (OSError, ValueError, StopIteration) as e:
             parser.exit(1, f"error: {variant} is not an articulated Variant: {e!r}\n")
         failed += not r["held"]
@@ -148,9 +156,9 @@ def _squeeze(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
 
 def _grip(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     try:
-        r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift)
-    except subprocess.CalledProcessError as e:
-        parser.exit(1, f"error: the grip check failed:\n{e.stderr[-2000:]}\n")
+        r = gripper.grip(args.world, args.plant, args.force, args.speed, args.lift, args.gui)
+    except RuntimeError as e:
+        parser.exit(1, f"error: the grip check failed:\n{e}\n")
     except (OSError, ValueError) as e:
         parser.exit(1, f"error: {e}\n")
     if not r["requested"]:
@@ -178,8 +186,8 @@ def _pick(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
             print(f"picked {args.plant}")
             return
         r = plant.pull(args.world, args.plant, args.speed, args.release)
-    except subprocess.CalledProcessError as e:
-        parser.exit(1, f"error: the pull check failed:\n{e.stderr[-2000:]}\n")
+    except RuntimeError as e:
+        parser.exit(1, f"error: the pull check failed:\n{e}\n")
     except (OSError, ValueError) as e:
         parser.exit(1, f"error: {e}\n")
     if not r["requested"]:
