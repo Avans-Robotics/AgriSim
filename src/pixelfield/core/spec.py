@@ -38,7 +38,7 @@ class Crop:
     yaw: tuple[float, float]
     pull_out_force: tuple[float, float]
     variants: int
-    library: str  # Asset Library folder of this Crop's Variants
+    library: str  # Asset Library folder of this Crop's Variants, relative to ROOT or absolute
     stage: str  # growth stage slot in Variant names, e.g. carrot_harvest_v07
     pull_out_curve: PullOutCurve | None = None  # root crops only
 

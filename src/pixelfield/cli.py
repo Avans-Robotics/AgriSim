@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+from pixelfield import ROOT
 from pixelfield.core.layout import build_layout, to_manifest
 from pixelfield.core.spec import load_crop, load_field_spec
 from pixelfield.exporters import EXPORTERS, gazebo
@@ -20,7 +21,7 @@ def main(argv: list[str] | None = None) -> None:
     build.add_argument("spec", type=Path, help="Field Spec YAML")
     build.add_argument("-o", "--out", type=Path, help="output folder (default: out/<spec name>)")
     build.add_argument(
-        "--crops", type=Path, default=Path("crops"), help="folder of Crop definitions"
+        "--crops", type=Path, default=ROOT / "crops", help="folder of Crop definitions"
     )
     build.add_argument(
         "--exporter", choices=sorted(EXPORTERS), help="run only this Exporter (default: all)"
@@ -28,7 +29,7 @@ def main(argv: list[str] | None = None) -> None:
     generate = commands.add_parser("generate", help="regenerate a Crop's Variants")
     generate.add_argument("crop", help="Crop name, e.g. carrot")
     generate.add_argument(
-        "--crops", type=Path, default=Path("crops"), help="folder of Crop definitions"
+        "--crops", type=Path, default=ROOT / "crops", help="folder of Crop definitions"
     )
     render = commands.add_parser("render", help="save camera images of a Gazebo world, headless")
     render.add_argument("world", type=Path, help="world.sdf written by build")
@@ -114,9 +115,9 @@ def _generate(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None
     except (OSError, ValueError, KeyError, TypeError) as e:
         parser.exit(1, f"error: no Crop or Asset Generator: {e}\n")
 
-    paths = generator(crop.variants, Path(crop.library))
+    paths = generator(crop.variants, ROOT / crop.library)
     world = gazebo.preview(paths, Path("out") / f"{crop.name}_variants")
-    print(f"{len(paths)} Variants written to {crop.library}, preview: gz sim {world}")
+    print(f"{len(paths)} Variants written to {ROOT / crop.library}, preview: gz sim {world}")
 
 
 def _settle(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:

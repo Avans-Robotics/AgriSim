@@ -12,6 +12,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from pixelfield import ROOT
 from pixelfield.core.layout import FieldLayout, to_manifest
 from pixelfield.exporters.colors import crop_colors
 
@@ -19,8 +20,8 @@ SDF_VERSION = "1.9"
 SOIL_THICKNESS = 0.02  # of the tile visuals
 # CC0 PBR soil (ambientCG Ground048) and its tiles with dry patches baked in (see
 # generators/soil.py), copied into textures/ next to world.sdf.
-SOIL_TEXTURES = Path("assets/library/textures/soil")
-SOIL_TILES = Path("assets/library/textures/soil_tiles")
+SOIL_TEXTURES = ROOT / "assets" / "library" / "textures" / "soil"
+SOIL_TILES = ROOT / "assets" / "library" / "textures" / "soil_tiles"
 SOIL_ATLAS = 4  # soil tiles per side of the baked atlas; tile (i, j) uses (i % 4, j % 4)
 SOIL_TILE = 1.0  # meters covered by one soil tile
 # Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
@@ -122,7 +123,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             links[p.pixel] = _model(world, "r{}c{}".format(*p.pixel), (ox, oy, 0.0, 0.0))
         link = links[p.pixel]
         visual = ET.SubElement(link, "visual", name=p.id)
-        mesh = Path(layout.crops[p.crop].library) / f"{p.variant}.glb"
+        mesh = ROOT / layout.crops[p.crop].library / f"{p.variant}.glb"
         if mesh.is_file():
             # ponytail: hue_shift ignored here, glb materials can't be tinted per Plant
             # without replacing them; add a per-Plant material if renders look too uniform.

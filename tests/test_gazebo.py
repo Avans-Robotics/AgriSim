@@ -147,6 +147,20 @@ def test_plants_use_copied_variant_meshes(mixed):
         assert scale == pytest.approx([p["scale"]] * 3, abs=1e-4)  # Manifest rounds to 4
 
 
+def test_build_and_pick_info_work_from_any_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # default Crop folder and library resolve against the checkout
+    main(["build", str(REPO / "examples" / "carrot_pixel.yaml")])
+    out = tmp_path / "out" / "carrot_pixel"
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["crops"]["carrot"]["library"] == "assets/library/carrot"  # same on any machine
+    assert (out / "textures" / "normal.jpg").is_file()
+    assert (out / "meshes" / f"{manifest['plants'][0]['variant']}.glb").is_file()
+    rows = (out / "plants" / "plants.tsv").read_text().splitlines()[1:]
+    assert len(rows) == len(manifest["plants"])
+    info = plant.plant_info(out, manifest["plants"][0]["id"])
+    assert Path(info["variant"]).with_suffix(".physics.json").is_file()
+
+
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
 def test_world_passes_gz_sdf_check(mixed):
     world_sdf, _ = mixed

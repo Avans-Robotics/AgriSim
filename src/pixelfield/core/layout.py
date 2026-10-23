@@ -4,8 +4,8 @@ import json
 import math
 import random
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
+from pixelfield import ROOT
 from pixelfield.core.spec import Crop, FieldSpec, PlantingPattern
 
 MANIFEST_FORMAT_VERSION = 1
@@ -77,8 +77,8 @@ def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
     for name, crop in crops.items():
         if crop.pull_out_curve and roots[name] is None:
             raise ValueError(f"{name}: no root size for each of its {crop.variants} Variants in "
-                             f"{crop.library}/variants.json, needed to keep roots apart (the "
-                             "library path is relative to the working directory)")  # fmt: skip
+                             f"{ROOT / crop.library}/variants.json, needed to keep roots "
+                             "apart")  # fmt: skip
     for row, names in enumerate(spec.grid):
         for col, name in enumerate(names):
             origin = (spec.column_x(col), (spec.rows - 1 - row) * spec.pixel_size)
@@ -91,7 +91,7 @@ def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
 def _root_radii(crop: Crop) -> list[float] | None:
     """Root radius per Variant index at scale 1 from the library's variants.json; None for a
     Crop whose Variants have no root (lettuce) or a library without sizes."""
-    path = Path(crop.library) / "variants.json"
+    path = ROOT / crop.library / "variants.json"
     if not path.is_file():
         return None
     sizes = json.loads(path.read_text())

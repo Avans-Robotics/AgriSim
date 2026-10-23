@@ -1,6 +1,6 @@
 [project]
 name = "pixelfield"
-version = "0.1.0"
+version = "0.5.0"
 description = "Pixel farming field generator for robot simulation"
 readme = "README.md"
 license = { file = "LICENSE" }
