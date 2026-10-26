@@ -96,6 +96,7 @@ The M5e check: in the `amiga-ros:jazzy` image (gz-sim 8.15.0, gz-rendering 8.2.3
 | a2c6a96 | Unchanged launch: the Amiga spawns at the origin, one wheel and fork on the carrots of r8c0 and r8c1 | 27 to 28, crushed, never unpicked | 0.003 |
 | a2c6a96 | Spawned in the gaps, standing 20 s, then driving north at 0.3 m/s for 10 m (twice) | 1 standing, 3 while driving, all 3 unpicked | 0.95 to 1.03 |
 | 6616cd5 (per-link box) | Spawned in the gaps, standing | 144 | 0.001 to 0.01 |
+| f626a43 (interface 2), amiga_description 67c9ae1 (chassis and wheels on bit 0 only) | Spawned in a gap heading 0.8 rad, driving 0.3 m/s diagonally across the beds, about 15 m | 3 (arm and arm platform, default bits) | 0.95 to 1.00 |
 | a2c6a96 | Spawned in the gaps, then moved 20 cm east by `set_pose` and back | 33, of which 28 unpicked 24 s later | about 0.2, back towards 1.0 as they unpick |
 
 Wheel rig over a carrot row (robot interface 2, `carrot_pixel.yaml`, physics only, unthrottled, one Pixel): a 7 kg wheel under a 30 kg load on a free suspension, driven at 0.3 m/s along the middle row. RTF is the average over the run.
