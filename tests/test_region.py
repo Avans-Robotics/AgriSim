@@ -176,6 +176,11 @@ def test_plants_left_alone_turn_static_and_can_be_picked_again(field):
     assert set(r["picked"]) == near_east | near_west
     assert set(r["visuals_then"]) == set(plants) - near_west  # static again before the return
     assert set(r["visuals"]) == set(plants) - near_east - near_west
+    # A rebuilt static visual has a new name, so a gz GUI that missed a removal cannot crash on
+    # a duplicate (PullOut.cc, kRepickDelay).
+    untouched = set(plants) - near_east - near_west
+    assert set(r["visual_names_then"]) == untouched | {f"{i}~1" for i in near_east}
+    assert set(r["visual_names"]) == untouched
 
 
 def test_the_world_sets_the_region_knobs(field):
@@ -198,15 +203,23 @@ def test_an_unpicked_plant_waits_a_second_before_it_is_picked_again(field):
     unpicked = {p: t for p, event, t in first["events"] if event == "unpicked"}
     assert east in unpicked  # the group comes to rest within 8 s, as in the test above
     back = max(unpicked.values()) + 0.1  # inside the cooldown of the last one unpicked
-    moves = [*away, {"at": round(back / step), "probe": "visitor", "to": [pe["x"], pe["y"], 0.1]}]
-    r = run(field, probes, steps=round((back + 1.5) / step), moves=moves)
+    leave = back + 1.5  # after every re-pick
+    moves = [*away, {"at": round(back / step), "probe": "visitor", "to": [pe["x"], pe["y"], 0.1]},
+             {"at": round(leave / step), "probe": "visitor", "to": [-1.0, -1.0, 0.1]}]  # fmt: skip
+    r = run(field, probes, steps=round((leave + 8.0) / step), moves=moves)
     events = {}
     for plant_id, event, t in r["events"]:
         events.setdefault(plant_id, []).append((event, t))
     assert any(t + plant.REPICK_DELAY > back for t in unpicked.values())  # one still cooling
     for plant_id, t_unpick in unpicked.items():
-        assert [e for e, _ in events[plant_id]] == ["picked", "unpicked", "picked"], plant_id
+        assert [e for e, _ in events[plant_id]][:3] == ["picked", "unpicked", "picked"], plant_id
         # Picked again at the first region check (every 10 ms) once both the probe is back and
         # the cooldown is over.
         due = max(t_unpick + plant.REPICK_DELAY, back)
         assert due <= events[plant_id][2][1] < due + 0.05, plant_id
+    # Left alone again: each rebuild has a new name, and every Plant has one static visual.
+    twice = {i for i, e in events.items() if [event for event, _ in e].count("unpicked") == 2}
+    assert east in twice
+    names = r["visual_names"]
+    assert len(names) == len({n.split("~")[0] for n in names}) == len(plants)
+    assert {f"{i}~2" for i in twice} <= set(names)
