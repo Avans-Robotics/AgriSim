@@ -1081,3 +1081,21 @@ pixelfield m5e-soil-bit (f626a43 plus this log and the perf row), amiga_descript
 - User: drive into the beds in the GUI with the local amiga_description (mount it over /ros2_ws/src/amiga_description and `colcon build --packages-select amiga_description`).
 - amiga_description: PR, tag (v0.6.0?), then amiga_ros2 bumps its pin. Merge pixelfield m5e-packaging and m5e-soil-bit, tag v0.5.0 on the merge.
 - The arm platform lumped into base_footprint by amiga_ros2 keeps the default bits; set 0x1 there too if it ever reaches into the foliage.
+
+## 2026-10-26 GUI crash on unpick: 1 s re-pick delay
+### Goal & outcome
+The user's GUI run (Amiga with soil-only chassis and wheels) crashed: `Another item already exists with name: r7c2::link::r7c2-012`, then a segfault in `SceneManager::CreateVisual`. Cause: an unpick rebuilt the Plant's static visual and a quick re-pick (the arm or arm platform, default bits, at the bed edge) removed it within one GUI frame; gz-sim's `RenderUtil::Update` applies removals before creations and checks timestamps only for models, so the visual stayed as a ghost and the next unpick duplicated its name. Fix on m5e-unpick-cooldown (e73f076): an unpicked Plant cannot be picked again for 1 s of sim time (region skips it, the pick service refuses it). ADR 0010 and spec 14 amended.
+### Decisions & why
+- Cooldown over unique visual names: unique names would avoid the crash but leave ghost Plants in the GUI.
+- 1 s of sim time spans many GUI frames even at 10x real time; the cost is a robot passing through that one Plant's static visual during that second.
+### Lessons / gotchas
+- Headless servers did not show it: the Sensors system's render update runs every step, so creation and removal never share a batch. GUI-only races need a GUI run or reading gz-sim's RenderUtil (gz-sim8 `src/rendering/RenderUtil.cc`).
+- In the region test, Plants of one group unpick at very different times (2.3 s, 4.8 s, 6.8 s after the probe left), so a test on re-pick timing must use the latest unpick and expect earlier ones at the return.
+- The null dereference after a failed `CreateVisual` is a gz-sim bug worth reporting upstream.
+### State
+Branch m5e-unpick-cooldown stacked on m5e-soil-bit, commit e73f076, not pushed. Validated: pytest 105 passed, 144 skipped; ruff; the new test fails against m5e-soil-bit's system (re-picked 0.11 s after the unpick) and passes now. GUI rerun by the user UNVERIFIED.
+### Open items
+- User: rerun the GUI drive with branch m5e-unpick-cooldown.
+- Report the CreateVisual null dereference to gz-sim.
+- amiga_ros2 arm platform: bitmask 0x1 so it stops picking edge Plants.
+- Merge order: m5e-packaging, m5e-soil-bit, m5e-unpick-cooldown; tag v0.5.0 on the last merge.
