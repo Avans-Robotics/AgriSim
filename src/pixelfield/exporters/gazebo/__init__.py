@@ -51,9 +51,13 @@ WORLD_NAME = "pixelfield"
 # Our pull-out system (ADR 0006), built into build/systems/ and found through
 # GZ_SIM_SYSTEM_PLUGIN_PATH; a world without it still runs, gz only logs that it is missing.
 PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
-# A picked root starts below the soil plane, so it must not collide with the soil: the soil
-# keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
-SOIL_BITMASK = 0x1
+# Collide bits (robot interface 2, spec section 14). Bit 0 is the soil's alone: a robot
+# collision with collide_bitmask 0x1 touches the soil and no Plant, so a wheel can drive over a
+# bed without picking or crushing it. The soil also carries bit 1, shared with Plant leaves, so
+# leaves rest on the soil. A picked root starts below the soil plane, so root collisions leave
+# out both soil bits (plant.ROOT_BITMASK) until the detach.
+SOIL_BITMASK = 0x3
+PLANT_BITMASK = 0xFFFF & ~0x1  # every Plant collision lacks bit 0; leaves have all the others
 # Active Region (ADR 0010): meters added around every robot collision's box, and the footprint
 # radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
 # Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks

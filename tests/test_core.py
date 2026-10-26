@@ -219,7 +219,7 @@ def test_path_gap_wider_than_the_field_is_no_gap(tmp_path):
 
 def test_manifest_has_border_and_robot_interface(tmp_path):
     manifest = to_manifest(layout_of(tmp_path, "  C\n"))
-    assert (manifest["robot_interface"], manifest["format_version"]) == (1, 1)
+    assert (manifest["robot_interface"], manifest["format_version"]) == (2, 1)
     assert (manifest["field"]["border"], manifest["field"]["path_gaps"]) == (0.5, [])
     assert to_manifest(layout_of(tmp_path, "  C\n", extra="border: 0\n"))["field"]["border"] == 0
 

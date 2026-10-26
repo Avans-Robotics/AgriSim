@@ -14,7 +14,8 @@
 // Active Region (ADR 0010): every 10 ms of sim time, each link with collisions of a model that
 // is not part of the Field (soil, Pixel models r<row>c<col>, camera_* models, Picked Plants
 // and their anchors) takes the world axis-aligned box of each of its collisions plus <padding>
-// meters (default 0.05). Every root crop Plant whose footprint meets one of those boxes is
+// meters (default 0.05), except collisions whose collide bitmask shares no bit with the Plants
+// (0x1, the soil's alone). Every root crop Plant whose footprint meets one of those boxes is
 // picked like a pick by id. One box per collision, not per link: a robot base whose wheel forks
 // and cross tubes share a link would otherwise pick every Plant under it. The
 // footprint is a vertical cylinder from the Plant's z up to its foliage height, around its
@@ -68,6 +69,7 @@
 #include <sdf/Link.hh>
 #include <sdf/Model.hh>
 #include <sdf/Root.hh>
+#include <sdf/Surface.hh>
 #include <sdf/Visual.hh>
 
 namespace pixelfield
@@ -75,6 +77,10 @@ namespace pixelfield
 using namespace gz::sim;
 
 constexpr uint16_t kAllBits = 0xFFFF;  // collide bitmask of a detached root
+// Bits of every Plant collision (gazebo.PLANT_BITMASK): all but bit 0, the soil's alone. A
+// robot collision sharing none of them (collide_bitmask 0x1) never touches a Plant, so it
+// picks none.
+constexpr uint16_t kPlantBits = 0xFFFE;
 constexpr double kAnchorMass = 0.001;  // kg, light next to any root
 // The prismatic range ends a little past the root depth so the joint limit never stops the
 // root before it reaches the detach point.
@@ -124,7 +130,8 @@ gz::math::AxisAlignedBox Moved(const gz::math::AxisAlignedBox &_box,
   return {lo, hi};
 }
 
-/// The box of each of a link's collisions, in the link's frame; empty without any. Not gz-sim's
+/// The box of each of a link's collisions that can touch a Plant, in the link's frame; empty
+/// without any. Not gz-sim's
 /// Link::ComputeAxisAlignedBox: it moves only two corners of each collision's box, so a
 /// collision turned in its link comes out too small (a cube turned 45 degrees about z gets no
 /// width in x).
@@ -137,6 +144,9 @@ std::vector<gz::math::AxisAlignedBox> LinkBoxes(Entity _link, const EntityCompon
     auto pose = _ecm.Component<components::Pose>(collision);
     if (!element || !element->Data().Geom())
       continue;
+    const sdf::Surface *surface = element->Data().Surface();
+    if (surface && surface->Contact() && !(surface->Contact()->CollideBitmask() & kPlantBits))
+      continue;  // soil only, like a wheel meant to drive over beds
     auto local = element->Data().Geom()->AxisAlignedBox(&meshAxisAlignedBox);
     if (!local || !(local->Min().X() <= local->Max().X()))
       continue;  // no size, or an empty box that would span everything once moved

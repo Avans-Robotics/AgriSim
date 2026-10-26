@@ -86,9 +86,10 @@ def plant_model(
                 _write_obj(obj, link["hull"])
             collision = ET.SubElement(element, "collision", name="collision")
             _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
-        for collision in element.findall("collision") if link["name"] == "root" else []:
+        bitmask = ROOT_BITMASK if link["name"] == "root" else gazebo.PLANT_BITMASK
+        for collision in element.findall("collision"):
             contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
-            _text(contact, "collide_bitmask", str(ROOT_BITMASK))
+            _text(contact, "collide_bitmask", str(bitmask))
         visual = ET.SubElement(element, "visual", name="visual")
         _text(visual, "pose", gazebo._join(gazebo.GLTF_TO_Z_UP))
         mesh = _mesh(visual, f"meshes/{glb.name}", s)

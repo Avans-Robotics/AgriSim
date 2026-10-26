@@ -98,6 +98,15 @@ The M5e check: in the `amiga-ros:jazzy` image (gz-sim 8.15.0, gz-rendering 8.2.3
 | 6616cd5 (per-link box) | Spawned in the gaps, standing | 144 | 0.001 to 0.01 |
 | a2c6a96 | Spawned in the gaps, then moved 20 cm east by `set_pose` and back | 33, of which 28 unpicked 24 s later | about 0.2, back towards 1.0 as they unpick |
 
+Wheel rig over a carrot row (robot interface 2, `carrot_pixel.yaml`, physics only, unthrottled, one Pixel): a 7 kg wheel under a 30 kg load on a free suspension, driven at 0.3 m/s along the middle row. RTF is the average over the run.
+
+| Wheel collide bitmask | Picked Plants | Wheel rides up | RTF |
+|---|---|---|---|
+| default (0xFFFF) | 10 | 2.3 cm | 0.09 average, 0.03 in the row |
+| 0x1 (soil only) | none | 0 | 2.1 |
+
+Spike variants on robot interface 1 bits (same rig): leaves kept off the soil, wheel still touching Plants: 0.07 to 0.1x in the row; wheel touching only soil and leaves, not roots: 0.03x; wheel touching nothing but soil, 10 Picked Plants with their leaves on the soil: 0.23x, with leaves off the soil: about 1x. The cost is the heavy wheel pressing gram-light leaves into the soil; Picked Plants alone cost too, so a soil-only wheel that picks none is the fast case. No explosion was seen in 2 to 4 s of sim with this rig; the user saw carrots fly and the Amiga vanish while driving into the carrots, not reproduced yet.
+
 - A robot must spawn in the Path Gaps or in the Border, not on Plants: a wheel spawned inside anchored roots crushes them, and bent Plants stay picked.
 - In every launch, the empty world too, the `joint_state_broadcaster` spawner timed out ("Switch controller timed out after 5 seconds") and only `lite6_traj_controller` was active; driving does not depend on it (gz DiffDrive). An amiga_ros2 matter.
 

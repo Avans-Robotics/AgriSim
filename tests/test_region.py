@@ -120,6 +120,15 @@ def test_boxes_pick_the_plants_whose_crown_footprint_they_meet(field):
     )
     assert not expected["span"]
 
+    # A soil-only box (collide bitmask 0x1, like a wheel meant to drive over beds) right over
+    # the southmost Plant, which no other box reaches, picks nothing.
+    south = min(plants, key=lambda n: plants[n]["y"])
+    ps = plants[south]
+    assert south not in set().union(*expected.values())
+    assert south in meets(plants, (ps["x"], ps["y"], z), (HALF,) * 3)  # if it could touch
+    probes.append({**probe("soil_only", ps["x"], ps["y"], z), "bitmask": 1})
+    expected["soil_only"] = set()
+
     r = run(field, probes, pick=a)
     assert set(r["picked"]) == set().union(*expected.values())
     assert a in r["picked"] and west in r["picked"] and east not in r["picked"]

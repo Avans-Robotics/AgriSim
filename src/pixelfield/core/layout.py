@@ -9,7 +9,7 @@ from pixelfield import ROOT
 from pixelfield.core.spec import Crop, FieldSpec, PlantingPattern
 
 MANIFEST_FORMAT_VERSION = 1
-ROBOT_INTERFACE_VERSION = 1  # spec section 14; a breaking change raises it
+ROBOT_INTERFACE_VERSION = 2  # spec section 14; a breaking change raises it
 FIT_TRIES = 20  # jitter draws per Plant before it is left out because its root does not fit
 
 

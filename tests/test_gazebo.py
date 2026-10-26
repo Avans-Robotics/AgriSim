@@ -59,7 +59,9 @@ def test_soil_collision_is_a_plane_on_the_soil_bit(mixed):
     assert collision.findtext("surface/contact/collide_bitmask") == str(gazebo.SOIL_BITMASK)
 
 
-def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0, -9.81)):
+def _ground_world(
+    world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0, -9.81), bitmask=None
+):
     """The Field's soil model alone, plus a 1 kg box, unthrottled, physics only."""
     sdf = ET.Element("sdf", version=gazebo.SDF_VERSION)
     world = ET.SubElement(sdf, "world", name=name)
@@ -86,6 +88,9 @@ def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0
     if mu is not None:
         ode = ET.SubElement(ET.SubElement(ET.SubElement(collision, "surface"), "friction"), "ode")
         ET.SubElement(ode, "mu").text = ET.SubElement(ode, "mu2").text = str(mu)
+    if bitmask is not None:
+        contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
+        ET.SubElement(contact, "collide_bitmask").text = str(bitmask)
     path = world_sdf.with_name(f"{name}.sdf")
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
     result = subprocess.run(
@@ -96,10 +101,11 @@ def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0
 
 
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
-def test_a_box_dropped_beyond_the_border_lands(mixed):
+@pytest.mark.parametrize("bitmask", [None, 0x1])  # default, and soil-only (robot interface 2)
+def test_a_box_dropped_beyond_the_border_lands(mixed, bitmask):
     world_sdf, manifest = mixed
     x = -manifest["field"]["border"] - 1.0  # 1 m west of the textured soil
-    report = _ground_world(world_sdf, "drop", (x, 0.0, 0.5), (0.1, 0.1, 0.1))
+    report = _ground_world(world_sdf, "drop", (x, 0.0, 0.5), (0.1, 0.1, 0.1), bitmask=bitmask)
     assert report["max_travel"] == pytest.approx(0.45, abs=0.01)  # rests at z = 0.05; falls 4.9 m
     # Resting contact reads just under 1 mm/s in DART; a box falling for 1 s reaches 9.8 m/s.
     assert report["max_speed_after"] < 0.01 and not report["nan"]
