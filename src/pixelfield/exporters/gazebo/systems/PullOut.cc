@@ -22,7 +22,8 @@
 // crown with the crown radius, or with the foliage radius when <footprint> is "foliage".
 // Unpick (M5d): a Plant the Active Region picked whose bond is intact, whose links have been
 // at rest for 2 s, all within 1 cm of where they were just after the spawn (the static visual's pose), and that no such box
-// meets, turns back into its static visual; it can be picked again. A Plant picked by id stays.
+// meets, turns back into its static visual; it can be picked again after 1 s of sim time (by the
+// region or by id). A Plant picked by id stays.
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
 // published only on a step where d or the force changed, plus one message per event, which
 // also carries `event`: picked, peak_passed, detached or unpicked. A resting Picked Plant is
@@ -99,6 +100,12 @@ constexpr double kRestSpeed = 0.001;  // m/s
 constexpr std::chrono::seconds kRestTime{2};
 constexpr double kRestDepth = 1e-4;  // meters
 constexpr double kRestTolerance = 0.01;  // meters
+// An unpicked Plant cannot be picked again for this long. The gz GUI applies the removals it
+// collected between two frames before the creations, with no timestamp check for visuals, so a
+// static visual rebuilt by an unpick and removed by a quick re-pick in the same frame stays in
+// its scene as a ghost, and the next unpick of that Plant crashes the GUI on the duplicate name
+// (gz-sim 8.15). One second of sim time spans many GUI frames even at 10x real time.
+constexpr std::chrono::seconds kRepickDelay{1};
 
 struct Curve
 {
@@ -251,6 +258,12 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       gzerr << "Pick: [" << name << "] was already picked\n";
       return true;
     }
+    if (this->Cooling(name))
+    {
+      gzerr << "Pick: [" << name << "] was unpicked less than "
+            << kRepickDelay.count() << " s of sim time ago; try again\n";
+      return true;
+    }
     request->byId = true;
     this->requests.push_back(*request);
     this->picked.insert(name);
@@ -355,8 +368,8 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     }
     for (const std::string &id : hits)
     {
-      if (this->picked.count(id))
-        continue;
+      if (this->picked.count(id) || this->Cooling(id))
+        continue;  // a cooling Plant is picked by a later check if still met
       this->picked.insert(id);  // also when its file is broken: one error, not one per check
       // ponytail: parsed in the simulation thread, a few ms per Plant; move it to a worker
       // if a robot reaching into a bed stalls the simulation noticeably.
@@ -365,9 +378,22 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     }
   }
 
+  /// Whether a Plant was unpicked less than kRepickDelay of sim time ago. Holds the mutex.
+  private: bool Cooling(const std::string &_name)
+  {
+    auto it = this->unpicked.find(_name);
+    if (it == this->unpicked.end())
+      return false;
+    if (this->simTime - it->second < kRepickDelay)
+      return true;
+    this->unpicked.erase(it);
+    return false;
+  }
+
   public: void PreUpdate(const UpdateInfo &_info, EntityComponentManager &_ecm) override
   {
     std::lock_guard<std::mutex> lock(this->mutex);
+    this->simTime = _info.simTime;
     if (!this->loaded)
     {
       this->LoadTable(_ecm);
@@ -439,6 +465,7 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       creator.SetParent(visual, p.pixelLink);
     }
     this->picked.erase(p.name);
+    this->unpicked[p.name] = _info.simTime;
     this->Publish(p.name, 0.0, 0.0, true, "unpicked", _info);
     gzmsg << "Pick: [" << p.name << "] unpicked\n";
     return true;
@@ -611,6 +638,8 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
   private: std::vector<Request> requests;
   private: std::map<std::string, Pick> picks;
   private: std::set<std::string> picked;
+  private: std::unordered_map<std::string, std::chrono::steady_clock::duration> unpicked;  // when
+  private: std::chrono::steady_clock::duration simTime{0};  // of the latest PreUpdate
   private: std::vector<std::shared_ptr<sdf::Root>> roots;
   private: double padding = 0.05;  // meters around each collision's box
   private: bool foliage = false;  // footprint radius: foliage instead of crown

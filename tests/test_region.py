@@ -182,3 +182,31 @@ def test_the_world_sets_the_region_knobs(field):
     element = ET.parse(field / "world.sdf").find(".//plugin[@name='pixelfield::PullOut']")
     assert float(element.findtext("padding")) == PAD
     assert element.findtext("footprint") == "crown"
+
+
+@needs_system
+def test_an_unpicked_plant_waits_a_second_before_it_is_picked_again(field):
+    # The gz GUI leaves a ghost of a static visual rebuilt and removed in the same frame, then
+    # crashes on the next unpick of that Plant, so a robot returning right away waits.
+    plants = table(field)
+    east = max(plants, key=lambda n: plants[n]["x"])
+    pe = plants[east]
+    step = gazebo.PHYSICS_STEP
+    probes = [probe("visitor", pe["x"], pe["y"], 0.1)]
+    away = [{"at": round(0.2 / step), "probe": "visitor", "to": [-1.0, -1.0, 0.1]}]
+    first = run(field, probes, steps=round(8.0 / step), moves=away)
+    unpicked = {p: t for p, event, t in first["events"] if event == "unpicked"}
+    assert east in unpicked  # the group comes to rest within 8 s, as in the test above
+    back = max(unpicked.values()) + 0.1  # inside the cooldown of the last one unpicked
+    moves = [*away, {"at": round(back / step), "probe": "visitor", "to": [pe["x"], pe["y"], 0.1]}]
+    r = run(field, probes, steps=round((back + 1.5) / step), moves=moves)
+    events = {}
+    for plant_id, event, t in r["events"]:
+        events.setdefault(plant_id, []).append((event, t))
+    assert any(t + plant.REPICK_DELAY > back for t in unpicked.values())  # one still cooling
+    for plant_id, t_unpick in unpicked.items():
+        assert [e for e, _ in events[plant_id]] == ["picked", "unpicked", "picked"], plant_id
+        # Picked again at the first region check (every 10 ms) once both the probe is back and
+        # the cooldown is over.
+        due = max(t_unpick + plant.REPICK_DELAY, back)
+        assert due <= events[plant_id][2][1] < due + 0.05, plant_id

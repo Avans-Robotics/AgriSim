@@ -36,6 +36,7 @@ PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pul
 PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
 DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
 SYSTEMS_BUILD = ROOT / "build" / "systems"
+REPICK_DELAY = 1.0  # seconds of sim time before an unpicked Plant can be picked again (PullOut.cc)
 NAMESPACE = "https://github.com/Avans-Robotics/AgriSim"  # of custom SDF elements
 ROOT_BITMASK = 0xFFFF & ~gazebo.SOIL_BITMASK  # the root collides with all but the soil
 
