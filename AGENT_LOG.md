@@ -1045,3 +1045,23 @@ Branch m5e-packaging from main, commits a2c6a96, 95c50b3, 35f9e36, 9af4e39, loca
 - `test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours` failed once in 4 full-suite runs, passed in 4 isolated runs; no traceback kept. Probably the M5d intermittent check-script failure.
 - Camera `<save>` paths in world.sdf (`renders/top`) are relative to the server's cwd: under `ros2 launch` any camera subscriber writes PNGs into the launch folder (the untracked `renders/` in the repo root). Pre-existing.
 - The 1 cm bent-leaf unpick tolerance still has no automated test.
+
+## 2026-10-26 Soil-only collide bit (robot interface 2)
+### Goal & outcome
+The user drove the Amiga into the carrots: RTF fell to 0.5%, carrots flew and the Amiga vanished. Spike with a 37 kg wheel rig over a carrot row (one Pixel, physics only) found the cost: a heavy wheel pressing gram-light leaves into the soil (0.03x); a wheel touching only the soil runs fast. Built fix (a): bit 0 belongs to the soil alone (soil 0x3, leaves 0xFFFE, roots 0xFFFC), the Active Region skips collisions that share no bit with the Plants, `robot_interface` 2. A wheel with `collide_bitmask` 0x1 picks nothing and runs at 2.1x on the rig; the default wheel is unchanged (0.09x, 10 picks).
+### Decisions & why
+- Soil gets a second bit (1) shared with leaves instead of dropping leaf-soil contact: leaves keep resting on the soil, so settle, squeeze and unpick behaviour stay as validated. Roots skip both soil bits.
+- Opt-out is robot-side (wheels and chassis set 0x1), zero config stays the default: a robot that keeps 0xFFFF behaves as in interface 1, except that 0x1 no longer touches leaves (hence the version bump).
+- Runaway guard (fix b) not built: the explosion was not reproduced in 2 to 4 s of rig sim; build it after a reproduction (suspect the Amiga's wheel-fork boxes bulldozing leaves).
+### Lessons / gotchas
+- Spike numbers (interface 1 bits): wheel on leaves+roots 0.03x, rides 2.3 cm up; leaves off the soil 0.07 to 0.1x; wheel on soil+leaves without roots 0.03x (roots are not the cost); soil-only wheel with 10 Picked Plants whose leaves rest on the soil 0.23x, leaves off the soil about 1x. Picked Plants cost on their own, so skipping the pick matters as much as skipping the contact.
+- A new region probe first sat at the same spot as an existing probe, so the old system passed too; a test probe must reach a Plant no other probe reaches, checked by running the old .so.
+- NVIDIA in the container: the toolkit is installed; `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all` injects the 595.99 EGL/GLX libs into amiga-ros:jazzy (checked), plus the PRIME and EGL vendor env vars. GUI on NVIDIA in the container UNVERIFIED.
+- gz.sim8 Python: `Link.world_pose` needs `import gz.math7` first, or pybind cannot convert the Pose3d.
+### State
+Branch m5e-soil-bit stacked on m5e-packaging, commit f626a43, not pushed. Local tag v0.5.0 still on m5e-packaging (9af4e39). Validated: pytest 104 passed, 144 skipped; ruff; region test fails against m5e-packaging's system and passes now; spike rerun on the new build (soil-only wheel 0 picks 2.1x, default wheel unchanged). Slow settle and squeeze not rerun (leaf-soil, leaf-leaf and root contacts unchanged by the bit choice). Amiga with 0x1 wheels UNVERIFIED (needs the amiga_description change).
+### Open items
+- amiga_description: `collide_bitmask` 0x1 on wheels and base collisions (URDF `<gazebo reference>` collision surface block; check the conversion with `gz sdf -p`). Then the user drives into the beds again.
+- Tag: merge m5e-packaging and m5e-soil-bit, then tag v0.5.0 on the merge so the release carries interface 2.
+- Fix (b) runaway guard after reproducing the explosion (fork box rig, about 2 to 3 min on one Pixel).
+- From M5e: amiga_ros2 spawn pose args, joint_state_broadcaster timeout, gz-rendering 8.3.0; camera save path relative to the cwd; the flaky full-Pixel grip test.
