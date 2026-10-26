@@ -1065,3 +1065,19 @@ Branch m5e-soil-bit stacked on m5e-packaging, commit f626a43, not pushed. Local 
 - Tag: merge m5e-packaging and m5e-soil-bit, then tag v0.5.0 on the merge so the release carries interface 2.
 - Fix (b) runaway guard after reproducing the explosion (fork box rig, about 2 to 3 min on one Pixel).
 - From M5e: amiga_ros2 spawn pose args, joint_state_broadcaster timeout, gz-rendering 8.3.0; camera save path relative to the cwd; the flaky full-Pixel grip test.
+
+## 2026-10-26 Amiga chassis and wheels on the soil-only bit
+### Goal & outcome
+In amiga_description (branch feat/soil-only-collisions, 67c9ae1, not pushed): `collide_bitmask` 0x01 on base_link and the four wheels. Container drive test (pixelfield m5e-soil-bit, local amiga_description mounted over the image's v0.5.1): the Amiga spawned in a gap heading 0.8 rad drove 0.3 m/s diagonally across the beds for about 15 m at 0.95 to 1.0x, 3 Plants picked (arm and arm platform keep the default bits), z stays on the soil. Row added to perf.md.
+### Decisions & why
+- Opt-out lives in the robot description, not in pixelfield: other worlds are unaffected (ground planes and obstacles use 0xFFFF, which shares bit 0), the real robot ignores `<gazebo>` tags, Amiga_ws has its own amiga_description copy, and amiga_ros2's image pins v0.5.1 until someone bumps it.
+### Lessons / gotchas
+- sdformat URDF conversion: a second `<gazebo reference>` block with a `<collision><surface>` blob for a link replaces the friction set by `mu1`/`mu2`/`fdir1` in an earlier block (the wheels came out with an empty `<friction/>`). The blob must sit in the same block as the friction tags; checked by diffing `gz sdf -p` output against main (only the 13 bitmask lines and empty default surface elements on the 9 base boxes are added, wheel mu kept, prefix works).
+- Collisions lumped from base_link into base_footprint keep the extension's bitmask; collisions lumped from child links (amiga_ros2's arm platform) do not.
+- The scratchpad was emptied between sessions; keep container scripts reproducible from the log, not from scratch files.
+### State
+pixelfield m5e-soil-bit (f626a43 plus this log and the perf row), amiga_description feat/soil-only-collisions 67c9ae1, both not pushed. Validated: `gz sdf -p` diff of the Amiga model; container drive test above. Explosion while driving into beds with the default bits not reproduced; with the new bits it cannot happen through wheel or chassis contact.
+### Open items
+- User: drive into the beds in the GUI with the local amiga_description (mount it over /ros2_ws/src/amiga_description and `colcon build --packages-select amiga_description`).
+- amiga_description: PR, tag (v0.6.0?), then amiga_ros2 bumps its pin. Merge pixelfield m5e-packaging and m5e-soil-bit, tag v0.5.0 on the merge.
+- The arm platform lumped into base_footprint by amiga_ros2 keeps the default bits; set 0x1 there too if it ever reaches into the foliage.
