@@ -1099,3 +1099,20 @@ Branch m5e-unpick-cooldown stacked on m5e-soil-bit, commit e73f076, not pushed. 
 - Report the CreateVisual null dereference to gz-sim.
 - amiga_ros2 arm platform: bitmask 0x1 so it stops picking edge Plants.
 - Merge order: m5e-packaging, m5e-soil-bit, m5e-unpick-cooldown; tag v0.5.0 on the last merge.
+
+## 2026-10-26 GUI crash at the first unpick: rebuilt visuals get new names
+### Goal & outcome
+The cooldown (e73f076) did not stop the user's GUI crash: it always hit r7c2-012 at its first unpick, after the Amiga spawned next to it (0.25 m from the arm platform) and the user drove off without touching any Plant. Started with `-s` and the GUI attached after the spawn, the same drive did not crash, so the GUI missed the pick's removal of the static visual during its startup. Fix (this commit): an unpick rebuilds the static visual as `<id>~<n>` and the pull-out system tracks the current name. Region tests check `~1` and `~2` names and one visual per Plant; both checks fail on e73f076.
+### Decisions & why
+- New names over trying to detect the GUI: the race lives in gz-sim's GUI and depends on GPU and load timing; a unique name makes a duplicate impossible whatever the timing. Cost: a GUI that missed a removal shows a stale copy, visible only once that Plant is pulled out.
+- The 1 s re-pick delay stays: it covers the create-and-remove-in-one-frame ghost.
+### Lessons / gotchas
+- Four Xvfb (llvmpipe) GUI reproductions did not crash (picks during GUI load, flapping, 10 x 10 Field); the race needs the real GPU's timing. The user's `-s` plus later `gz sim -g` run was the discriminating test.
+- gz.sim8 Python has no Visual class or name accessor; tests probe the predictable names with `Link.visual_by_name`.
+- My handoff once said "everything as before" without the `docker run`; the user ran the in-container block on the host, which added `safe.directory '*'` to the global git config and colcon dirs to the repo (cleanup given). Every command block now names where it runs (memory: full-commands).
+### State
+Branch m5e-unpick-cooldown, not pushed. Validated: pytest 105 passed, 144 skipped; ruff; region name checks fail on e73f076 and pass now. GUI with the normal launch (GUI started with the server) UNVERIFIED until the user reruns it.
+### Open items
+- User: rerun with the normal launch (GUI together with the server).
+- Report the gz-sim GUI issues upstream: missed removal at startup, removals applied before creations without a visual timestamp check, null dereference after a failed CreateVisual.
+- Amiga does not push Plants when driving over beds (soil-only wheels, by design); a "trampled" visual only if a demo needs it.
