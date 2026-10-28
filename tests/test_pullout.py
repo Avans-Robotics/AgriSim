@@ -13,6 +13,7 @@ import trimesh
 
 from pixelfield.cli import main
 from pixelfield.core.spec import load_crop
+from pixelfield.exporters import gazebo
 from pixelfield.exporters.gazebo import plant
 
 REPO = Path(__file__).resolve().parents[1]
@@ -63,6 +64,13 @@ def test_build_writes_the_sdf_of_every_root_crop_plant(field):
         assert float(element.get("depth")) == pytest.approx(request["depth"])
         root = model.find("link[@name='root']")
         assert root.findtext("collision/surface/contact/collide_bitmask") == str(plant.ROOT_BITMASK)
+        # Leaves touch the soil through bit 1; no Plant collision has the soil-only bit 0.
+        leaves = [c for link in model.iter("link") if link.get("name") != "root"
+                  for c in link.iter("collision")]  # fmt: skip
+        assert leaves and all(c.findtext("surface/contact/collide_bitmask")
+                              == str(gazebo.PLANT_BITMASK) for c in leaves)  # fmt: skip
+        assert gazebo.PLANT_BITMASK & gazebo.SOIL_BITMASK and not plant.ROOT_BITMASK & 0x3
+        assert not gazebo.PLANT_BITMASK & 0x1 and not plant.ROOT_BITMASK & 0x1
         # The root hull and the articulated glb are shared per Variant, scaled by the model.
         uri = root.findtext("collision/geometry/mesh/uri")
         assert uri == f"meshes/{p['variant']}/root.obj" and (field / "plants" / uri).is_file()

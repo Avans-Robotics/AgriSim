@@ -17,6 +17,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from pixelfield import ROOT
 from pixelfield.exporters import gazebo
 
 STEP = gazebo.PHYSICS_STEP  # seconds per physics step
@@ -34,7 +35,8 @@ PULL_STEP = 0.001  # seconds
 PULL_SPEED = 0.05  # meters per second, the measurement protocol's suggested pull speed
 PULL_AFTER = 0.03  # meters lifted past the root depth before letting go
 DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the log
-SYSTEMS_BUILD = Path(__file__).resolve().parents[4] / "build" / "systems"
+SYSTEMS_BUILD = ROOT / "build" / "systems"
+REPICK_DELAY = 1.0  # seconds of sim time before an unpicked Plant can be picked again (PullOut.cc)
 NAMESPACE = "https://github.com/Avans-Robotics/AgriSim"  # of custom SDF elements
 ROOT_BITMASK = 0xFFFF & ~gazebo.SOIL_BITMASK  # the root collides with all but the soil
 
@@ -85,9 +87,10 @@ def plant_model(
                 _write_obj(obj, link["hull"])
             collision = ET.SubElement(element, "collision", name="collision")
             _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
-        for collision in element.findall("collision") if link["name"] == "root" else []:
+        bitmask = ROOT_BITMASK if link["name"] == "root" else gazebo.PLANT_BITMASK
+        for collision in element.findall("collision"):
             contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
-            _text(contact, "collide_bitmask", str(ROOT_BITMASK))
+            _text(contact, "collide_bitmask", str(bitmask))
         visual = ET.SubElement(element, "visual", name="visual")
         _text(visual, "pose", gazebo._join(gazebo.GLTF_TO_Z_UP))
         mesh = _mesh(visual, f"meshes/{glb.name}", s)
@@ -189,7 +192,7 @@ def write_plants(manifest: dict, out_dir: Path) -> int:
     rows = ["id\tx\ty\tz\tradius\theight\tcrown"]
     for p in manifest["plants"]:
         crop = manifest["crops"][p["crop"]]
-        variant = Path(crop["library"]) / p["variant"]
+        variant = ROOT / crop["library"] / p["variant"]
         if crop["pull_out_curve"] is None or not variant.with_suffix(".physics.json").is_file():
             continue
         first = variant not in variants
@@ -269,7 +272,7 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
     if "row_direction" not in crop:
         raise ValueError(f"{world_dir / 'manifest.json'} has no row direction: built before "
                          "M5d, rebuild it")  # fmt: skip
-    physics = json.loads((Path(crop["library"]) / p["variant"]).with_suffix(".physics.json")
+    physics = json.loads((ROOT / crop["library"] / p["variant"]).with_suffix(".physics.json")
                          .read_text())  # fmt: skip
     s = p["scale"]
     root = next(link for link in physics["links"] if link["name"] == "root")
@@ -283,7 +286,7 @@ def plant_info(world_dir: Path, plant_id: str) -> dict:
         "mass": sum(link["mass"] for link in physics["links"]) * s**3,
         "root_hull": [[c * s for c in v] for v in root["hull"]["vertices"]],
         "row_direction": crop["row_direction"],
-        "variant": str(Path(crop["library"]) / p["variant"]),  # library path without extension
+        "variant": str(ROOT / crop["library"] / p["variant"]),  # library path without extension
         "scale": s,
     }
 

@@ -12,6 +12,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from pixelfield import ROOT
 from pixelfield.core.layout import FieldLayout, to_manifest
 from pixelfield.exporters.colors import crop_colors
 
@@ -19,8 +20,8 @@ SDF_VERSION = "1.9"
 SOIL_THICKNESS = 0.02  # of the tile visuals
 # CC0 PBR soil (ambientCG Ground048) and its tiles with dry patches baked in (see
 # generators/soil.py), copied into textures/ next to world.sdf.
-SOIL_TEXTURES = Path("assets/library/textures/soil")
-SOIL_TILES = Path("assets/library/textures/soil_tiles")
+SOIL_TEXTURES = ROOT / "assets" / "library" / "textures" / "soil"
+SOIL_TILES = ROOT / "assets" / "library" / "textures" / "soil_tiles"
 SOIL_ATLAS = 4  # soil tiles per side of the baked atlas; tile (i, j) uses (i % 4, j % 4)
 SOIL_TILE = 1.0  # meters covered by one soil tile
 # Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
@@ -50,10 +51,14 @@ WORLD_NAME = "pixelfield"
 # Our pull-out system (ADR 0006), built into build/systems/ and found through
 # GZ_SIM_SYSTEM_PLUGIN_PATH; a world without it still runs, gz only logs that it is missing.
 PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
-# A picked root starts below the soil plane, so it must not collide with the soil: the soil
-# keeps bit 0 only and root collisions leave it out (plant.ROOT_BITMASK) until the detach.
-SOIL_BITMASK = 0x1
-# Active Region (ADR 0010): meters added around every robot link's box, and the footprint
+# Collide bits (robot interface 2, spec section 14). Bit 0 is the soil's alone: a robot
+# collision with collide_bitmask 0x1 touches the soil and no Plant, so a wheel can drive over a
+# bed without picking or crushing it. The soil also carries bit 1, shared with Plant leaves, so
+# leaves rest on the soil. A picked root starts below the soil plane, so root collisions leave
+# out both soil bits (plant.ROOT_BITMASK) until the detach.
+SOIL_BITMASK = 0x3
+PLANT_BITMASK = 0xFFFF & ~0x1  # every Plant collision lacks bit 0; leaves have all the others
+# Active Region (ADR 0010): meters added around every robot collision's box, and the footprint
 # radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
 # Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks
 # and the grip run at it (the scripted pull at its own plant.PULL_STEP). 2 ms runs the 10 x 10
@@ -122,7 +127,7 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
             links[p.pixel] = _model(world, "r{}c{}".format(*p.pixel), (ox, oy, 0.0, 0.0))
         link = links[p.pixel]
         visual = ET.SubElement(link, "visual", name=p.id)
-        mesh = Path(layout.crops[p.crop].library) / f"{p.variant}.glb"
+        mesh = ROOT / layout.crops[p.crop].library / f"{p.variant}.glb"
         if mesh.is_file():
             # ponytail: hue_shift ignored here, glb materials can't be tinted per Plant
             # without replacing them; add a per-Plant material if renders look too uniform.

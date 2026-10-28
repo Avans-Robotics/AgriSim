@@ -37,6 +37,8 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 ## Commands
 
 - Install: `uv sync`
+- Install in a robot image (ADR 0009): README section "Use in a robot repository" (clone a tag, `pip3 install --break-system-packages -e` the clone, build the systems against the image's gz-sim after `source /opt/ros/jazzy/setup.bash`, export `GZ_SIM_SYSTEM_PLUGIN_PATH`). Checked in `amiga-ros:jazzy` with amiga_ros2 unchanged.
+- Relative library paths (Crop definitions, Manifest) and the default `--crops` resolve against the checkout (`pixelfield.ROOT`), never the working directory, so every command works from any folder; outputs still default to `out/` in the working directory.
 - Build a world: `uv run pixelfield build examples/carrot_pixel.yaml` (writes `out/carrot_pixel/`: manifest.json, field.svg, world.sdf, meshes/, textures/, and plants/ with the SDF of every root crop Plant plus plants.tsv for the pull-out system; a 10 x 10 Field takes about 5 s and 150 MB)
 - Open it: `gz sim out/carrot_pixel/world.sdf`
 - Render camera images headless: `uv run pixelfield render out/carrot_pixel/world.sdf` (writes `renders/top.png`, `renders/oblique.png`, about 12 s)

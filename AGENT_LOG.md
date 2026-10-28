@@ -1022,3 +1022,97 @@ m5d-capsules (50d2372, 4b241f9) and m5d-active-region stacked on it (latest a61d
 - User: GUI check that the shaking is gone (`uv run pixelfield grip out/carrot_pixel r0c0-015 --gui`).
 - The intermittent check-script crash (stderr now captured); the 1 cm bent-leaf unpick tolerance has no automated test.
 - Merge m5d-capsules, then m5d-active-region; then M5e packaging.
+
+## 2026-10-23 M5e packaging and the Amiga in the Field
+### Goal & outcome
+User asked how far amiga_ros2 is from driving the Amiga in a Field, then said to finish M5e. Done: library paths independent of the cwd, install instructions for robot repositories (README, CLAUDE.md, spec 14), version 0.5.0 and a local tag `v0.5.0`, plus an Active Region fix found while answering. Container check in `amiga-ros:jazzy` with amiga_ros2 unchanged: clone of the tag, `pip3 install --break-system-packages -e`, systems built against the vendored gz-sim 8.15.0, Field built from another folder, launch: the Amiga stands in the Field with the pull-out system loaded. With the spawn pose in the gaps (temp copy of the launch, `-x 2.024 -y 1.5 -Y 1.5707963`) it stands and drives 10 m north at 1.0x, 3 edge Plants picked and all unpicked (perf.md, M5e section).
+### Decisions & why
+- Active Region tests one box per collision, not one per link (ADR 0010 amended): the Amiga's base_link holds the low wheel forks and the high cross tubes, so its single box picked 144 carrots under the chassis at about 0.01x. Found by reading the URDF before any run.
+- Relative library paths resolve against `pixelfield.ROOT` (the checkout), the Manifest keeps `assets/library/<crop>`: same Manifest on every machine, no format change. Needs an editable install from the clone, which ADR 0009 already prescribes; `build` refuses a non-editable install and a missing library folder loudly.
+- `SYSTEM_PYTHON` stays `/usr/bin/python3`: in a ROS image `source /opt/ros/jazzy/setup.bash` puts the vendored gz bindings (gz.sim8, gz.msgs10) on PYTHONPATH.
+- Tag kept local and moved with each commit: it must point at main after the merge, so the user tags the merge commit (or pushes this one).
+### Lessons / gotchas
+- `timeout` around `docker exec` kills only the client; processes inside the container keep running. Leftover servers in the same ROS domain (two controller managers) made later runs look hung. Clean container: no hang. Kill inside the container (a script file, so `pkill -f` does not match its own `bash -c`).
+- A stale .pyc after `git stash pop`: same mtime second and same byte size as the old source, so Python kept the old bytecode. Clear `__pycache__` after stash games.
+- The unchanged amiga_ros2 launch spawns at the Field origin, one wheel and fork on the carrots of r8c0/r8c1: 27 crushed Picked Plants that never unpick, 0.003x. A robot must spawn in the gaps or the Border (README, spec 14).
+- `amiga-ros:jazzy` has no pip and gz-rendering 8.2.3 (below the 8.3.0 floor; matters once it has a camera). EGL fails on the NVIDIA node with `/dev/dri`; headless sensors still ran.
+- In every launch, the empty world too, the `joint_state_broadcaster` spawner times out; only `lite6_traj_controller` activates. amiga_ros2 issue, driving is unaffected (gz DiffDrive).
+### State
+Branch m5e-packaging from main, commits a2c6a96, 95c50b3, 35f9e36, 9af4e39, local tag v0.5.0 on 9af4e39, not pushed. Validated: pytest 103 passed, 144 skipped (slow); ruff; region test fails against main's per-link system and passes now; cwd test fails without the path change; build, pull and grip from a scratch folder; container check and drive runs (on 95c50b3 code, later commits are docs, comments and the CLI refusals, tested on the host); validator agent (mesh, visual-only, nested and empty links; unpick with two-collision links; Manifest without machine paths).
+### Open items
+- User: push the branch, PR, merge, then tag `v0.5.0` on the merge commit and push the tag (the README clone command needs it on GitHub).
+- amiga_ros2 (their repo): spawn pose launch args (x, y, yaw), the joint_state_broadcaster timeout, gz-rendering 8.3.0 in the image, the pick service and pull_out bridges for harvesting.
+- `test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours` failed once in 4 full-suite runs, passed in 4 isolated runs; no traceback kept. Probably the M5d intermittent check-script failure.
+- Camera `<save>` paths in world.sdf (`renders/top`) are relative to the server's cwd: under `ros2 launch` any camera subscriber writes PNGs into the launch folder (the untracked `renders/` in the repo root). Pre-existing.
+- The 1 cm bent-leaf unpick tolerance still has no automated test.
+
+## 2026-10-26 Soil-only collide bit (robot interface 2)
+### Goal & outcome
+The user drove the Amiga into the carrots: RTF fell to 0.5%, carrots flew and the Amiga vanished. Spike with a 37 kg wheel rig over a carrot row (one Pixel, physics only) found the cost: a heavy wheel pressing gram-light leaves into the soil (0.03x); a wheel touching only the soil runs fast. Built fix (a): bit 0 belongs to the soil alone (soil 0x3, leaves 0xFFFE, roots 0xFFFC), the Active Region skips collisions that share no bit with the Plants, `robot_interface` 2. A wheel with `collide_bitmask` 0x1 picks nothing and runs at 2.1x on the rig; the default wheel is unchanged (0.09x, 10 picks).
+### Decisions & why
+- Soil gets a second bit (1) shared with leaves instead of dropping leaf-soil contact: leaves keep resting on the soil, so settle, squeeze and unpick behaviour stay as validated. Roots skip both soil bits.
+- Opt-out is robot-side (wheels and chassis set 0x1), zero config stays the default: a robot that keeps 0xFFFF behaves as in interface 1, except that 0x1 no longer touches leaves (hence the version bump).
+- Runaway guard (fix b) not built: the explosion was not reproduced in 2 to 4 s of rig sim; build it after a reproduction (suspect the Amiga's wheel-fork boxes bulldozing leaves).
+### Lessons / gotchas
+- Spike numbers (interface 1 bits): wheel on leaves+roots 0.03x, rides 2.3 cm up; leaves off the soil 0.07 to 0.1x; wheel on soil+leaves without roots 0.03x (roots are not the cost); soil-only wheel with 10 Picked Plants whose leaves rest on the soil 0.23x, leaves off the soil about 1x. Picked Plants cost on their own, so skipping the pick matters as much as skipping the contact.
+- A new region probe first sat at the same spot as an existing probe, so the old system passed too; a test probe must reach a Plant no other probe reaches, checked by running the old .so.
+- NVIDIA in the container: the toolkit is installed; `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all` injects the 595.99 EGL/GLX libs into amiga-ros:jazzy (checked), plus the PRIME and EGL vendor env vars. GUI on NVIDIA in the container UNVERIFIED.
+- gz.sim8 Python: `Link.world_pose` needs `import gz.math7` first, or pybind cannot convert the Pose3d.
+### State
+Branch m5e-soil-bit stacked on m5e-packaging, commit f626a43, not pushed. Local tag v0.5.0 still on m5e-packaging (9af4e39). Validated: pytest 104 passed, 144 skipped; ruff; region test fails against m5e-packaging's system and passes now; spike rerun on the new build (soil-only wheel 0 picks 2.1x, default wheel unchanged). Slow settle and squeeze not rerun (leaf-soil, leaf-leaf and root contacts unchanged by the bit choice). Amiga with 0x1 wheels UNVERIFIED (needs the amiga_description change).
+### Open items
+- amiga_description: `collide_bitmask` 0x1 on wheels and base collisions (URDF `<gazebo reference>` collision surface block; check the conversion with `gz sdf -p`). Then the user drives into the beds again.
+- Tag: merge m5e-packaging and m5e-soil-bit, then tag v0.5.0 on the merge so the release carries interface 2.
+- Fix (b) runaway guard after reproducing the explosion (fork box rig, about 2 to 3 min on one Pixel).
+- From M5e: amiga_ros2 spawn pose args, joint_state_broadcaster timeout, gz-rendering 8.3.0; camera save path relative to the cwd; the flaky full-Pixel grip test.
+
+## 2026-10-26 Amiga chassis and wheels on the soil-only bit
+### Goal & outcome
+In amiga_description (branch feat/soil-only-collisions, 67c9ae1, not pushed): `collide_bitmask` 0x01 on base_link and the four wheels. Container drive test (pixelfield m5e-soil-bit, local amiga_description mounted over the image's v0.5.1): the Amiga spawned in a gap heading 0.8 rad drove 0.3 m/s diagonally across the beds for about 15 m at 0.95 to 1.0x, 3 Plants picked (arm and arm platform keep the default bits), z stays on the soil. Row added to perf.md.
+### Decisions & why
+- Opt-out lives in the robot description, not in pixelfield: other worlds are unaffected (ground planes and obstacles use 0xFFFF, which shares bit 0), the real robot ignores `<gazebo>` tags, Amiga_ws has its own amiga_description copy, and amiga_ros2's image pins v0.5.1 until someone bumps it.
+### Lessons / gotchas
+- sdformat URDF conversion: a second `<gazebo reference>` block with a `<collision><surface>` blob for a link replaces the friction set by `mu1`/`mu2`/`fdir1` in an earlier block (the wheels came out with an empty `<friction/>`). The blob must sit in the same block as the friction tags; checked by diffing `gz sdf -p` output against main (only the 13 bitmask lines and empty default surface elements on the 9 base boxes are added, wheel mu kept, prefix works).
+- Collisions lumped from base_link into base_footprint keep the extension's bitmask; collisions lumped from child links (amiga_ros2's arm platform) do not.
+- The scratchpad was emptied between sessions; keep container scripts reproducible from the log, not from scratch files.
+### State
+pixelfield m5e-soil-bit (f626a43 plus this log and the perf row), amiga_description feat/soil-only-collisions 67c9ae1, both not pushed. Validated: `gz sdf -p` diff of the Amiga model; container drive test above. Explosion while driving into beds with the default bits not reproduced; with the new bits it cannot happen through wheel or chassis contact.
+### Open items
+- User: drive into the beds in the GUI with the local amiga_description (mount it over /ros2_ws/src/amiga_description and `colcon build --packages-select amiga_description`).
+- amiga_description: PR, tag (v0.6.0?), then amiga_ros2 bumps its pin. Merge pixelfield m5e-packaging and m5e-soil-bit, tag v0.5.0 on the merge.
+- The arm platform lumped into base_footprint by amiga_ros2 keeps the default bits; set 0x1 there too if it ever reaches into the foliage.
+
+## 2026-10-26 GUI crash on unpick: 1 s re-pick delay
+### Goal & outcome
+The user's GUI run (Amiga with soil-only chassis and wheels) crashed: `Another item already exists with name: r7c2::link::r7c2-012`, then a segfault in `SceneManager::CreateVisual`. Cause: an unpick rebuilt the Plant's static visual and a quick re-pick (the arm or arm platform, default bits, at the bed edge) removed it within one GUI frame; gz-sim's `RenderUtil::Update` applies removals before creations and checks timestamps only for models, so the visual stayed as a ghost and the next unpick duplicated its name. Fix on m5e-unpick-cooldown (e73f076): an unpicked Plant cannot be picked again for 1 s of sim time (region skips it, the pick service refuses it). ADR 0010 and spec 14 amended.
+### Decisions & why
+- Cooldown over unique visual names: unique names would avoid the crash but leave ghost Plants in the GUI.
+- 1 s of sim time spans many GUI frames even at 10x real time; the cost is a robot passing through that one Plant's static visual during that second.
+### Lessons / gotchas
+- Headless servers did not show it: the Sensors system's render update runs every step, so creation and removal never share a batch. GUI-only races need a GUI run or reading gz-sim's RenderUtil (gz-sim8 `src/rendering/RenderUtil.cc`).
+- In the region test, Plants of one group unpick at very different times (2.3 s, 4.8 s, 6.8 s after the probe left), so a test on re-pick timing must use the latest unpick and expect earlier ones at the return.
+- The null dereference after a failed `CreateVisual` is a gz-sim bug worth reporting upstream.
+### State
+Branch m5e-unpick-cooldown stacked on m5e-soil-bit, commit e73f076, not pushed. Validated: pytest 105 passed, 144 skipped; ruff; the new test fails against m5e-soil-bit's system (re-picked 0.11 s after the unpick) and passes now. GUI rerun by the user UNVERIFIED.
+### Open items
+- User: rerun the GUI drive with branch m5e-unpick-cooldown.
+- Report the CreateVisual null dereference to gz-sim.
+- amiga_ros2 arm platform: bitmask 0x1 so it stops picking edge Plants.
+- Merge order: m5e-packaging, m5e-soil-bit, m5e-unpick-cooldown; tag v0.5.0 on the last merge.
+
+## 2026-10-26 GUI crash at the first unpick: rebuilt visuals get new names
+### Goal & outcome
+The cooldown (e73f076) did not stop the user's GUI crash: it always hit r7c2-012 at its first unpick, after the Amiga spawned next to it (0.25 m from the arm platform) and the user drove off without touching any Plant. Started with `-s` and the GUI attached after the spawn, the same drive did not crash, so the GUI missed the pick's removal of the static visual during its startup. Fix (this commit): an unpick rebuilds the static visual as `<id>~<n>` and the pull-out system tracks the current name. Region tests check `~1` and `~2` names and one visual per Plant; both checks fail on e73f076.
+### Decisions & why
+- New names over trying to detect the GUI: the race lives in gz-sim's GUI and depends on GPU and load timing; a unique name makes a duplicate impossible whatever the timing. Cost: a GUI that missed a removal shows a stale copy, visible only once that Plant is pulled out.
+- The 1 s re-pick delay stays: it covers the create-and-remove-in-one-frame ghost.
+### Lessons / gotchas
+- Four Xvfb (llvmpipe) GUI reproductions did not crash (picks during GUI load, flapping, 10 x 10 Field); the race needs the real GPU's timing. The user's `-s` plus later `gz sim -g` run was the discriminating test.
+- gz.sim8 Python has no Visual class or name accessor; tests probe the predictable names with `Link.visual_by_name`.
+- My handoff once said "everything as before" without the `docker run`; the user ran the in-container block on the host, which added `safe.directory '*'` to the global git config and colcon dirs to the repo (cleanup given). Every command block now names where it runs (memory: full-commands).
+### State
+Branch m5e-unpick-cooldown, not pushed. Validated: pytest 105 passed, 144 skipped; ruff; region name checks fail on e73f076 and pass now. GUI with the normal launch (GUI started with the server) UNVERIFIED until the user reruns it.
+### Open items
+- User: rerun with the normal launch (GUI together with the server).
+- Report the gz-sim GUI issues upstream: missed removal at startup, removals applied before creations without a visual timestamp check, null dereference after a failed CreateVisual.
+- Amiga does not push Plants when driving over beds (soil-only wheels, by design); a "trampled" visual only if a demo needs it.

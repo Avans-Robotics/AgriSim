@@ -15,7 +15,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-TEXTURES = Path("assets/library/textures")
+from pixelfield import ROOT
+
+TEXTURES = ROOT / "assets" / "library" / "textures"
 PERIOD = 4  # atlas tiles per side; the soil pattern repeats every PERIOD meters
 DRY_COVER = 0.35  # fraction of the soil in dry patches
 DRY_MIX = 0.45  # share of the dry soil inside a patch; mild, so the base soil still shows

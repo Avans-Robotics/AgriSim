@@ -66,7 +66,7 @@ def probe(name, x, y, z, offset=(0.0, 0.0, 0.0), half=HALF, yaw=0.0):
     """A cube of side 2 half centred at (x, y, z), turned by yaw in its link, the link moved
     by -offset."""
     return {"name": name, "pose": [x - offset[0], y - offset[1], z - offset[2]],
-            "size": [2 * half] * 3, "offset": [*offset, 0.0, 0.0, yaw]}  # fmt: skip
+            "size": [2 * half] * 3, "offsets": [[*offset, 0.0, 0.0, yaw]]}  # fmt: skip
 
 
 @needs_system
@@ -104,6 +104,30 @@ def test_boxes_pick_the_plants_whose_crown_footprint_they_meet(field):
     assert north not in set().union(*expected.values())
     expected["turned"] = meets(plants, centre, (reach, reach, TURNED))
     assert north in expected["turned"]
+
+    # Two cubes in one link, west and east of the Pixel, like the wheel forks of a robot base
+    # straddling a bed: the box of the whole link would hold every Plant at that y, each
+    # cube's box holds none.
+    west_x = pw["x"] - pw["crown"] - PAD - HALF - 0.01
+    east_x = pe["x"] + pe["crown"] + PAD + HALF + 0.01
+    mid = (west_x + east_x) / 2
+    span = {"name": "span", "pose": [mid, pa["y"], z], "size": [2 * HALF] * 3,
+            "offsets": [[west_x - mid, 0, 0, 0, 0, 0], [east_x - mid, 0, 0, 0, 0, 0]]}  # fmt: skip
+    probes.append(span)
+    assert a in meets(plants, (mid, pa["y"], z), ((east_x - west_x) / 2 + HALF, HALF, HALF))
+    expected["span"] = meets(plants, (west_x, pa["y"], z), (HALF,) * 3) | meets(
+        plants, (east_x, pa["y"], z), (HALF,) * 3
+    )
+    assert not expected["span"]
+
+    # A soil-only box (collide bitmask 0x1, like a wheel meant to drive over beds) right over
+    # the southmost Plant, which no other box reaches, picks nothing.
+    south = min(plants, key=lambda n: plants[n]["y"])
+    ps = plants[south]
+    assert south not in set().union(*expected.values())
+    assert south in meets(plants, (ps["x"], ps["y"], z), (HALF,) * 3)  # if it could touch
+    probes.append({**probe("soil_only", ps["x"], ps["y"], z), "bitmask": 1})
+    expected["soil_only"] = set()
 
     r = run(field, probes, pick=a)
     assert set(r["picked"]) == set().union(*expected.values())
@@ -152,9 +176,50 @@ def test_plants_left_alone_turn_static_and_can_be_picked_again(field):
     assert set(r["picked"]) == near_east | near_west
     assert set(r["visuals_then"]) == set(plants) - near_west  # static again before the return
     assert set(r["visuals"]) == set(plants) - near_east - near_west
+    # A rebuilt static visual has a new name, so a gz GUI that missed a removal cannot crash on
+    # a duplicate (PullOut.cc, kRepickDelay).
+    untouched = set(plants) - near_east - near_west
+    assert set(r["visual_names_then"]) == untouched | {f"{i}~1" for i in near_east}
+    assert set(r["visual_names"]) == untouched
 
 
 def test_the_world_sets_the_region_knobs(field):
     element = ET.parse(field / "world.sdf").find(".//plugin[@name='pixelfield::PullOut']")
     assert float(element.findtext("padding")) == PAD
     assert element.findtext("footprint") == "crown"
+
+
+@needs_system
+def test_an_unpicked_plant_waits_a_second_before_it_is_picked_again(field):
+    # The gz GUI leaves a ghost of a static visual rebuilt and removed in the same frame, then
+    # crashes on the next unpick of that Plant, so a robot returning right away waits.
+    plants = table(field)
+    east = max(plants, key=lambda n: plants[n]["x"])
+    pe = plants[east]
+    step = gazebo.PHYSICS_STEP
+    probes = [probe("visitor", pe["x"], pe["y"], 0.1)]
+    away = [{"at": round(0.2 / step), "probe": "visitor", "to": [-1.0, -1.0, 0.1]}]
+    first = run(field, probes, steps=round(8.0 / step), moves=away)
+    unpicked = {p: t for p, event, t in first["events"] if event == "unpicked"}
+    assert east in unpicked  # the group comes to rest within 8 s, as in the test above
+    back = max(unpicked.values()) + 0.1  # inside the cooldown of the last one unpicked
+    leave = back + 1.5  # after every re-pick
+    moves = [*away, {"at": round(back / step), "probe": "visitor", "to": [pe["x"], pe["y"], 0.1]},
+             {"at": round(leave / step), "probe": "visitor", "to": [-1.0, -1.0, 0.1]}]  # fmt: skip
+    r = run(field, probes, steps=round((leave + 8.0) / step), moves=moves)
+    events = {}
+    for plant_id, event, t in r["events"]:
+        events.setdefault(plant_id, []).append((event, t))
+    assert any(t + plant.REPICK_DELAY > back for t in unpicked.values())  # one still cooling
+    for plant_id, t_unpick in unpicked.items():
+        assert [e for e, _ in events[plant_id]][:3] == ["picked", "unpicked", "picked"], plant_id
+        # Picked again at the first region check (every 10 ms) once both the probe is back and
+        # the cooldown is over.
+        due = max(t_unpick + plant.REPICK_DELAY, back)
+        assert due <= events[plant_id][2][1] < due + 0.05, plant_id
+    # Left alone again: each rebuild has a new name, and every Plant has one static visual.
+    twice = {i for i, e in events.items() if [event for event, _ in e].count("unpicked") == 2}
+    assert east in twice
+    names = r["visual_names"]
+    assert len(names) == len({n.split("~")[0] for n in names}) == len(plants)
+    assert {f"{i}~2" for i in twice} <= set(names)

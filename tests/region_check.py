@@ -3,13 +3,15 @@
 Usage: region_check.py <world.sdf> <config json>
 
 Config: probes (static models added to a copy of the world, each one box link: name, pose
-[x, y, z] of the link, size [x, y, z] of its box, offset [x, y, z, roll, pitch, yaw] of the
-box's collision in the link), steps, pick (a Plant id to request by id after the first step,
-or null), moves (optional, [{"at": step, "probe": name, "to": [x, y, z]}]), snapshot
-(optional step at which to also report the visuals as visuals_then). Prints one JSON
+[x, y, z] of the link, size [x, y, z] of its boxes, offsets: [x, y, z, roll, pitch, yaw] of
+each box's collision in the link, bitmask: optional collide bitmask of the boxes), steps,
+pick (a Plant id to request by id after the first step, or null), moves (optional,
+[{"at": step, "probe": name, "to": [x, y, z]}]), snapshot (optional step at which to also
+report the visuals as visuals_then). Prints one JSON
 line: the root crop Plants that are models at the end, the pick reply (null without a pick),
-the state topic's events as [plant, event, sim time] in order, and the Plants whose static
-visual is in their Pixel model at the end.
+the state topic's events as [plant, event, sim time] in order, the Plants whose static
+visual is in their Pixel model at the end, and the names of those visuals (<id>, or <id>~<n>
+after the n-th rebuild by an unpick).
 """
 
 import json
@@ -31,12 +33,15 @@ rows = (world_sdf.parent / "plants" / "plants.tsv").read_text().splitlines()[1:]
 ids = [row.split("\t")[0] for row in rows]
 
 
-def probe(name, pose, size, offset):
+def probe(name, pose, size, offsets, bitmask=None):
     j = " ".join
+    surface = (f"<surface><contact><collide_bitmask>{bitmask}</collide_bitmask></contact>"
+               "</surface>" if bitmask is not None else "")  # fmt: skip
+    boxes = "".join(f'<collision name="box{i}"><pose>{j(map(str, offset))}</pose>'
+                    f"<geometry><box><size>{j(map(str, size))}</size></box></geometry>"
+                    f"{surface}</collision>" for i, offset in enumerate(offsets))  # fmt: skip
     return (f'<model name="{name}"><static>true</static><pose>{j(map(str, pose))} 0 0 0</pose>'
-            f'<link name="link"><collision name="box"><pose>{j(map(str, offset))}</pose>'
-            f"<geometry><box><size>{j(map(str, size))}</size></box></geometry></collision>"
-            "</link></model>")  # fmt: skip
+            f'<link name="link">{boxes}</link></model>')  # fmt: skip
 
 
 copy = world_sdf.with_name(".region.sdf")
@@ -45,7 +50,8 @@ text = re.sub(r"<real_time_factor>[^<]*<", "<real_time_factor>0<", world_sdf.rea
 copy.write_text(text.replace("</world>", models + "</world>", 1))
 set_verbosity(1)
 fixture = TestFixture(str(copy))
-picked, visuals, visuals_then, events = [], [], [], []
+picked, visuals, visuals_then, events, names, names_then = [], [], [], [], [], []
+REBUILDS = 5  # rebuilt visual names looked for per Plant
 moves = {m["at"]: m for m in config.get("moves", [])}
 
 
@@ -67,9 +73,13 @@ def post_update(info, ecm):
     picked[:] = [i for i in ids if world.model_by_name(ecm, i)]
     links = [Link(link) for i in {i.split("-")[0] for i in ids}
              for link in Model(world.model_by_name(ecm, i)).links(ecm)]  # fmt: skip
-    visuals[:] = [i for i in ids if any(link.visual_by_name(ecm, i) for link in links)]
+    # A static visual is named by its Plant id, <id>~<n> after its n-th rebuild by an unpick.
+    names[:] = [n for i in ids for n in [i, *(f"{i}~{k}" for k in range(1, REBUILDS + 1))]
+                if any(link.visual_by_name(ecm, n) for link in links)]  # fmt: skip
+    visuals[:] = [i for i in ids if any(n.split("~")[0] == i for n in names)]
     if info.iterations == config.get("snapshot"):
         visuals_then[:] = visuals
+        names_then[:] = names
 
 
 fixture.on_pre_update(pre_update)
@@ -91,4 +101,5 @@ try:
 finally:
     copy.unlink()
 print(json.dumps({"picked": picked, "requested": requested, "events": events,
-                  "visuals": visuals, "visuals_then": visuals_then}))  # fmt: skip
+                  "visuals": visuals, "visuals_then": visuals_then, "visual_names": names,
+                  "visual_names_then": names_then}))  # fmt: skip

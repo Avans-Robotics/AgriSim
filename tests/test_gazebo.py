@@ -59,7 +59,9 @@ def test_soil_collision_is_a_plane_on_the_soil_bit(mixed):
     assert collision.findtext("surface/contact/collide_bitmask") == str(gazebo.SOIL_BITMASK)
 
 
-def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0, -9.81)):
+def _ground_world(
+    world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0, -9.81), bitmask=None
+):
     """The Field's soil model alone, plus a 1 kg box, unthrottled, physics only."""
     sdf = ET.Element("sdf", version=gazebo.SDF_VERSION)
     world = ET.SubElement(sdf, "world", name=name)
@@ -86,6 +88,9 @@ def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0
     if mu is not None:
         ode = ET.SubElement(ET.SubElement(ET.SubElement(collision, "surface"), "friction"), "ode")
         ET.SubElement(ode, "mu").text = ET.SubElement(ode, "mu2").text = str(mu)
+    if bitmask is not None:
+        contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
+        ET.SubElement(contact, "collide_bitmask").text = str(bitmask)
     path = world_sdf.with_name(f"{name}.sdf")
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
     result = subprocess.run(
@@ -96,10 +101,11 @@ def _ground_world(world_sdf, name, box_xyz, box_size, mu=None, gravity=(0.0, 0.0
 
 
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
-def test_a_box_dropped_beyond_the_border_lands(mixed):
+@pytest.mark.parametrize("bitmask", [None, 0x1])  # default, and soil-only (robot interface 2)
+def test_a_box_dropped_beyond_the_border_lands(mixed, bitmask):
     world_sdf, manifest = mixed
     x = -manifest["field"]["border"] - 1.0  # 1 m west of the textured soil
-    report = _ground_world(world_sdf, "drop", (x, 0.0, 0.5), (0.1, 0.1, 0.1))
+    report = _ground_world(world_sdf, "drop", (x, 0.0, 0.5), (0.1, 0.1, 0.1), bitmask=bitmask)
     assert report["max_travel"] == pytest.approx(0.45, abs=0.01)  # rests at z = 0.05; falls 4.9 m
     # Resting contact reads just under 1 mm/s in DART; a box falling for 1 s reaches 9.8 m/s.
     assert report["max_speed_after"] < 0.01 and not report["nan"]
@@ -145,6 +151,38 @@ def test_plants_use_copied_variant_meshes(mixed):
         assert (world_sdf.parent / "meshes" / f"{p['variant']}.glb").is_file()
         scale = [float(v) for v in model.findtext(".//mesh/scale").split()]
         assert scale == pytest.approx([p["scale"]] * 3, abs=1e-4)  # Manifest rounds to 4
+
+
+def test_build_and_pick_info_work_from_any_working_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # default Crop folder and library resolve against the checkout
+    main(["build", str(REPO / "examples" / "carrot_pixel.yaml")])
+    out = tmp_path / "out" / "carrot_pixel"
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["crops"]["carrot"]["library"] == "assets/library/carrot"  # same on any machine
+    assert (out / "textures" / "normal.jpg").is_file()
+    assert (out / "meshes" / f"{manifest['plants'][0]['variant']}.glb").is_file()
+    rows = (out / "plants" / "plants.tsv").read_text().splitlines()[1:]
+    assert len(rows) == len(manifest["plants"])
+    info = plant.plant_info(out, manifest["plants"][0]["id"])
+    assert Path(info["variant"]).with_suffix(".physics.json").is_file()
+
+
+def test_build_refuses_a_missing_library_and_a_checkout_without_assets(
+    tmp_path, monkeypatch, capsys
+):
+    crops = tmp_path / "crops"
+    crops.mkdir()
+    shutil.copy(REPO / "crops" / "carrot.yaml", crops)
+    lettuce = (REPO / "crops" / "lettuce.yaml").read_text()
+    (crops / "lettuce.yaml").write_text(lettuce.replace("assets/library/lettuce", "mylib/lettuce"))
+    args = ["build", str(REPO / "examples" / "mixed.yaml"), "-o", str(tmp_path / "out")]
+    with pytest.raises(SystemExit):
+        main([*args, "--crops", str(crops)])
+    assert "no Asset Library folder" in capsys.readouterr().err
+    monkeypatch.setattr("pixelfield.cli.ROOT", tmp_path)  # as a non-editable install sees it
+    with pytest.raises(SystemExit):
+        main(args)
+    assert "install pixelfield editable" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
