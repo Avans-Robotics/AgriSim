@@ -1138,3 +1138,15 @@ Branch m5f-venue, commit 5c2974d, not pushed. Validated: pytest 113 passed, 144 
 - User: confirm the real bed layout (3 x 8 with paths, or 4 x 8 with wheels on the soil) and the greenhouse size and bed position; adjust `examples/avans_kas.yaml`.
 - User: push m5f-venue, PR, merge; amiga_ros2 then pins the merge commit (or 5c2974d) and adds kas spawn support (pavers from Manifest `venue.bounds`).
 - `venue: null` in a spec raises like `border: null`; make it mean "no Venue" if anyone writes that.
+
+## 2026-10-28 Avans greenhouse: 4 pavers each side
+### Goal & outcome
+The user asked for a narrower floor: 4 pavers west and east of the bed. Option (a) chosen by the user: the whole greenhouse narrows to 8.808 m (4.008 m soil plus 2 x 2.4 m), length stays 25 m; only `examples/avans_kas.yaml` changed, plus docs and a test on the venue bounds.
+### Decisions & why
+- Narrower greenhouse over a 12 m greenhouse with a second floor type beyond the pavers: matches "about 4 tiles on each side" of the real kas with no code change. The ridge drops to about 6.05 m (pitch fixed).
+### Lessons / gotchas
+- The stone wall stands on the outer 0.25 m of the 4th west paver (inside the footprint by design).
+### State
+Branch m5f-venue, commit after 5c2974d (see git log), not pushed. Validated: fast tests (core, gazebo, pavers) 71 passed; ruff; `gz sdf -k`; overhead render shows 4 pavers east of the bed. The perf row was measured at 12 x 25 m (same 4 visuals, not re-measured).
+### Open items
+- User: confirm the real bed layout and the greenhouse length; push, PR, merge; amiga_ros2 pins the merge commit.
