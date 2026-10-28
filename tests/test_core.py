@@ -271,3 +271,65 @@ def test_avans_kas_example_gaps_fit_the_wheel_track():
     assert (west, east) == pytest.approx((-spec.border - 2.4, spec.width + spec.border + 2.4))
     assert {crop for row in spec.grid for crop in row} == {"carrot", "beetroot", "radish",
                                                           "lettuce"}  # fmt: skip
+
+
+def test_crop_overrides_replace_file_values_before_the_checks():
+    path = REPO / "crops" / "carrot.yaml"
+    crop = load_crop(path, {"planting.in_row_spacing": 0.1, "variation.scale": [0.9, 1.1]})
+    assert (crop.planting.in_row_spacing, crop.scale) == (0.1, (0.9, 1.1))
+    assert crop.planting.row_spacing == CARROT.planting.row_spacing  # the rest from the file
+    xs = sorted({round(x, 3) for x, _ in planting_positions(crop.planting, 0.5, 0.0)})
+    assert [round(b - a, 3) for a, b in pairwise(xs)] == [0.1] * (len(xs) - 1)
+    for key, value, match in [("planting.in_row_spacng", 0.1, "no value of"),
+                              ("name", "x", "no value of"), ("planting", 1, "no value of"),
+                              ("planting.in_row_spacing", 0, "planting needs"),
+                              ("planting.missing_rate", 1.0, "planting needs"),
+                              ("variation.hue_shift", [0, 0], "no value of"),
+                              ("planting.jitter", "wide", "needs a value like"),
+                              ("planting.margin", True, "needs a value like"),
+                              ("planting.jitter", float("nan"), "needs a value like"),
+                              ("variation.scale", [0.5, 1, 2], "needs a value like"),
+                              ("assets.library", {"a": 1}, "needs a value like"),
+                              ("variation.scale", [0.0, 0.0], "0 < low <= high"),
+                              ("physics.pull_out_force", [-5.0, -1.0], "0 <= low <= high"),
+                              ("assets.variants", 2.5, "whole number")]:  # fmt: skip
+        with pytest.raises(ValueError, match=match):
+            load_crop(path, {key: value})
+
+
+def test_a_margin_narrower_than_the_widest_root_is_refused(tmp_path):
+    path = tmp_path / "spec.yaml"
+    path.write_text("seed: 42\nlegend:\n  C: carrot\ngrid: |\n  C\n")
+    crop = load_crop(REPO / "crops" / "carrot.yaml", {"planting.margin": 0.02})
+    with pytest.raises(ValueError, match="neighbouring Pixels"):  # widest carrot root 2.27 cm
+        build_layout(load_field_spec(path), {"carrot": crop})
+
+
+def test_build_set_overrides_one_crop_and_records_it(tmp_path, capsys):
+    args = ["build", str(REPO / "examples" / "avans_kas.yaml"), "--crops", str(REPO / "crops")]
+    main([*args, "-o", str(tmp_path / "plain")])
+    main([*args, "-o", str(tmp_path / "set"), "--set", "carrot.planting.in_row_spacing=0.10"])
+    plain, wide = (json.loads((tmp_path / name / "manifest.json").read_text())
+                   for name in ("plain", "set"))  # fmt: skip
+    assert "crop_overrides" not in plain  # builds without overrides are unchanged
+    assert wide["crop_overrides"] == {"carrot.planting.in_row_spacing": 0.1}
+    by_crop = [{c: [p for p in m["plants"] if p["crop"] == c] for c in ("carrot", "radish")}
+               for m in (plain, wide)]  # fmt: skip
+    assert len(by_crop[1]["carrot"]) < 0.5 * len(by_crop[0]["carrot"])
+    assert by_crop[1]["radish"] == by_crop[0]["radish"]  # other Crops untouched
+    for bad, message in [("carot.planting.in_row_spacing=0.1", "not a Crop of this Field"),
+                         ("carrot.planting.in_row_spacing", "expected CROP.KEY=VALUE"),
+                         ("carrot.planting.jitter=[", "while parsing"),
+                         ("carrot.planting.margin=0.01", "neighbouring Pixels")]:  # fmt: skip
+        with pytest.raises(SystemExit):
+            main([*args, "-o", str(tmp_path / "bad"), "--set", bad])
+        assert message in capsys.readouterr().err
+    twice = [
+        "--set",
+        "carrot.planting.in_row_spacing=0.08",
+        "--set",
+        "carrot.planting.in_row_spacing=0.1",
+    ]
+    with pytest.raises(SystemExit):
+        main([*args, "-o", str(tmp_path / "bad"), *twice])
+    assert "set twice" in capsys.readouterr().err

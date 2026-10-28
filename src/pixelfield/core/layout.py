@@ -79,6 +79,12 @@ def build_layout(spec: FieldSpec, crops: dict[str, Crop]) -> FieldLayout:
             raise ValueError(f"{name}: no root size for each of its {crop.variants} Variants in "
                              f"{ROOT / crop.library}/variants.json, needed to keep roots "
                              "apart")  # fmt: skip
+        # Plants stay `margin` inside their Pixel, so this keeps roots in neighbouring Pixels apart
+        widest = max(roots[name]) * max(crop.scale) if roots[name] else 0.0
+        if widest > crop.planting.margin:
+            raise ValueError(f"{name}: planting margin {crop.planting.margin} m is below its "
+                             f"widest root radius {widest:.6f} m (largest Variant at the largest "
+                             "scale), so roots in neighbouring Pixels could overlap")  # fmt: skip
     for row, names in enumerate(spec.grid):
         for col, name in enumerate(names):
             origin = (spec.column_x(col), (spec.rows - 1 - row) * spec.pixel_size)
@@ -166,7 +172,7 @@ def _plant_pixel(
 
 def to_manifest(layout: FieldLayout) -> dict:
     spec = layout.spec
-    return {
+    manifest = {
         "format_version": MANIFEST_FORMAT_VERSION,
         "robot_interface": ROBOT_INTERFACE_VERSION,
         "field": {
@@ -232,3 +238,10 @@ def to_manifest(layout: FieldLayout) -> dict:
             for p in layout.plants
         ],
     }
+    # values set over the crop files at build time; absent when there are none
+    overrides = {f"{name}.{key}": value for name, crop in layout.crops.items()
+                 for key, value in crop.overrides}  # fmt: skip
+    overrides = dict(sorted(overrides.items()))
+    if overrides:
+        manifest["crop_overrides"] = overrides
+    return manifest
