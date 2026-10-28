@@ -160,7 +160,11 @@ assets:
   stage: harvest         # growth stage slot in Variant names, optional (ADR 0008)
 ```
 
-Roots never overlap (M5d): real roots cannot share space, and two Picked Plants anchored inside each other fight forever in the physics engine. When a Plant's root (its Variant's root radius from the library's `variants.json`, times its scale) would overlap one placed before it in the same Pixel, its jitter is drawn again, up to 20 times, and it is left out if it still does not fit. Touching roots are fine. The margins keep roots in neighbouring Pixels apart for the current Crops. In `random_10x10.yaml` this moves 845 of 2,760 Plants (by 2 cm median, at most 6 cm) and leaves out 47.
+Roots never overlap (M5d): real roots cannot share space, and two Picked Plants anchored inside each other fight forever in the physics engine. When a Plant's root (its Variant's root radius from the library's `variants.json`, times its scale) would overlap one placed before it in the same Pixel, its jitter is drawn again, up to 20 times, and it is left out if it still does not fit. Touching roots are fine. Plants stay `margin` inside their Pixel, so roots in neighbouring Pixels stay apart as long as the margin is at least the widest root radius (largest Variant at the largest scale); a build refuses a root crop whose margin is narrower (M5g). In `random_10x10.yaml` this moves 845 of 2,760 Plants (by 2 cm median, at most 6 cm) and leaves out 47.
+
+A build checks the Planting Pattern (numbers only, spacings above 0, margin and jitter of at least 0, `missing_rate` in [0, 1)), `scale` (0 < low <= high), `pull_out_force` (0 <= low <= high) and `variants` (a whole number of at least 1).
+
+Overrides (M5g): `pixelfield build <spec> --set <crop>.<key path>=<value>` replaces one value of a Crop's definition for that build, for example `--set carrot.planting.in_row_spacing=0.10` (carrots 10 cm apart in the row, so a gripper's jaws close on one Plant's stalks only). Repeat `--set` for more values. The value is parsed as YAML and replaces the file's before any check, so the checks above apply to it. Only Crops of the Field and values that exist in the crop file and that a build uses can be overridden (not `name`, `hue_shift` or `generator`), each key once, and the new value must be of the same kind as the file's: a finite number for a number, a list of as many numbers for a list, a string for a string. A typo is an error. Write numbers with a dot (`1.0e-1`, not `1e-1`, which YAML reads as a string). Overrides are a property of the Field (plant density, spacing), not of a robot, and are recorded in the Manifest as `crop_overrides`.
 
 ## 7. Field Layout and Manifest
 
@@ -196,6 +200,8 @@ The Field Layout is the only thing Exporters read. It is written next to every e
   ]
 }
 ```
+
+`crop_overrides` (M5g) maps each `--set` key to its value, for example `{"carrot.planting.in_row_spacing": 0.1}`; the key is absent when the build had none, so such builds are unchanged. With `spec_sha256`, the Crop files and the pixelfield commit, it reproduces the Field.
 
 `venue` is `null` without a Venue; `bounds` is its footprint as (west, south, east, north), paved outside the soil (M5f, an added key, so `format_version` stays 1).
 
@@ -268,8 +274,9 @@ M5 chunks (decisions in [ADR 0009](../adr/0009-robot-free-world-provider.md) and
 | M5b | Ground for robots: soil collision as an infinite plane, Field Spec `border`, Manifest `field.path_gaps` and `robot_interface` version, `examples/amiga_10x10.yaml` | The example builds; its SVG shows the gaps where the Manifest says; a box dropped beyond the Border lands; a pick and pull still pass (root bitmask unchanged); tests |
 | M5c | Pick by id: `build` writes `plants/<id>.sdf` for root crop Plants plus the table the system reads, the system loads the file, Python `pick` sends only the id; the state topic publishes on change plus events; a scripted pull with non-zero `pull_out_damping` | `pixelfield pick` in a running world; `gz topic -e` is silent for a resting Picked Plant; `pull.csv` unchanged; build time and `out/` size recorded |
 | M5d | Spike first: a full carrot Pixel picked at once (leaf drift, RTF); it failed, see ADR 0010. Then petiole collisions as capsules (ADR 0006), and the Active Region in the pull-out system: any non-Field link's box plus padding picks the root crop Plants whose crown footprint it meets | The M4e test gripper pulling one carrot pushes its neighbours instead of passing through (GUI, by the maintainer). In a slot: settle check at scale 0.85 and 1.15, the slow squeeze over all 72 Variants, perf rows (pass: the test gripper grasping a mid-Pixel carrot in the 10 x 10 Field with the OAK-D rig runs as fast as the rig alone allows, at least 0.8x; measured 0.97x at a 2 ms step) |
-| M5f | Venue: optional Field Spec `venue` (paver floor around the soil, glass greenhouse with frame and low stone wall, visuals only), soil tiles fitted to the Border, Manifest `venue`, `examples/avans_kas.yaml` | The example builds and passes `gz sdf -k`; a render shows pavers joined to the bed edge, see-through glass, frame shadows; tests |
 | M5e | Packaging: Manifest library paths independent of the working directory, install instructions for robot repositories, tag `v0.5.0` | In the `amiga-ros:jazzy` container, with no `amiga_ros2` change: clone tag `v0.5.0`, install it, build the Amiga example Field and the systems, launch `gazebo.launch.py gz_args:='-r <world.sdf>'`: the Amiga stands in the Field with the pull-out system loaded |
+| M5f | Venue: optional Field Spec `venue` (paver floor around the soil, glass greenhouse with frame and low stone wall, visuals only), soil tiles fitted to the Border, Manifest `venue`, `examples/avans_kas.yaml` | The example builds and passes `gz sdf -k`; a render shows pavers joined to the bed edge, see-through glass, frame shadows; tests |
+| M5g | Crop overrides: `build --set <crop>.<key path>=<value>`, Manifest `crop_overrides`, Planting Pattern checks, and the margin check that keeps roots in neighbouring Pixels apart | `avans_kas.yaml` with carrots at 0.10 m builds in one command; builds without `--set` are byte-identical to before; typos and a too narrow margin are refused; tests |
 
 M5d also returns untouched, resting Picked Plants outside the Active Region to their static visual ("unpick", ADR 0010): Picked Plants cost about 0.15 ms per physics step each even at rest (M5d spike), so they must not pile up behind a driving robot.
 

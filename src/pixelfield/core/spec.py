@@ -10,6 +10,8 @@ from pathlib import Path
 import yaml
 
 EMPTY = "."
+# Crop values a build ignores: an override of them would claim a change in the Manifest.
+NO_EFFECT = ("variation.hue_shift", "assets.generator")
 VENUE_MIN_FLOOR = 0.5  # meters of pavers around the soil, room for the Venue's stone wall
 
 
@@ -43,6 +45,7 @@ class Crop:
     library: str  # Asset Library folder of this Crop's Variants, relative to ROOT or absolute
     stage: str  # growth stage slot in Variant names, e.g. carrot_harvest_v07
     pull_out_curve: PullOutCurve | None = None  # root crops only
+    overrides: tuple[tuple[str, object], ...] = ()  # (key path, value) set over the crop file
 
 
 @dataclass(frozen=True)
@@ -102,9 +105,38 @@ class FieldSpec:
         return self.rows * self.pixel_size
 
 
-def load_crop(path: Path) -> Crop:
+def load_crop(path: Path, overrides: dict[str, object] | None = None) -> Crop:
+    """A Crop definition; overrides map key paths such as "planting.in_row_spacing" to values
+    that replace the file's, before any check, so they are checked like the file."""
     data = yaml.safe_load(Path(path).read_text())
+    for key, value in (overrides or {}).items():
+        *parents, leaf = key.split(".")
+        node = data
+        for part in parents:
+            node = node.get(part) if isinstance(node, dict) else None
+        if key in ("name", *NO_EFFECT) or not isinstance(node, dict) or leaf not in node or (
+            isinstance(node[leaf], dict)):  # fmt: skip
+            raise ValueError(f"{data['name']}: {key} is no value of its crop file that a build "
+                             "uses and can be overridden")  # fmt: skip
+        if not _same_kind(node[leaf], value):
+            raise ValueError(f"{data['name']}: {key} needs a value like its crop file's "
+                             f"{node[leaf]!r}, got {value!r}")  # fmt: skip
+        node[leaf] = value
+    planting = data["planting"]
+    numbers = all(type(v) in (int, float) and math.isfinite(v) for v in planting.values())
+    if not (numbers and planting["row_spacing"] > 0 and planting["in_row_spacing"] > 0
+            and planting["margin"] >= 0 and planting["jitter"] >= 0
+            and 0 <= planting["missing_rate"] < 1):  # fmt: skip
+        raise ValueError(f"{data['name']}: planting needs numbers, spacings above 0, margin "
+                         "and jitter of at least 0, missing_rate in [0, 1)")  # fmt: skip
     variation = data["variation"]
+    scale, force = variation["scale"], data["physics"]["pull_out_force"]
+    if not (0 < scale[0] <= scale[1] and 0 <= force[0] <= force[1]):
+        raise ValueError(f"{data['name']}: variation.scale needs 0 < low <= high, "
+                         "physics.pull_out_force 0 <= low <= high")  # fmt: skip
+    variants = data["assets"].get("variants", 24)
+    if type(variants) is not int or variants < 1:
+        raise ValueError(f"{data['name']}: assets.variants needs a whole number of at least 1")
     curve = data["physics"].get("pull_out_curve")
     if curve and not (curve["d_peak"] > 0 and 0 <= curve["residual_fraction"] <= 1
                       and curve["pull_out_damping"] >= 0):  # fmt: skip
@@ -116,11 +148,24 @@ def load_crop(path: Path) -> Crop:
         scale=tuple(variation["scale"]),
         yaw=tuple(variation["yaw"]),
         pull_out_force=tuple(data["physics"]["pull_out_force"]),
-        variants=data["assets"].get("variants", 24),
+        variants=variants,
         library=data["assets"].get("library", f"assets/library/{data['name']}"),
         stage=data["assets"].get("stage", "harvest"),
         pull_out_curve=PullOutCurve(**curve) if curve else None,
+        overrides=tuple(
+            (k, tuple(v) if isinstance(v, list) else v) for k, v in (overrides or {}).items()
+        ),
     )
+
+
+def _same_kind(old: object, new: object) -> bool:
+    """An override keeps the file value's kind: a finite number (no bool) for a number, a list
+    of as many such values for a list, else the same type. Keeps the Manifest valid JSON."""
+    if isinstance(old, list):
+        return isinstance(new, list) and len(new) == len(old) and all(map(_same_kind, old, new))
+    if type(old) in (int, float):
+        return type(new) in (int, float) and math.isfinite(new)
+    return type(new) is type(old)
 
 
 def load_field_spec(path: Path) -> FieldSpec:

@@ -7,6 +7,8 @@ import argparse
 import json
 from pathlib import Path
 
+import yaml
+
 from pixelfield import ROOT
 from pixelfield.core.layout import build_layout, to_manifest
 from pixelfield.core.spec import load_crop, load_field_spec
@@ -23,6 +25,9 @@ def main(argv: list[str] | None = None) -> None:
     build.add_argument(
         "--crops", type=Path, default=ROOT / "crops", help="folder of Crop definitions"
     )
+    build.add_argument("--set", action="append", default=[], metavar="CROP.KEY=VALUE",
+                       help="override a value of a Crop of this Field for this build, e.g. "
+                            "carrot.planting.in_row_spacing=0.10; repeatable")  # fmt: skip
     build.add_argument(
         "--exporter", choices=sorted(EXPORTERS), help="run only this Exporter (default: all)"
     )
@@ -91,18 +96,30 @@ def main(argv: list[str] | None = None) -> None:
     try:
         spec = load_field_spec(args.spec)
         names = {name for row in spec.grid for name in row if name}
-        crops = {name: load_crop(args.crops / f"{name}.yaml") for name in names}
+        overrides = {}
+        for item in args.set:
+            key, equals, value = item.partition("=")
+            name, dot, path = key.partition(".")
+            if not (equals and dot and path):
+                raise ValueError(f"--set {item}: expected CROP.KEY=VALUE")
+            if name not in names:
+                raise ValueError(f"--set {item}: {name} is not a Crop of this Field")
+            if path in overrides.get(name, {}):
+                raise ValueError(f"--set {item}: {key} is set twice")
+            overrides.setdefault(name, {})[path] = yaml.safe_load(value)
+        crops = {name: load_crop(args.crops / f"{name}.yaml", overrides.get(name))
+                 for name in names}  # fmt: skip
         for crop in crops.values():
             if not (ROOT / crop.library).is_dir():
                 raise ValueError(f"{crop.name}: no Asset Library folder {ROOT / crop.library} "
                                  "(a relative library path is relative to the pixelfield "
                                  "checkout)")  # fmt: skip
-    except (OSError, ValueError, KeyError, TypeError) as e:
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as e:
         parser.exit(1, f"error: {e}\n")
 
     try:
         layout = build_layout(spec, crops)
-    except ValueError as e:
+    except (ValueError, TypeError) as e:
         parser.exit(1, f"error: {e}\n")
     out = args.out or Path("out") / args.spec.stem
     out.mkdir(parents=True, exist_ok=True)
