@@ -1150,3 +1150,22 @@ The user asked for a narrower floor: 4 pavers west and east of the bed. Option (
 Branch m5f-venue, commit after 5c2974d (see git log), not pushed. Validated: fast tests (core, gazebo, pavers) 71 passed; ruff; `gz sdf -k`; overhead render shows 4 pavers east of the bed. The perf row was measured at 12 x 25 m (same 4 visuals, not re-measured).
 ### Open items
 - User: confirm the real bed layout and the greenhouse length; push, PR, merge; amiga_ros2 pins the merge commit.
+
+## 2026-10-28 Crop overrides: build --set (M5g)
+### Goal & outcome
+amiga_ros2 needs carrots 10 cm apart in the row (the gripper's 3 cm pads grab neighbours' stalks at 4 cm) on the multi-Crop `avans_kas.yaml`, without copying crop files. Built `pixelfield build <spec> --set <crop>.<key path>=<value>` (repeatable), Manifest `crop_overrides` (only when used), more crop checks, and a margin check across Pixels. avans_kas with carrots at 0.10: 961 Plants (341 carrots instead of 800, other Crops identical). Commit 0856a94 on m5g-crop-overrides.
+### Decisions & why
+- CLI `--set` over a `--crops` overlay or spec includes: no file at all, and `--crops` keeps its meaning (an overlay would silently fill keys a full custom file left out on purpose).
+- Overrides replace the YAML values before parsing, so crop file checks apply unchanged; an override must keep the file value's kind (finite number, list of the same length, same type). That one rule also keeps the Manifest valid JSON.
+- Refused: Crops not in the Field, keys missing from the file, `name`, keys a build ignores (`hue_shift`, `generator`: they would claim a change in the Manifest), the same key twice.
+- `crop_overrides` is absent without overrides (sorted keys when present): builds without `--set` stay byte-identical, checked against main for all 11 examples (validator) and again for 3 after the fixes.
+- New check for crop files too: root crop margin >= widest root radius x largest scale. The spec only claimed it before; the shipped Crops pass (carrot 0.023 < 0.04, beetroot 0.045 < 0.05, radish 0.025 < 0.05).
+### Lessons / gotchas
+- YAML 1.1 reads `1e-1` as a string (needs `1.0e-1`), and `0x10` as 16. Documented in spec section 6.
+- Crop files had almost no checks (planting values went straight into `PlantingPattern(**...)`); bad values gave tracebacks deep in layout. Planting, scale, pull_out_force and variants are now checked.
+### State
+Branch m5g-crop-overrides from main 01def74, commit 0856a94. Validated: pytest 116 passed, 144 skipped (slow); ruff; byte-identical builds; validator agent (root overlap within and across Pixels at 0.10 and at the margin boundary, override reaches plants/<id>.sdf, plant_info reads such a Manifest, works from a foreign cwd). pick/pull/grip on an overridden world UNVERIFIED (unchanged code paths; they read only Plant entries).
+### Open items
+- `variants` above the Variants the library holds is not checked (pre-existing for crop files).
+- The Manifest does not record which `--crops` folder was used (pre-existing).
+- User: PR, merge; amiga_ros2 pins the merge commit and drops its carrot.yaml copy.
