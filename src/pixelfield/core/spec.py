@@ -1,5 +1,6 @@
 """Loading Field Specs and Crop definitions from YAML."""
 
+import dataclasses
 import hashlib
 import math
 import random
@@ -9,6 +10,7 @@ from pathlib import Path
 import yaml
 
 EMPTY = "."
+VENUE_MIN_FLOOR = 0.5  # meters of pavers around the soil, room for the Venue's stone wall
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,21 @@ class Crop:
 
 
 @dataclass(frozen=True)
+class Venue:
+    """Greenhouse around the Field, for looks only: paver floor, glass, frame, low stone wall."""
+
+    size: tuple[float, float]  # meters, x by y; the ridge runs along y
+    center: tuple[float, float]  # Field coordinates
+    wall: str  # "west" or "east": the long side with the low stone wall
+
+    @property
+    def bounds(self) -> tuple[float, float, float, float]:
+        """(west, south, east, north) in Field coordinates; all paved but the soil."""
+        (w, d), (x, y) = self.size, self.center
+        return x - w / 2, y - d / 2, x + w / 2, y + d / 2
+
+
+@dataclass(frozen=True)
 class FieldSpec:
     pixel_size: float
     seed: int
@@ -52,6 +69,7 @@ class FieldSpec:
     path_gap: tuple[int, float] | None  # (every_n_cols, width): bare soil between column groups
     sha256: str
     border: float = 0.5  # meters of textured soil around the Field
+    venue: Venue | None = None
 
     @property
     def rows(self) -> int:
@@ -121,7 +139,7 @@ def load_field_spec(path: Path) -> FieldSpec:
         raise ValueError("a Field Spec has either grid or random, not both")
     grid = _random_grid(data["random"], seed) if "random" in data else _drawn_grid(data)
 
-    return FieldSpec(
+    spec = FieldSpec(
         pixel_size=float(data.get("pixel_size", 0.5)),
         seed=seed,
         grid=grid,
@@ -130,6 +148,31 @@ def load_field_spec(path: Path) -> FieldSpec:
         sha256=hashlib.sha256(raw).hexdigest(),
         border=float(border),
     )
+    if "venue" in data:
+        spec = dataclasses.replace(spec, venue=_venue(data["venue"], spec))
+    return spec
+
+
+def _venue(data: dict, spec: FieldSpec) -> Venue:
+    message = "venue needs size [x, y] up to 1000 m, optionally center [x, y] and wall west or east"
+    try:
+        size, center = data["size"], data.get("center", [spec.width / 2, spec.depth / 2])
+        wall = data.get("wall", "west")
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError(message) from error
+    pairs = (size, center)
+    if not all(type(p) is list and len(p) == 2 and all(type(v) in (int, float) for v in p)
+               for p in pairs) or wall not in ("west", "east"):  # fmt: skip
+        raise ValueError(message)  # bool and str are no numbers
+    if not (all(0 < v <= 1000 for v in size) and all(math.isfinite(v) for v in center)):
+        raise ValueError(message)
+    venue = Venue(size=tuple(map(float, size)), center=tuple(map(float, center)), wall=wall)
+    west, south, east, north = venue.bounds
+    pad = spec.border + VENUE_MIN_FLOOR
+    if not (west <= -pad and south <= -pad and east >= spec.width + pad
+            and north >= spec.depth + pad):  # fmt: skip
+        raise ValueError(f"venue must hold the Field, its Border and {VENUE_MIN_FLOOR} m of floor")
+    return venue
 
 
 def _drawn_grid(data: dict) -> tuple[tuple[str | None, ...], ...]:

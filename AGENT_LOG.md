@@ -1116,3 +1116,37 @@ Branch m5e-unpick-cooldown, not pushed. Validated: pytest 105 passed, 144 skippe
 - User: rerun with the normal launch (GUI together with the server).
 - Report the gz-sim GUI issues upstream: missed removal at startup, removals applied before creations without a visual timestamp check, null dereference after a failed CreateVisual.
 - Amiga does not push Plants when driving over beds (soil-only wheels, by design); a "trampled" visual only if a demo needs it.
+
+## 2026-10-28 Venue: Avans greenhouse around a Field (M5f)
+### Goal & outcome
+Optional Field Spec `venue` (size, center, wall) adds a glasshouse around the Field, for looks only: 0.6 m paver floor around the soil, glass walls and gable roof, steel frame, low stone wall. Example `examples/avans_kas.yaml`: the agrobot competition bed, 3 x 8 Pixels of 0.9 m, Path Gaps every column of 0.624 m (Amiga wheel track 1.524 m straddling one column), border 0.03 so the soil is about 4.0 x 7.26 m, random mix of all four Crops, 1420 Plants. Manifest gets a top-level `venue` key (null without one). Commit 5c2974d on m5f-venue.
+### Decisions & why
+- Bed layout (a) 3 x 8 with Path Gaps, and the other eight discussion recommendations, accepted by the user's IMPLEMENT without separate answers. The real bed's paths (or wheels on the soil) are still to be confirmed by the user.
+- Floor, glass and frame are each one OBJ mesh written at build time (floor UVs repeat per 4 x 4 pavers, joints aligned to the soil's south-west corner): four visuals for the whole greenhouse instead of hundreds of boxes, since a box maps its texture once per face.
+- Paver texture baked procedurally (`generators/pavers.py`), no external asset. Exporter keeps its own copy of PAVER and PERIOD (like SOIL_ATLAS) so `build` never imports PIL; a test checks they match.
+- No collisions on the greenhouse; robots drive through glass, frame and wall. The floor is the existing soil plane.
+- Soil tiles scaled to whole counts (`round`, tiles about 0.67 to 1.5 m) so they end exactly at the Border; otherwise the overhang would z-fight with the pavers. Changes every world's soil visuals slightly, not physics.
+- The footprint must leave at least 0.5 m of pavers around the soil (core `VENUE_MIN_FLOOR`): one rule keeps the stone wall off the soil and avoids an empty floor mesh.
+- Manifest `venue` is an added key: format_version 1 and robot_interface 2 unchanged.
+### Lessons / gotchas
+- gz ogre2 honours an SDF PBR material on an OBJ visual and wraps UVs beyond 0..1 (checked by render), so one mesh can tile a texture over any area.
+- Glass with `cast_shadows` false lets the sun through; the frame still casts shadows on the floor.
+- A coplanar face (stone wall ends against the gable glass) z-fights; the wall is 2 cm shorter.
+### State
+Branch m5f-venue, commit 5c2974d, not pushed. Validated: pytest 113 passed, 144 skipped (slow); ruff; `gz sdf -k` on the kas world; two wide-camera renders (pavers, joints at the bed edge, see-through glass, frame shadows; done before the tile `round` change and the 2 cm wall trim); perf rows: kas world with a 30 Hz full-HD camera 1.00x with and without the Venue, +23 MiB VRAM; validator agent (odd inputs, OBJ winding and indices, soil-tile test fails on the old overhang code, other worlds' Manifest only gains `venue: null`, build works with pyyaml only). GUI look UNVERIFIED.
+### Open items
+- User: confirm the real bed layout (3 x 8 with paths, or 4 x 8 with wheels on the soil) and the greenhouse size and bed position; adjust `examples/avans_kas.yaml`.
+- User: push m5f-venue, PR, merge; amiga_ros2 then pins the merge commit (or 5c2974d) and adds kas spawn support (pavers from Manifest `venue.bounds`).
+- `venue: null` in a spec raises like `border: null`; make it mean "no Venue" if anyone writes that.
+
+## 2026-10-28 Avans greenhouse: 4 pavers each side
+### Goal & outcome
+The user asked for a narrower floor: 4 pavers west and east of the bed. Option (a) chosen by the user: the whole greenhouse narrows to 8.808 m (4.008 m soil plus 2 x 2.4 m), length stays 25 m; only `examples/avans_kas.yaml` changed, plus docs and a test on the venue bounds.
+### Decisions & why
+- Narrower greenhouse over a 12 m greenhouse with a second floor type beyond the pavers: matches "about 4 tiles on each side" of the real kas with no code change. The ridge drops to about 6.05 m (pitch fixed).
+### Lessons / gotchas
+- The stone wall stands on the outer 0.25 m of the 4th west paver (inside the footprint by design).
+### State
+Branch m5f-venue, commit after 5c2974d (see git log), not pushed. Validated: fast tests (core, gazebo, pavers) 71 passed; ruff; `gz sdf -k`; overhead render shows 4 pavers east of the bed. The perf row was measured at 12 x 25 m (same 4 visuals, not re-measured).
+### Open items
+- User: confirm the real bed layout and the greenhouse length; push, PR, merge; amiga_ros2 pins the merge commit.

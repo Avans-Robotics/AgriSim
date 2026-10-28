@@ -185,6 +185,15 @@ def to_manifest(layout: FieldLayout) -> dict:
             "seed": spec.seed,
             "spec_sha256": spec.sha256,
         },
+        # greenhouse around the Field, for looks; its floor is paved outside the soil
+        "venue": {
+            "size": list(spec.venue.size),
+            "center": [round(c, 6) for c in spec.venue.center],
+            "wall": spec.venue.wall,
+            "bounds": [round(c, 6) for c in spec.venue.bounds],
+        }
+        if spec.venue
+        else None,
         "crops": {
             name: {
                 "library": crop.library,

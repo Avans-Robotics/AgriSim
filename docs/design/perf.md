@@ -39,6 +39,8 @@ RTF is averaged: simulation time elapsed over a 20 s wall-clock window after war
 | 2026-10-22 | same, 1 ms step | same, test gripper over the carrot nearest the camera: 5 Picked Plants | 2,713 / 93 | OAK-D rig, nadir | 0.58 | 579 MiB total |
 | 2026-10-22 | same, 2 ms step | same | 2,713 / 93 | OAK-D rig, nadir | 0.97 | 579 MiB total |
 | 2026-10-22 | same, 4 ms step | same | 2,713 / 93 | OAK-D rig, nadir | 1.00 | 579 MiB total |
+| 2026-10-28 | m5f-venue | `avans_kas.yaml`, server, Venue removed by hand | 1,420 / 25 | one camera 1920 x 1080 at 30 Hz, no saving, GI, inside the greenhouse looking at the bed from 3 m up (2 runs) | 1.00 | 560 MiB total |
+| 2026-10-28 | m5f-venue | same, with the Venue (4 visuals, 12 x 25 m) | 1,420 / 26 | same (2 runs) | 1.00 | 583 MiB total |
 
 Build time of `random_10x10.yaml`: 0.12 s, output 8.8 MB.
 

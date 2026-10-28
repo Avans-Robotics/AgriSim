@@ -94,7 +94,18 @@ A Path Gap of `width` meters follows every `every_n_cols` Pixel columns, only be
 
 For a robot whose wheels run in the Path Gaps, the gap centres are `every_n_cols * pixel_size + width` apart, so `width = wheel_track - every_n_cols * pixel_size`. With 0.5 m Pixels the Amiga's 1.524 m wheel track needs `every_n_cols: 2, width: 0.524` (`examples/amiga_10x10.yaml`); the outer wheels run on the Border. The Manifest lists each gap's x range, so a robot repo does not redo this arithmetic.
 
-The Border (default 0.5 m) is textured soil around the Field, room for a robot to drive in and turn; a Field meant for driving uses for example `border: 2.0`. Beyond it the ground continues as an invisible plane, so a robot never falls off the world.
+The Border (default 0.5 m) is textured soil around the Field, room for a robot to drive in and turn; a Field meant for driving uses for example `border: 2.0`. Beyond it the ground continues as an invisible plane, so a robot never falls off the world. The soil tiles are scaled a little (to between about 0.67 and 1.5 m) so they end exactly at the Border's edge.
+
+Optional Venue (M5f), a greenhouse around the Field, for looks only:
+
+```yaml
+venue:
+  size: [12.0, 25.0]     # meters, x by y, the greenhouse footprint; the ridge runs along y
+  center: [2.0, 3.6]     # optional, Field coordinates, default the Field centre
+  wall: west             # optional, west (default) or east: the long side with a low stone wall
+```
+
+Everything inside the footprint but the soil (Field plus Border) is paved with 0.6 m concrete pavers, their joints lined up with the soil's south-west corner. The greenhouse has glass walls and a gable roof (4 m to the gutter, 25 degree pitch), a steel frame with posts at most 3 m apart and a stone wall 0.6 m high along one long side. It has no collisions: the floor is the soil plane at z = 0 (the real bed is assumed flush with the pavers), and a robot drives through the glass, frame and wall. In Gazebo it is four visuals (floor, glass and frame as OBJ meshes written at build time, the wall as a box), so its size does not cost frames. The footprint must hold the Field, its Border and at least 0.5 m of pavers on every side (room for the stone wall), and be at most 1000 m on a side (the ground plane is about 2 km wide). `examples/avans_kas.yaml` is the agrobot competition bed in the Avans greenhouse: 3 x 8 Pixels of 0.9 m with Path Gaps for the Amiga's wheels, about 4 x 7.2 m, with 4 pavers west and east of the soil as in the real greenhouse; its length is a guess.
 
 Random Field:
 
@@ -162,6 +173,8 @@ The Field Layout is the only thing Exporters read. It is written next to every e
   "field": {"pixel_size": 0.5, "rows": 3, "cols": 4, "width": 2.3, "depth": 1.5,
             "path_gap": {"every_n_cols": 2, "width": 0.3}, "path_gaps": [[1.0, 1.3]],
             "border": 0.5, "seed": 42, "spec_sha256": "..."},
+  "venue": {"size": [12.0, 25.0], "center": [1.15, 0.75], "wall": "west",
+            "bounds": [-4.85, -11.75, 7.15, 13.25]},
   "crops": {
     "carrot": {"library": "assets/library/carrot",
                "pull_out_curve": {"d_peak": 0.005, "residual_fraction": 0.3, "pull_out_damping": 0.0},
@@ -183,6 +196,8 @@ The Field Layout is the only thing Exporters read. It is written next to every e
   ]
 }
 ```
+
+`venue` is `null` without a Venue; `bounds` is its footprint as (west, south, east, north), paved outside the soil (M5f, an added key, so `format_version` stays 1).
 
 Plant ids are stable for a given spec and seed, so results from different runs can be compared.
 
@@ -219,7 +234,7 @@ See [ADR 0005](../adr/0005-dataset-rendering-separate-from-simulation.md).
 - M4 makes picked root crop Plants dynamic, one model each ([ADR 0006](../adr/0006-pull-out-via-anchored-root-and-force-law.md)): a C++ gz-sim system removes its grouped visual, spawns it as an articulated model (rigid root, spring-jointed petiole chains), welds the root to an anchor on a vertical prismatic joint, and applies the Plant's Pull-out Curve as a joint force until the root has travelled its own length, then detaches it. Lettuce stays static (cut, not pulled).
 - Soil is not simulated: loose soil only, no soil state per Pixel, no crown tear-off in M4. All Plant physics parameters are uncalibrated until the [measurement protocol](../research/measurement-protocol.md) has run.
 - M5 adds the Active Region ([ADR 0010](../adr/0010-active-region.md)): every root crop Plant whose footprint (a cylinder around its crown with the crown radius, from the soil to the top of its foliage) meets the bounding box of any robot collision (any collision of a model that is not part of the Field, plus 0.05 m of padding) becomes a Picked Plant, so any robot touches the Plants whose crowns it reaches. Plant SDFs are written at build time; Picked Plants collide with robots and with each other, their petioles as capsules (M5d spike: mesh hull contact was slow and violent).
-- Soil collision is a plane at z = 0 on the soil collide bits 0 and 1 (M5; bit 0 is the soil's alone, section 14); its textured part covers the Field plus the Border. dartsim makes the plane about 2 km wide (a box lands at x = 1040 m and falls at 1060 m, measured in M5b), so for a robot on a Field it has no edge.
+- Soil collision is a plane at z = 0 on the soil collide bits 0 and 1 (M5; bit 0 is the soil's alone, section 14); its textured part covers the Field plus the Border, and a Venue paves the rest of its footprint with visuals on the same plane. dartsim makes the plane about 2 km wide (a box lands at x = 1040 m and falls at 1060 m, measured in M5b), so for a robot on a Field it has no edge.
 - Target Field size: up to about 10 x 10 Pixels (thousands of Plants). Performance is measured in M2 and recorded in [perf.md](perf.md).
 
 ## 11. Milestones
@@ -253,6 +268,7 @@ M5 chunks (decisions in [ADR 0009](../adr/0009-robot-free-world-provider.md) and
 | M5b | Ground for robots: soil collision as an infinite plane, Field Spec `border`, Manifest `field.path_gaps` and `robot_interface` version, `examples/amiga_10x10.yaml` | The example builds; its SVG shows the gaps where the Manifest says; a box dropped beyond the Border lands; a pick and pull still pass (root bitmask unchanged); tests |
 | M5c | Pick by id: `build` writes `plants/<id>.sdf` for root crop Plants plus the table the system reads, the system loads the file, Python `pick` sends only the id; the state topic publishes on change plus events; a scripted pull with non-zero `pull_out_damping` | `pixelfield pick` in a running world; `gz topic -e` is silent for a resting Picked Plant; `pull.csv` unchanged; build time and `out/` size recorded |
 | M5d | Spike first: a full carrot Pixel picked at once (leaf drift, RTF); it failed, see ADR 0010. Then petiole collisions as capsules (ADR 0006), and the Active Region in the pull-out system: any non-Field link's box plus padding picks the root crop Plants whose crown footprint it meets | The M4e test gripper pulling one carrot pushes its neighbours instead of passing through (GUI, by the maintainer). In a slot: settle check at scale 0.85 and 1.15, the slow squeeze over all 72 Variants, perf rows (pass: the test gripper grasping a mid-Pixel carrot in the 10 x 10 Field with the OAK-D rig runs as fast as the rig alone allows, at least 0.8x; measured 0.97x at a 2 ms step) |
+| M5f | Venue: optional Field Spec `venue` (paver floor around the soil, glass greenhouse with frame and low stone wall, visuals only), soil tiles fitted to the Border, Manifest `venue`, `examples/avans_kas.yaml` | The example builds and passes `gz sdf -k`; a render shows pavers joined to the bed edge, see-through glass, frame shadows; tests |
 | M5e | Packaging: Manifest library paths independent of the working directory, install instructions for robot repositories, tag `v0.5.0` | In the `amiga-ros:jazzy` container, with no `amiga_ros2` change: clone tag `v0.5.0`, install it, build the Amiga example Field and the systems, launch `gazebo.launch.py gz_args:='-r <world.sdf>'`: the Amiga stands in the Field with the pull-out system loaded |
 
 M5d also returns untouched, resting Picked Plants outside the Active Region to their static visual ("unpick", ADR 0010): Picked Plants cost about 0.15 ms per physics step each even at rest (M5d spike), so they must not pile up behind a driving robot.
@@ -315,7 +331,7 @@ Point 4 decides the strength of the paper: without real-world validation it is a
 pixelfield is a robot-free world provider ([ADR 0009](../adr/0009-robot-free-world-provider.md)): a robot repository launches a pixelfield world and spawns its robot into it, and everything pixelfield offers is gz-native. Interface version 2, recorded in the Manifest as `robot_interface` (from M5b); a breaking change raises it and is noted here. Version 2 (M5e): collide bit 0 belongs to the soil alone, so a robot collision with `collide_bitmask` 0x1 touches the soil and no Plant; in version 1 it also touched Plant leaves.
 
 - **World**: `out/<field>/world.sdf`, world name always `pixelfield`. Two worlds on one machine run in separate `GZ_PARTITION`s.
-- **Frames**: SI units, z up, x east, y north, origin at the south-west corner of the Field at ground level (section 4). The ground is a plane at z = 0 reaching about 1 km in every direction (dartsim); textured soil covers the Field and its Border. A robot spawns in the Path Gaps or the Border, never on Plants: Plants it spawns into are picked, crushed and stay picked (M5e: the Amiga spawned at the origin ran at 0.003x).
+- **Frames**: SI units, z up, x east, y north, origin at the south-west corner of the Field at ground level (section 4). The ground is a plane at z = 0 reaching about 1 km in every direction (dartsim); textured soil covers the Field and its Border, and an optional Venue paves the rest of its footprint (Manifest `venue.bounds`; no collisions beyond the plane). A robot spawns in the Path Gaps, the Border or on a Venue's pavers, never on Plants: Plants it spawns into are picked, crushed and stay picked (M5e: the Amiga spawned at the origin ran at 0.003x).
 - **Manifest**: `out/<field>/manifest.json` (section 7), the ground truth: Plant ids, Crops, positions, scales, Pull-out Forces, Path Gap x ranges.
 - **Systems**: built from `src/pixelfield/exporters/gazebo/systems/` and found through `GZ_SIM_SYSTEM_PLUGIN_PATH`; without them the world runs, but no Plant can be picked.
 - **Pick service**: `/world/pixelfield/pixelfield/pick`, request `gz.msgs.StringMsg` with the Plant id, reply `gz.msgs.Boolean` (false for an id that is not a root crop Plant of the Field, one that is a Picked Plant now, or any id before the first simulation update, while the system has not read its table yet). For example `gz service -s /world/pixelfield/pixelfield/pick --reqtype gz.msgs.StringMsg --reptype gz.msgs.Boolean --timeout 5000 --req 'data: "r0c0-017"'`. The system loads `out/<field>/plants/<id>.sdf`, written by `pixelfield build` for every root crop Plant, from the folder of the world file.

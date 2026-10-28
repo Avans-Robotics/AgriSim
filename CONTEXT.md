@@ -26,6 +26,10 @@ _Avoid_: track, lane, aisle
 The strip of textured soil around the Field, room for a robot to drive in and turn.
 _Avoid_: headland, margin (reserved for the Planting Pattern)
 
+**Venue**:
+The optional greenhouse around a Field: a paver floor around the soil, glass, frame and a low stone wall. Visuals only, for looks.
+_Avoid_: scene, environment, building
+
 ### Crops and plants
 
 **Crop**:
