@@ -44,6 +44,8 @@ Pixel farming field generator for robot simulation. Gazebo first, simulator-agno
 - Render camera images headless: `uv run pixelfield render out/carrot_pixel/world.sdf` (writes `renders/top.png`, `renders/oblique.png`, about 12 s)
 - Regenerate a Crop's Variants: `uv run pixelfield generate <crop>` for carrot, beetroot, radish or lettuce (needs `uv sync --extra generate` or the dev group; preview: `gz sim out/<crop>_variants/world.sdf`). Rebuild worlds afterwards; a test fails if the committed library no longer matches its generator.
 - Rebake the soil tiles: `uv run python -m pixelfield.generators.soil` (writes `assets/library/textures/soil_tiles/`, about 7 s)
+- Rebake the Venue's paver texture: `uv run python -m pixelfield.generators.pavers` (writes `assets/library/textures/pavers/color.jpg`, about 1 s)
+- The Avans greenhouse bed with its Venue: `uv run pixelfield build examples/avans_kas.yaml` (about 4 s, 1420 Plants)
 - All four M3 Crops side by side: `uv run pixelfield build examples/m3_crops.yaml`
 - Settle check of an articulated root crop Variant, headless (about 4 s each, writes `out/settle_<variant>/world.sdf` to open in `gz sim`): `uv run pixelfield settle assets/library/carrot/carrot_harvest_v00`
 - Build the C++ pull-out system (about 5 s; Field worlds load it from `GZ_SIM_SYSTEM_PLUGIN_PATH`, without it gz logs that the plugin is missing): `cmake -S src/pixelfield/exporters/gazebo/systems -B build/systems && cmake --build build/systems`, then `export GZ_SIM_SYSTEM_PLUGIN_PATH=$PWD/build/systems` before `gz sim`

@@ -9,7 +9,7 @@ import pytest
 
 from pixelfield.cli import main
 from pixelfield.exporters import gazebo
-from pixelfield.exporters.gazebo import plant
+from pixelfield.exporters.gazebo import plant, venue
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -213,9 +213,13 @@ def test_soil_visual_is_textured_tiles_covering_field_plus_border(mixed):
     tops = {float(t.findtext("pose").split()[2]) + float(t.findtext(".//box/size").split()[2]) / 2
             for t in tiles}  # fmt: skip
     assert tops == {0.0}
-    border = 2 * field["border"]
-    assert max(xs) - min(xs) + 1.0 >= field["width"] + border  # 1 m tiles
-    assert max(ys) - min(ys) + 1.0 >= field["depth"] + border
+    sizes = {tuple(map(float, t.findtext(".//box/size").split()[:2])) for t in tiles}
+    assert len(sizes) == 1 and all(0.66 < size < 1.51 for size in next(iter(sizes)))
+    (sx, sy), border = next(iter(sizes)), field["border"]
+    # the tiles end at the soil edge, no overhang onto a Venue's pavers (poses from its centre)
+    half = (field["width"] / 2 + border, field["depth"] / 2 + border)
+    assert (min(xs) - sx / 2, max(xs) + sx / 2) == pytest.approx((-half[0], half[0]), abs=1e-3)
+    assert (min(ys) - sy / 2, max(ys) + sy / 2) == pytest.approx((-half[1], half[1]), abs=1e-3)
     for tile in tiles:
         i, j = (int(n) % gazebo.SOIL_ATLAS for n in tile.get("name").split("_")[1:])
         uri = tile.findtext(".//albedo_map")
@@ -250,3 +254,82 @@ def test_render_saves_one_image_per_camera(tmp_path):
           "--crops", str(REPO / "crops")])  # fmt: skip
     main(["render", str(tmp_path / "world.sdf")])
     assert sorted(p.name for p in (tmp_path / "renders").iterdir()) == ["oblique.png", "top.png"]
+
+
+@pytest.fixture(scope="module")
+def kas(tmp_path_factory):
+    out = tmp_path_factory.mktemp("kas")
+    main(["build", str(REPO / "examples" / "avans_kas.yaml"), "-o", str(out),
+          "--crops", str(REPO / "crops")])  # fmt: skip
+    return out / "world.sdf", json.loads((out / "manifest.json").read_text())
+
+
+def _obj_faces(path):
+    """Faces of an OBJ file as lists of (vertex, texture coordinate or None)."""
+    vertices, uvs, faces = [], [], []
+    for line in path.read_text().splitlines():
+        kind, *values = line.split()
+        if kind == "v":
+            vertices.append(tuple(map(float, values)))
+        elif kind == "vt":
+            uvs.append(tuple(map(float, values)))
+        elif kind == "f":
+            refs = [value.split("/") for value in values]
+            faces.append([(vertices[int(v) - 1], uvs[int(t) - 1] if t else None)
+                          for v, t, _ in refs])  # fmt: skip
+    return faces
+
+
+def test_venue_is_four_visuals_without_collisions(kas):
+    world_sdf, _ = kas
+    venue = next(m for m in ET.parse(world_sdf).iter("model") if m.get("name") == "venue")
+    assert venue.findtext("static") == "true" and venue.find(".//collision") is None
+    visuals = {v.get("name"): v for v in venue.iter("visual")}
+    assert set(visuals) == {"floor", "glass", "frame", "stone_wall"}
+    for name in ("floor", "glass", "frame"):
+        assert (world_sdf.parent / visuals[name].findtext(".//mesh/uri")).is_file()
+    assert (world_sdf.parent / visuals["floor"].findtext(".//albedo_map")).is_file()
+    assert visuals["glass"].findtext("cast_shadows") == "false"
+    assert 0 < float(visuals["glass"].findtext("transparency")) < 1
+
+
+def test_paver_floor_covers_the_venue_but_the_soil(kas):
+    world_sdf, manifest = kas
+    field, (west, south, east, north) = manifest["field"], manifest["venue"]["bounds"]
+    b = field["border"]
+    faces = _obj_faces(world_sdf.parent / "meshes" / "venue_floor.obj")
+    area = 0.0
+    for face in faces:
+        (x0, y0, _), (x1, y1, _) = face[0][0], face[2][0]
+        area += (x1 - x0) * (y1 - y0)
+        assert {z for (_, _, z), _ in face} == {0.0}
+        # inside the venue, outside the soil
+        assert west <= x0 < x1 <= east and south <= y0 < y1 <= north
+        assert x1 <= -b + 1e-6 or x0 >= field["width"] + b - 1e-6 or y1 <= -b + 1e-6 or (
+            y0 >= field["depth"] + b - 1e-6)  # fmt: skip
+        for (x, y, _), (u, v) in face:  # one texture repeat per 4 x 4 pavers of 0.6 m,
+            assert (u, v) == pytest.approx(((x + b) / 2.4, (y + b) / 2.4), abs=1e-4)  # joints
+    soil = (field["width"] + 2 * b) * (field["depth"] + 2 * b)  # on the soil's corner
+    assert area == pytest.approx((east - west) * (north - south) - soil, abs=1e-3)
+
+
+def test_frame_and_glass_reach_the_ridge_over_the_venue(kas):
+    world_sdf, manifest = kas
+    west, south, east, north = manifest["venue"]["bounds"]
+    for part in ("frame", "glass"):
+        points = [p for face in _obj_faces(world_sdf.parent / "meshes" / f"venue_{part}.obj")
+                  for p, _ in face]  # fmt: skip
+        xs, ys, zs = zip(*points, strict=True)
+        ridge = venue.GUTTER_HEIGHT + (east - west) / 2 * math.tan(venue.ROOF_PITCH)
+        pad = venue.BEAM if part == "frame" else 1e-4  # OBJ keeps 4 decimals
+        assert min(xs) == pytest.approx(west, abs=pad) and max(xs) == pytest.approx(east, abs=pad)
+        assert min(ys) == pytest.approx(south, abs=pad)
+        assert max(ys) == pytest.approx(north, abs=pad)
+        assert min(zs) == pytest.approx(0.0, abs=pad) and max(zs) == pytest.approx(ridge, abs=pad)
+
+
+@pytest.mark.skipif(shutil.which("gz") is None, reason="Gazebo not installed")
+def test_venue_world_passes_gz_sdf_check(kas):
+    world_sdf, _ = kas
+    result = subprocess.run(["gz", "sdf", "-k", str(world_sdf)], capture_output=True, text=True)
+    assert result.returncode == 0 and "Valid" in result.stdout, result.stdout + result.stderr

@@ -3,6 +3,7 @@
 Plants use their Variant mesh, copied into `meshes/` next to world.sdf so the output folder
 is self-contained. Crops without Variants in their library fall back to a cylinder. Root crop
 Plants also get their articulated SDF in `plants/`, loaded by the pull-out system on a pick.
+An optional Venue adds a greenhouse with a paver floor around the soil (venue.py).
 """
 
 import math
@@ -23,7 +24,7 @@ SOIL_THICKNESS = 0.02  # of the tile visuals
 SOIL_TEXTURES = ROOT / "assets" / "library" / "textures" / "soil"
 SOIL_TILES = ROOT / "assets" / "library" / "textures" / "soil_tiles"
 SOIL_ATLAS = 4  # soil tiles per side of the baked atlas; tile (i, j) uses (i % 4, j % 4)
-SOIL_TILE = 1.0  # meters covered by one soil tile
+SOIL_TILE = 1.0  # meters covered by one soil tile, scaled a little to fit the soil
 # Stand-in cylinder for Crops without Variants yet; radius from the Planting Pattern.
 STAND_IN_RADIUS = 0.4  # fraction of the smallest planting spacing
 STAND_IN_HEIGHT = 0.1  # meters, before Plant scale
@@ -96,21 +97,27 @@ def export(layout: FieldLayout, out_dir: Path) -> Path:
     _text(plane, "size", _join(soil_size))  # not the collision extent
     contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
     _text(contact, "collide_bitmask", str(SOIL_BITMASK))
-    # A box maps the texture once per face, so the visual is a grid of SOIL_TILE squares
-    # centred on the soil, top face at z = 0; the outer tiles may overhang the Border a little.
+    # A box maps the texture once per face, so the visual is a grid of tiles of about SOIL_TILE
+    # covering exactly the Field plus the Border, top face at z = 0.
     textures = Path(out_dir) / "textures"
     textures.mkdir(parents=True, exist_ok=True)
     shutil.copy(SOIL_TEXTURES / "normal.jpg", textures)  # shared; color and roughness are baked
     shutil.copytree(SOIL_TILES, textures / "tiles", dirs_exist_ok=True)
-    nx, ny = (math.ceil(size / SOIL_TILE) for size in soil_size)
+    nx, ny = (max(1, round(size / SOIL_TILE)) for size in soil_size)
+    tile = (soil_size[0] / nx, soil_size[1] / ny)  # scaled a little to end at the soil edge
     for i in range(nx):
         for j in range(ny):
             visual = ET.SubElement(soil, "visual", name=f"tile_{i}_{j}")
-            offset = ((i - (nx - 1) / 2) * SOIL_TILE, (j - (ny - 1) / 2) * SOIL_TILE)
+            offset = ((i - (nx - 1) / 2) * tile[0], (j - (ny - 1) / 2) * tile[1])
             _text(visual, "pose", _join(offset + (-SOIL_THICKNESS / 2, 0.0, 0.0, 0.0)))
             box = ET.SubElement(ET.SubElement(visual, "geometry"), "box")
-            _text(box, "size", _join((SOIL_TILE, SOIL_TILE, SOIL_THICKNESS)))
+            _text(box, "size", _join(tile + (SOIL_THICKNESS,)))
             visual.append(_soil_material(i % SOIL_ATLAS, j % SOIL_ATLAS))
+
+    if spec.venue:
+        from pixelfield.exporters.gazebo import venue  # it imports this module
+
+        venue.add(world, spec, out_dir)
 
     for name, (pitch, distance) in CAMERAS.items():
         world.append(_camera(name, (width / 2, depth / 2), pitch, distance))

@@ -1,0 +1,22 @@
+# The agrobot competition bed in the Avans greenhouse ("kas"): 0.9 m Pixels like its string
+# grid, one Crop per Pixel. The Amiga straddles one Pixel column with its wheels in the Path
+# Gaps; the outer columns' outer wheels run on the pavers. Bed about 3.95 x 7.2 m.
+pixel_size: 0.9
+seed: 1
+random:
+  rows: 8
+  cols: 3
+  crops:
+    carrot: 1
+    beetroot: 1
+    radish: 1
+    lettuce: 1
+  no_same_neighbour: true
+path_gap:                # width = wheel_track - every_n_cols * pixel_size = 1.524 - 1 * 0.9
+  every_n_cols: 1
+  width: 0.624
+border: 0.03             # the bed is about 4 m wide, flush with the pavers
+row_direction: 1.5707963 # rows run north-south, along the Path Gaps the wheels drive in
+venue:                   # rough size of the greenhouse, not measured; for looks only
+  size: [12.0, 25.0]
+  wall: west

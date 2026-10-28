@@ -111,6 +111,18 @@ def test_bad_specs_are_rejected(tmp_path):
     for border in ("-0.1", ".nan", ".inf", "wide", "true"):
         with pytest.raises(ValueError, match="border"):
             layout_of(tmp_path, "  C\n", extra=f"border: {border}\n")
+    bad = ("{}", "{size: [12]}", "{size: [12, 25], wall: north}", "big", "{size: x}",
+           '{size: "99"}', "{size: [true, 25]}", "{size: ['12', 25]}", "{size: [.inf, 25]}",
+           "{size: [0, 25]}", "{size: [1001, 25]}",
+           "{size: [12, 25], center: [.nan, 0]}")  # fmt: skip
+    for venue in bad:
+        with pytest.raises(ValueError, match="venue needs"):
+            layout_of(tmp_path, "  C\n", extra=f"venue: {venue}\n")
+    # 0.5 m Pixel, 0.5 m Border and 0.5 m of floor on each side: 2.5 m; a wall on the soil, or
+    # a footprint the soil fills, is refused
+    for venue in ("{size: [2.4, 3]}", "{size: [3, 3], center: [0.7, 0.25]}", "{size: [1.5, 1.5]}"):
+        with pytest.raises(ValueError, match="hold the Field"):
+            layout_of(tmp_path, "  C\n", extra=f"venue: {venue}\n")
 
 
 def random_spec(tmp_path, request, seed=7):
@@ -240,3 +252,20 @@ def test_amiga_example_gaps_fit_the_wheel_track(tmp_path):
     drawn = [(float(x), float(x) + float(w)) for x, w in
              re.findall(r'class="path-gap" x="([\d.]+)" y="0" width="([\d.]+)"', svg)]  # fmt: skip
     assert drawn == pytest.approx([(x0 * 1000, x1 * 1000) for x0, x1 in field["path_gaps"]])
+
+
+def test_manifest_venue_defaults_to_the_field_centre(tmp_path):
+    assert to_manifest(layout_of(tmp_path, "  C C\n"))["venue"] is None
+    venue = to_manifest(layout_of(tmp_path, "  C C\n", extra="venue: {size: [4, 6]}\n"))["venue"]
+    assert venue == {"size": [4.0, 6.0], "center": [0.5, 0.25], "wall": "west",
+                     "bounds": [-1.5, -2.75, 2.5, 3.25]}  # fmt: skip
+
+
+def test_avans_kas_example_gaps_fit_the_wheel_track():
+    spec = load_field_spec(REPO / "examples" / "avans_kas.yaml")
+    centres = [(x0 + x1) / 2 for x0, x1 in spec.path_gaps]
+    assert (spec.rows, spec.cols, spec.pixel_size) == (8, 3, 0.9)
+    assert [b - a for a, b in pairwise(centres)] == pytest.approx([1.524])
+    assert spec.width + 2 * spec.border == pytest.approx(4.0, abs=0.01)  # the real bed
+    assert {crop for row in spec.grid for crop in row} == {"carrot", "beetroot", "radish",
+                                                          "lettuce"}  # fmt: skip
