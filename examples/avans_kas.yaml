@@ -17,6 +17,6 @@ path_gap:                # width = wheel_track - every_n_cols * pixel_size = 1.5
   width: 0.624
 border: 0.03             # the bed is about 4 m wide, flush with the pavers
 row_direction: 1.5707963 # rows run north-south, along the Path Gaps the wheels drive in
-venue:                   # rough size of the greenhouse, not measured; for looks only
-  size: [12.0, 25.0]
+venue:                   # greenhouse for looks only; length not measured
+  size: [8.808, 25.0]    # 4 pavers of 0.6 m west and east of the 4.008 m soil
   wall: west

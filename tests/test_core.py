@@ -267,5 +267,7 @@ def test_avans_kas_example_gaps_fit_the_wheel_track():
     assert (spec.rows, spec.cols, spec.pixel_size) == (8, 3, 0.9)
     assert [b - a for a, b in pairwise(centres)] == pytest.approx([1.524])
     assert spec.width + 2 * spec.border == pytest.approx(4.0, abs=0.01)  # the real bed
+    west, _, east, _ = spec.venue.bounds  # 4 pavers of 0.6 m west and east of the soil
+    assert (west, east) == pytest.approx((-spec.border - 2.4, spec.width + spec.border + 2.4))
     assert {crop for row in spec.grid for crop in row} == {"carrot", "beetroot", "radish",
                                                           "lettuce"}  # fmt: skip
