@@ -1169,3 +1169,23 @@ Branch m5g-crop-overrides from main 01def74, commit 0856a94. Validated: pytest 1
 - `variants` above the Variants the library holds is not checked (pre-existing for crop files).
 - The Manifest does not record which `--crops` folder was used (pre-existing).
 - User: PR, merge; amiga_ros2 pins the merge commit and drops its carrot.yaml copy.
+
+## 2026-10-29 No leaf contact between Plants (M5h)
+### Goal & outcome
+amiga_ros2's xArm 6 lifting r6c1-041 in avans_kas (carrots at 0.10) pulled its in-row neighbours out through leaf-to-leaf contact. Now each Picked Plant's leaves get one collide bit of 2 to 7 from the pull-out system, so leaves of different Plants do not touch. Commit e4d6330 on m5h-plant-contact (stacked on m5g-crop-overrides, same content as main c37045b).
+### Decisions & why
+- Per-pick collide bits over low leaf friction (dartsim takes the lower friction of two surfaces, so pads would slip too) and over a force cap (dartsim has none). Choice: a free bit, else the one whose nearest Picked Plant is farthest. ADR 0010 amended (it had rejected collide bits for all overlapping neighbours; only Picked Plants need them).
+- Bits: soil 0xFD, buried root 0x2, leaves 0xFC in files, one bit once picked. robot_interface stays 2; spec now says only default, 0xFF, 0xFFFF and 0x1 are part of the interface.
+### Lessons / gotchas
+- A collision without collide_bitmask acts as 0xFF, not 0xFFFF: leaves on bit 8 or higher are not touched by a default robot collision. Only 6 leaf bits.
+- gz-physics dartsim reads collide_bitmask from the SDF element, not from sdf::Surface: setting it through the DOM (Collision::SetSurface) had no effect.
+- The pixelfield-only repros (pairs, kas with the test gripper, an xArm-like hand with body box and descent) never showed the bug (neighbour d at most 0.7 mm); the dense carrot Pixel did (r0c0-020 stuck at d 64 mm, r0c0-021 up 20 mm), and the real amiga pick did. An A/B in amiga's own container settled the cause before any code was written.
+- A root whose bits overlap the soil's is pushed up by the soil (seen at 130 mm in a bisect); keep root and soil bits disjoint.
+- Killing all ros2 processes between launches in one container also kills the ROS daemon; the next launch's controller spawners fail. One container per run.
+### State
+Branch m5h-plant-contact, commit e4d6330, not pushed. Validated: pytest 117 passed, 144 skipped; slow settle and squeeze of the v00 Variants; ruff; new dense test fails on the old system binary and passes now; amiga_ros2 xArm 6 pick of r6c1-041 in avans_kas, headless, 3/3 pulled out with r6c1-040 at 0.1 mm and r6c1-042 at 0 (as-is: 195 and 160 mm, detached). Perf row not measured (fewer contacts only).
+### Open items
+- r6c1-039 rises 4.5 to 5.6 mm past its d_peak in every amiga run, with or without leaf contact: robot contact (arm links), for amiga_ros2.
+- Jaws no longer held apart by the target's bunch close further on a neighbour petiole lying between them (dense Pixel r0c0-004: neighbour about 20 mm).
+- More than 6 Picked Plants close together share bits and touch again; a pulled-out Plant keeps its bit after it leaves the table.
+- User: push m5h-plant-contact, PR, merge; amiga_ros2 pins the commit.
