@@ -24,16 +24,21 @@
 // at rest for 2 s, all within 1 cm of where they were just after the spawn (the static visual's pose), and that no such box
 // meets, turns back into its static visual, named <id>~<n> on its n-th rebuild; it can be
 // picked again after 1 s of sim time (by the region or by id). A Plant picked by id stays.
+// Leaf bits (M5h): each Picked Plant's leaves collide on one bit of 2 to 7, a free one or the
+// one whose nearest Picked Plant is farthest away, so leaves of different Plants do not touch
+// and a Plant lifted by its leaves drags no neighbour out of the soil.
 // State topic /world/<world>/pixelfield/pull_out: gz.msgs.Param with plant, d, force, attached,
 // published only on a step where d or the force changed, plus one message per event, which
 // also carries `event`: picked, peak_passed, detached or unpicked. A resting Picked Plant is
 // silent.
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -78,10 +83,13 @@ namespace pixelfield
 using namespace gz::sim;
 
 constexpr uint16_t kAllBits = 0xFFFF;  // collide bitmask of a detached root
-// Bits of every Plant collision (gazebo.PLANT_BITMASK): all but bit 0, the soil's alone. A
-// robot collision sharing none of them (collide_bitmask 0x1) never touches a Plant, so it
-// picks none.
-constexpr uint16_t kPlantBits = 0xFFFE;
+// Bits of every Plant collision: bit 1 of a buried root (plant.ROOT_BITMASK) and the leaf bits
+// 2 to 7 (gazebo.LEAF_BITMASK), not bit 0, the soil's alone. A robot collision sharing none of
+// them (collide_bitmask 0x1) never touches a Plant, so it picks none.
+constexpr uint16_t kPlantBits = 0xFE;
+// Leaf bits, also on the soil. Only up to bit 7: a robot collision without collide_bitmask
+// acts as 0xFF.
+constexpr int kFirstLeafBit = 2, kLastLeafBit = 7;
 constexpr double kAnchorMass = 0.001;  // kg, light next to any root
 // The prismatic range ends a little past the root depth so the joint limit never stops the
 // root before it reaches the detach point.
@@ -198,6 +206,7 @@ struct Pick
   bool detached = false;
   bool announced = false;  // the picked event went out
   double held = 0.0;  // lower limit of the slide: the highest d reached after the peak
+  int leafBit = kFirstLeafBit;  // the collide bit of its leaves
   double sentD = 0.0, sentForce = 0.0;  // last published state
 };
 
@@ -596,6 +605,17 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
       if (auto visual = pixelSdf->Data().LinkByIndex(i)->VisualByName(_r.name))
         pick.visual = *visual;
 
+    // Its leaves get their own collide bit; the root keeps its own (bit 1). In the SDF element:
+    // gz-physics dartsim reads collide_bitmask from there, not from sdf::Surface. The element
+    // belongs to this pick's parse of the file.
+    pick.leafBit = this->LeafBit(_r.name);
+    for (uint64_t i = 0; i < _r.model.LinkCount(); ++i)
+    {
+      const sdf::Link *link = _r.model.LinkByIndex(i);
+      for (uint64_t j = 0; link->Name() != "root" && j < link->CollisionCount(); ++j)
+        link->CollisionByIndex(j)->Element()->GetElement("surface")->GetElement("contact")
+          ->GetElement("collide_bitmask")->Set<unsigned int>(1u << pick.leafBit);
+    }
     // The model's pose in its file is the Plant's pose in the Field.
     SdfEntityCreator creator(_ecm, *this->eventMgr);
     Entity plant = creator.CreateEntities(&_r.model);
@@ -633,6 +653,25 @@ class PullOut : public System, public ISystemConfigure, public ISystemPreUpdate
     pick.root = root;
     this->picks[_r.name] = pick;
     gzmsg << "Pick: [" << _r.name << "] spawned and anchored\n";
+  }
+
+  /// Leaf bit for a Plant about to spawn: one no Picked Plant uses, else the one whose nearest
+  /// Picked Plant is farthest from it.
+  private: int LeafBit(const std::string &_name) const
+  {
+    // ponytail: with more than 6 Picked Plants close together some share a bit, and their
+    // leaves touch again; a pulled-out Plant leaves the table with its anchor but keeps its
+    // bit. Only bits 2 to 7 reach a robot with the default bitmask.
+    const gz::math::Vector3d &at = this->plants.at(_name).position;
+    std::array<double, kLastLeafBit + 1> nearest;
+    nearest.fill(std::numeric_limits<double>::infinity());
+    for (const auto &[id, p] : this->picks)
+      nearest[p.leafBit] = std::min(nearest[p.leafBit], at.Distance(this->plants.at(id).position));
+    int best = kFirstLeafBit;
+    for (int bit = kFirstLeafBit + 1; bit <= kLastLeafBit; ++bit)
+      if (nearest[bit] > nearest[best])
+        best = bit;
+    return best;
   }
 
   private: Entity world{kNullEntity};
