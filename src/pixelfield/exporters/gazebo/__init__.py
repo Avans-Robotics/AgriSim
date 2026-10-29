@@ -54,11 +54,14 @@ WORLD_NAME = "pixelfield"
 PULL_OUT_SYSTEM = ("PixelfieldPullOut", "pixelfield::PullOut")
 # Collide bits (robot interface 2, spec section 14). Bit 0 is the soil's alone: a robot
 # collision with collide_bitmask 0x1 touches the soil and no Plant, so a wheel can drive over a
-# bed without picking or crushing it. The soil also carries bit 1, shared with Plant leaves, so
-# leaves rest on the soil. A picked root starts below the soil plane, so root collisions leave
-# out both soil bits (plant.ROOT_BITMASK) until the detach.
-SOIL_BITMASK = 0x3
-PLANT_BITMASK = 0xFFFF & ~0x1  # every Plant collision lacks bit 0; leaves have all the others
+# bed without picking or crushing it. Bits 2 to 7 are leaf bits, on the soil too so leaves rest
+# on it: the pull-out system gives each Picked Plant's leaves one of them, so leaves of
+# different Plants do not touch and cannot pull each other out (M5h). Bit 1 is the roots': a
+# picked root starts below the soil plane and touches neither the soil nor other Plants'
+# leaves until the detach (plant.ROOT_BITMASK). Nothing above bit 7: a robot collision without
+# collide_bitmask acts as 0xFF.
+SOIL_BITMASK = 0xFD
+LEAF_BITMASK = 0xFC  # all leaf bits; the pull-out system keeps one per Picked Plant
 # Active Region (ADR 0010): meters added around every robot collision's box, and the footprint
 # radius of a root crop Plant, "crown" (its root's widest point) or "foliage" (its leaves' reach).
 # Seconds per physics step of every world we write (dartsim): the ADR 0006 stability checks

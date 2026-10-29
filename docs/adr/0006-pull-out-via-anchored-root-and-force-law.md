@@ -26,7 +26,7 @@ With `d` the upward displacement of the root, `v` its upward speed and `F` the r
 - Every physics step the system reads the prismatic joint position `d` and velocity `v` and commands the joint force `-F`. At `d >= L` it removes the `DetachableJoint` and the Plant moves freely.
 - Only vertical pull-out is modelled: sideways and rotational motion of the root is rigid until detach. An angled pull is a later knob.
 - The system computes the force itself, so the resisting force is known exactly each step. It publishes `d`, `F` and the attached state on a topic.
-- The buried root starts inside the soil collision, so the root's collision leaves out the soil's collide bits (0 and 1 since robot interface 2) while attached: otherwise contact forces add to the force law. At detach the system gives it the full bitmask (`CollideBitmaskCmd`), so a dropped Plant lands on the soil.
+- The buried root starts inside the soil collision, so the root's collision leaves out the soil's collide bits while attached (since M5h it has bit 1 alone, which the soil and leaves lack): otherwise contact forces add to the force law. At detach the system gives it the full bitmask (`CollideBitmaskCmd`), so a dropped Plant lands on the soil.
 - The anchor model is removed one step after the weld: dartsim keeps the root in the anchor's skeleton until the weld is gone, so removing both in one step freezes the root.
 
 ### Picking a Plant

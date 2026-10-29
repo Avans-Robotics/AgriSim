@@ -1150,3 +1150,42 @@ The user asked for a narrower floor: 4 pavers west and east of the bed. Option (
 Branch m5f-venue, commit after 5c2974d (see git log), not pushed. Validated: fast tests (core, gazebo, pavers) 71 passed; ruff; `gz sdf -k`; overhead render shows 4 pavers east of the bed. The perf row was measured at 12 x 25 m (same 4 visuals, not re-measured).
 ### Open items
 - User: confirm the real bed layout and the greenhouse length; push, PR, merge; amiga_ros2 pins the merge commit.
+
+## 2026-10-28 Crop overrides: build --set (M5g)
+### Goal & outcome
+amiga_ros2 needs carrots 10 cm apart in the row (the gripper's 3 cm pads grab neighbours' stalks at 4 cm) on the multi-Crop `avans_kas.yaml`, without copying crop files. Built `pixelfield build <spec> --set <crop>.<key path>=<value>` (repeatable), Manifest `crop_overrides` (only when used), more crop checks, and a margin check across Pixels. avans_kas with carrots at 0.10: 961 Plants (341 carrots instead of 800, other Crops identical). Commit 0856a94 on m5g-crop-overrides.
+### Decisions & why
+- CLI `--set` over a `--crops` overlay or spec includes: no file at all, and `--crops` keeps its meaning (an overlay would silently fill keys a full custom file left out on purpose).
+- Overrides replace the YAML values before parsing, so crop file checks apply unchanged; an override must keep the file value's kind (finite number, list of the same length, same type). That one rule also keeps the Manifest valid JSON.
+- Refused: Crops not in the Field, keys missing from the file, `name`, keys a build ignores (`hue_shift`, `generator`: they would claim a change in the Manifest), the same key twice.
+- `crop_overrides` is absent without overrides (sorted keys when present): builds without `--set` stay byte-identical, checked against main for all 11 examples (validator) and again for 3 after the fixes.
+- New check for crop files too: root crop margin >= widest root radius x largest scale. The spec only claimed it before; the shipped Crops pass (carrot 0.023 < 0.04, beetroot 0.045 < 0.05, radish 0.025 < 0.05).
+### Lessons / gotchas
+- YAML 1.1 reads `1e-1` as a string (needs `1.0e-1`), and `0x10` as 16. Documented in spec section 6.
+- Crop files had almost no checks (planting values went straight into `PlantingPattern(**...)`); bad values gave tracebacks deep in layout. Planting, scale, pull_out_force and variants are now checked.
+### State
+Branch m5g-crop-overrides from main 01def74, commit 0856a94. Validated: pytest 116 passed, 144 skipped (slow); ruff; byte-identical builds; validator agent (root overlap within and across Pixels at 0.10 and at the margin boundary, override reaches plants/<id>.sdf, plant_info reads such a Manifest, works from a foreign cwd). pick/pull/grip on an overridden world UNVERIFIED (unchanged code paths; they read only Plant entries).
+### Open items
+- `variants` above the Variants the library holds is not checked (pre-existing for crop files).
+- The Manifest does not record which `--crops` folder was used (pre-existing).
+- User: PR, merge; amiga_ros2 pins the merge commit and drops its carrot.yaml copy.
+
+## 2026-10-29 No leaf contact between Plants (M5h)
+### Goal & outcome
+amiga_ros2's xArm 6 lifting r6c1-041 in avans_kas (carrots at 0.10) pulled its in-row neighbours out through leaf-to-leaf contact. Now each Picked Plant's leaves get one collide bit of 2 to 7 from the pull-out system, so leaves of different Plants do not touch. Commit e4d6330 on m5h-plant-contact (stacked on m5g-crop-overrides, same content as main c37045b).
+### Decisions & why
+- Per-pick collide bits over low leaf friction (dartsim takes the lower friction of two surfaces, so pads would slip too) and over a force cap (dartsim has none). Choice: a free bit, else the one whose nearest Picked Plant is farthest. ADR 0010 amended (it had rejected collide bits for all overlapping neighbours; only Picked Plants need them).
+- Bits: soil 0xFD, buried root 0x2, leaves 0xFC in files, one bit once picked. robot_interface stays 2; spec now says only default, 0xFF, 0xFFFF and 0x1 are part of the interface.
+### Lessons / gotchas
+- A collision without collide_bitmask acts as 0xFF, not 0xFFFF: leaves on bit 8 or higher are not touched by a default robot collision. Only 6 leaf bits.
+- gz-physics dartsim reads collide_bitmask from the SDF element, not from sdf::Surface: setting it through the DOM (Collision::SetSurface) had no effect.
+- The pixelfield-only repros (pairs, kas with the test gripper, an xArm-like hand with body box and descent) never showed the bug (neighbour d at most 0.7 mm); the dense carrot Pixel did (r0c0-020 stuck at d 64 mm, r0c0-021 up 20 mm), and the real amiga pick did. An A/B in amiga's own container settled the cause before any code was written.
+- A root whose bits overlap the soil's is pushed up by the soil (seen at 130 mm in a bisect); keep root and soil bits disjoint.
+- Killing all ros2 processes between launches in one container also kills the ROS daemon; the next launch's controller spawners fail. One container per run.
+### State
+Branch m5h-plant-contact, commit e4d6330, not pushed. Validated: pytest 117 passed, 144 skipped; slow settle and squeeze of the v00 Variants; ruff; new dense test fails on the old system binary and passes now; amiga_ros2 xArm 6 pick of r6c1-041 in avans_kas, headless, 3/3 pulled out with r6c1-040 at 0.1 mm and r6c1-042 at 0 (as-is: 195 and 160 mm, detached). Perf row not measured (fewer contacts only).
+### Open items
+- r6c1-039 rises 4.5 to 5.6 mm past its d_peak in every amiga run, with or without leaf contact: robot contact (arm links), for amiga_ros2.
+- Jaws no longer held apart by the target's bunch close further on a neighbour petiole lying between them (dense Pixel r0c0-004: neighbour about 20 mm).
+- More than 6 Picked Plants close together share bits and touch again; a pulled-out Plant keeps its bit after it leaves the table.
+- User: push m5h-plant-contact, PR, merge; amiga_ros2 pins the commit.

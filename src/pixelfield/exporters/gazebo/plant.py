@@ -38,7 +38,7 @@ DROP_TIME = 1.0  # seconds after letting go, so the dropped Plant lands in the l
 SYSTEMS_BUILD = ROOT / "build" / "systems"
 REPICK_DELAY = 1.0  # seconds of sim time before an unpicked Plant can be picked again (PullOut.cc)
 NAMESPACE = "https://github.com/Avans-Robotics/AgriSim"  # of custom SDF elements
-ROOT_BITMASK = 0xFFFF & ~gazebo.SOIL_BITMASK  # the root collides with all but the soil
+ROOT_BITMASK = 0x2  # the root collides with robots and roots, not the soil or leaves
 
 
 def plant_model(
@@ -87,7 +87,7 @@ def plant_model(
                 _write_obj(obj, link["hull"])
             collision = ET.SubElement(element, "collision", name="collision")
             _mesh(collision, f"meshes/{variant.name}/{obj.name}", s)
-        bitmask = ROOT_BITMASK if link["name"] == "root" else gazebo.PLANT_BITMASK
+        bitmask = ROOT_BITMASK if link["name"] == "root" else gazebo.LEAF_BITMASK
         for collision in element.findall("collision"):
             contact = ET.SubElement(ET.SubElement(collision, "surface"), "contact")
             _text(contact, "collide_bitmask", str(bitmask))

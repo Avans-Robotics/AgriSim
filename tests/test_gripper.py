@@ -115,6 +115,19 @@ def test_a_grip_in_a_full_pixel_pulls_the_target_past_its_neighbours(dense):
 
 
 @needs_system
+def test_leaves_of_a_neighbour_do_not_pull_it_out(dense):
+    """Each Picked Plant's leaves collide on their own bit, so lifting a carrot by its leaf
+    bunch drags no neighbour up through leaf contact. With leaves of all Plants on shared bits
+    (before M5h) this target stayed in at d 64 mm and pulled its neighbour up 20 mm."""
+    target = "r0c0-020"
+    r = gripper.grip(dense, target)
+    neighbours = {name: d for name, d in r["plants"].items() if name != target}
+    assert r["requested"] and not r["nan"] and neighbours
+    assert r["detach_d"] == pytest.approx(r["depth"], abs=0.001)
+    assert max(neighbours.values()) < 0.0005
+
+
+@needs_system
 def test_the_strongest_beetroot_needs_a_stronger_grip(tmp_path, sparse_crops):
     out = build("m3_crops.yaml", tmp_path / "m3_crops", sparse_crops)
     plants = json.loads((out / "manifest.json").read_text())["plants"]
